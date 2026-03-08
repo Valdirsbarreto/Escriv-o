@@ -1,0 +1,1 @@
+# Escrivão AI — Schemas package
