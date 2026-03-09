@@ -1,0 +1,133 @@
+"""
+Escrivão AI — Agente Orquestrador (Worker)
+Gerencia a criação automatizada de inquéritos a partir de documentos.
+"""
+
+import logging
+import time
+import uuid
+import hashlib
+from typing import List
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.workers.celery_app import celery_app
+from app.services.storage import StorageService
+from app.services.pdf_extractor import PDFExtractorService
+from app.services.orchestrator_service import OrchestratorService
+from app.models.inquerito import Inquerito
+from app.models.documento import Documento
+from app.core.state_machine import EstadoInquerito
+
+logger = logging.getLogger(__name__)
+sync_engine = create_engine(settings.DATABASE_URL_SYNC)
+
+@celery_app.task(bind=True, max_retries=2)
+def orchestrate_new_inquerito(self, storage_paths: List[str], filenames: List[str]):
+    """
+    Task mestre que recebe arquivos recém-upados e 'descobre' o inquérito.
+    """
+    logger.info(f"[ORQUESTRADOR] Iniciando orquestração para {len(storage_paths)} arquivos")
+    
+    try:
+        with Session(sync_engine) as db:
+            storage = StorageService()
+            pdf_service = PDFExtractorService()
+            orchestrator = OrchestratorService()
+
+            # 1. Analisar o primeiro documento (geralmente o principal)
+            primary_path = storage_paths[0]
+            
+            import asyncio
+            loop = asyncio.new_event_loop()
+            content = loop.run_until_complete(storage.download_file(primary_path))
+            
+            # Extração rápida das primeiras páginas para o orquestrador
+            extraction = pdf_service.extract_with_ocr(content, max_pages=3)
+            texto_inicial = extraction["texto_completo"]
+
+            # 2. Chamar Inteligência do Orquestrador
+            analise = loop.run_until_complete(orchestrator.analisar_documentos_iniciais(texto_inicial))
+            loop.close()
+
+            logger.info(f"[ORQUESTRADOR] Analise concluída: {analise.get('inquerito')}")
+
+            # 3. Criar o Inquérito (ou recuperar se já existir)
+            meta = analise.get("inquerito", {})
+            numero_ip = meta.get("numero") or f"TEMP-{uuid.uuid4().hex[:6].upper()}"
+            ano = meta.get("ano") or time.localtime().tm_year
+            delegacia_cod = meta.get("delegacia_codigo")
+            delegacia_nome = meta.get("delegacia_nome")
+
+            # Buscar por número para evitar duplicidade
+            inquerito = db.execute(
+                select(Inquerito).where(Inquerito.numero == numero_ip)
+            ).scalar_one_or_none()
+
+            if not inquerito:
+                inquerito = Inquerito(
+                    numero=numero_ip,
+                    ano=ano,
+                    delegacia_origem_codigo=delegacia_cod,
+                    delegacia_origem_nome=delegacia_nome,
+                    delegacia_atual_codigo=delegacia_cod,
+                    delegacia_atual_nome=delegacia_nome,
+                    descricao=analise.get("fato_resumo", "Inquérito criado via ingestão automática."),
+                    estado_atual=EstadoInquerito.INDEXANDO.value
+                )
+                db.add(inquerito)
+                db.flush()
+                logger.info(f"[ORQUESTRADOR] Novo inquérito criado: {inquerito.id}")
+            else:
+                logger.info(f"[ORQUESTRADOR] Inquérito já existente: {inquerito.id}")
+                inquerito.estado_atual = EstadoInquerito.INDEXANDO.value
+
+            inquerito_id = inquerito.id
+
+            # 4. Registrar documentos e disparar ingestão individual
+            from app.workers.ingestion import ingest_document
+            
+            for path, fname in zip(storage_paths, filenames):
+                # Calcular hash (opcional mas bom para evitar duplicados no mesmo IP)
+                # Como já está no S3, poderíamos fazer stream, mas para simplificar:
+                doc_hash = hashlib.sha256(fname.encode()).hexdigest() # Simplificado para o MVP
+
+                documento = Documento(
+                    inquerito_id=inquerito_id,
+                    nome_arquivo=fname,
+                    hash_arquivo=doc_hash,
+                    storage_path=path,
+                    status_processamento="pendente"
+                )
+                db.add(documento)
+                db.flush()
+                
+                # Disparar ingestão padrão
+                ingest_document.delay(str(documento.id), str(inquerito_id))
+                inquerito.total_documentos += 1
+
+            # 5. Salvar Personagens Identificados e Gerar Relatório Inicial
+            personagens = analise.get("personagens", [])
+            orchestrator.salvar_personagens_e_contexto(db, inquerito_id, personagens)
+            
+            relatorio = loop.run_until_complete(
+                orchestrator.gerar_relatorio_contextualizado(
+                    inquerito_id, 
+                    str(analise)
+                )
+            )
+            inquerito.resumo_executivo = relatorio
+            
+            db.commit()
+            logger.info(f"[ORQUESTRADOR] Orquestração concluída para IP {numero_ip}")
+
+            return {
+                "status": "sucesso",
+                "inquerito_id": str(inquerito_id),
+                "numero": numero_ip
+            }
+
+    except Exception as e:
+        logger.error(f"[ORQUESTRADOR] Erro fatal: {e}")
+        raise self.retry(exc=e)

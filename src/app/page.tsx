@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, FolderOpen, AlertCircle, Clock } from "lucide-react";
+import { Search, FolderOpen, AlertCircle, Clock, UploadCloud, ArrowRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 
@@ -13,7 +14,7 @@ export default function Home() {
 
   useEffect(() => {
     api.get("/inqueritos")
-      .then((res) => setInqueritos(res.data))
+      .then((res) => setInqueritos(res.data?.items ?? res.data))
       .catch((err) => console.error(err))
       .finally(() => setLoading(false));
   }, []);
@@ -24,6 +25,27 @@ export default function Home() {
         <h1 className="text-3xl font-bold tracking-tight">Dashboard Investigativo</h1>
         <p className="text-zinc-400 mt-2">Visão geral dos inquéritos e atividades recentes do Escrivão AI.</p>
       </div>
+
+      {/* Banner de Ingestão Rápida */}
+      <Link href="/ingestao" className="block group">
+        <div className="relative overflow-hidden rounded-2xl border border-blue-500/30 bg-gradient-to-r from-blue-950/60 via-zinc-900/80 to-zinc-900/60 p-6 transition-all hover:border-blue-400/60 hover:from-blue-950/80">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_rgba(59,130,246,0.15),_transparent_60%)]" />
+          <div className="relative flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-blue-500/20 rounded-xl border border-blue-500/30">
+                <UploadCloud className="w-6 h-6 text-blue-400" />
+              </div>
+              <div>
+                <p className="font-semibold text-white text-lg">Importar Novo Inquérito</p>
+                <p className="text-zinc-400 text-sm mt-0.5">
+                  Arraste PDFs, imagens ou scans. A IA detecta e cria o processo automaticamente.
+                </p>
+              </div>
+            </div>
+            <ArrowRight className="w-5 h-5 text-blue-400 shrink-0 group-hover:translate-x-1 transition-transform" />
+          </div>
+        </div>
+      </Link>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="bg-zinc-900 border-zinc-800">

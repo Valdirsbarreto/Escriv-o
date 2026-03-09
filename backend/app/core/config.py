@@ -45,11 +45,26 @@ class Settings(BaseSettings):
     LLM_ECONOMICO_BASE_URL: str = "https://api.openai.com/v1"
     LLM_ECONOMICO_API_KEY: Optional[str] = None
 
+    # ── LLM Camada Standard ────────────────────────────────
+    LLM_STANDARD_PROVIDER: str = "google"
+    LLM_STANDARD_MODEL: str = "gemini-1.5-flash"
+    LLM_STANDARD_BASE_URL: str = "https://generativelanguage.googleapis.com"
+    LLM_STANDARD_API_KEY: Optional[str] = None
+
     # ── LLM Camada Premium ─────────────────────────────────
     LLM_PREMIUM_PROVIDER: str = "openai"
     LLM_PREMIUM_MODEL: str = "gpt-4.1"
     LLM_PREMIUM_BASE_URL: str = "https://api.openai.com/v1"
     LLM_PREMIUM_API_KEY: Optional[str] = None
+
+    # ── Gemini (Google) ────────────────────────────────────
+    GEMINI_API_KEY: Optional[str] = None
+
+    # ── DeepSeek ───────────────────────────────────────────
+    DEEPSEEK_API_KEY: Optional[str] = None
+
+    # ── OpenRouter ─────────────────────────────────────────
+    OPENROUTER_API_KEY: Optional[str] = None
 
     model_config = {
         "env_file": (".env", "../.env"),

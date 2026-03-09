@@ -163,12 +163,12 @@ class CopilotoService:
         messages.append({"role": "user", "content": query})
 
         # ── 4. Chamar LLM ────────────────────────────────
-        logger.info("[COPILOTO] Enviando para LLM (premium)")
+        logger.info("[COPILOTO] Enviando para LLM (economico)")
 
         try:
             llm_result = await self.llm_service.chat_completion(
                 messages=messages,
-                tier="premium",
+                tier="economico",
                 temperature=0.3,
                 max_tokens=3000,
             )

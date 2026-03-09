@@ -1,6 +1,6 @@
 # Escrivão AI — Memória do Projeto
 
-**Atualizado em:** 08 de março de 2026 — 22h55 (horário de Brasília)
+**Atualizado em:** 09 de março de 2026 — 15h20 (horário de Brasília)
 
 ---
 
@@ -9,15 +9,17 @@
 | Camada | Tecnologia |
 |--------|-----------|
 | Backend | Python 3.11 + FastAPI |
-| Banco Relacional | PostgreSQL 17.6 no **Supabase** (pooler AWS sa-east-1, SSL ativo, URL-encode da senha) |
+| Banco Relacional | PostgreSQL 17.6 no **Supabase** (pooler AWS us-west-2, SSL ativo) |
 | Banco Vetorial | Qdrant (Docker local, porta 6333) |
 | Mensageria | Celery + Redis (Docker local, porta 6379) |
-| Object Storage | MinIO (Docker local, porta 9000) |
-| PDF / OCR | `pypdf` (texto nativo) + `pytesseract` + `pdf2image` (OCR seletivo) |
-| Embeddings | `sentence-transformers` — modelo `all-MiniLM-L6-v2` (384 dims, local, custo zero) |
-| LLM | OpenAI GPT-4 via `LLMService` — roteamento **Econômico** (gpt-4.1-nano) / **Premium** (gpt-4.1) |
-| Testes | pytest + pytest-asyncio — **52 testes passando** atualmente |
-| Deploy Planejado | Frontend → Vercel, Backend → a definir |
+| Object Storage | Supabase Storage (prod) / MinIO (dev local) |
+| PDF / OCR | `pypdf` + `pytesseract` + `pdf2image` |
+| Embeddings | `sentence-transformers` — `all-MiniLM-L6-v2` (384 dims, local) |
+| LLM | **3 Camadas**: Econômico (DeepSeek/OpenRouter), Standard (Gemini Flash), Premium (Gemini Pro) |
+| Testes | pytest + pytest-asyncio |
+| CI/CD | GitHub Actions (`.github/workflows/ci.yml`) |
+| Deploy Frontend | **Vercel** (auto-deploy em push para `main`) |
+| Deploy Backend | A definir (Railway / Render / VPS) |
 
 ---
 

@@ -41,7 +41,7 @@ class ExtractorService:
         try:
             result = await self.llm_service.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
-                tier="economico",
+                tier="standard",
                 temperature=0.0,  # Queremos precisão/determinismo
                 max_tokens=50,
             )
@@ -66,7 +66,7 @@ class ExtractorService:
         try:
             result = await self.llm_service.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
-                tier="economico",
+                tier="standard",
                 temperature=0.1,  # Baixa temp para estruturação confiável
                 max_tokens=3000,
                 json_mode=True,   # Força a resposta em formato JSON JSON object

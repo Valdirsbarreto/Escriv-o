@@ -1,11 +1,19 @@
 import axios from "axios";
 
-// Instância do Axios
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+// Instância do Axios (JSON)
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1",
+  baseURL: BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
+});
+
+// Instância do Axios para upload de arquivos (multipart/form-data)
+// Não definir Content-Type aqui — o browser seta o boundary automagicamente
+export const apiMultipart = axios.create({
+  baseURL: BASE_URL,
 });
 
 // APIs Inquéritos
