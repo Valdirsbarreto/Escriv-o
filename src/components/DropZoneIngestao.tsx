@@ -2,32 +2,27 @@
 
 import { useCallback, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { CloudUpload, FileText, FileImage, Loader2, CheckCircle2, AlertTriangle, X } from "lucide-react";
+import {
+  CloudUpload, FileText, FileImage, Loader2,
+  CheckCircle2, AlertTriangle, X, WifiOff, Info
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiMultipart } from "@/lib/api";
 
-type Stage =
-  | "idle"
-  | "uploading"
-  | "analisando_ia"
-  | "extraindo_dados"
-  | "criando_inquerito"
-  | "concluido"
-  | "erro";
+type Stage = "idle" | "uploading" | "analisando_ia" | "extraindo_dados" | "criando_inquerito" | "concluido" | "erro";
 
-interface ArquivoItem {
-  name: string;
-  size: number;
-  type: string;
-}
+interface ArquivoItem { name: string; size: number; type: string; }
 
 interface ResultadoIngestao {
   id_sessao: string;
   mensagem: string;
   arquivos_recebidos: string[];
-  inquerito_id?: string;
-  numero?: string;
 }
+
+interface LoteStatus { lote: number; total: number; concluido: boolean; erro?: string; }
+
+const BATCH_SIZE = 10; // máximo de arquivos por lote
+const MAX_FILES = 100;
 
 const STAGES_LABELS: Record<Stage, string> = {
   idle: "",
@@ -36,7 +31,7 @@ const STAGES_LABELS: Record<Stage, string> = {
   extraindo_dados: "🔍 Extraindo nomes, datas e dados do inquérito...",
   criando_inquerito: "📁 Criando o Inquérito e registrando personagens...",
   concluido: "✅ Inquérito criado com sucesso!",
-  erro: "❌ Ocorreu um erro durante a ingestão.",
+  erro: "❌ Falha no envio",
 };
 
 function formatBytes(bytes: number) {
@@ -45,42 +40,100 @@ function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function diagnosarErro(err: any): string {
+  if (!err) return "Erro desconhecido.";
+  
+  // Sem resposta = backend inacessível
+  if (err.code === "ERR_NETWORK" || !err.response) {
+    const url = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+    return `Não foi possível conectar ao backend (${url}).\n\nVerifique se o servidor FastAPI está rodando:\n  cd backend && uvicorn app.main:app --reload`;
+  }
+  
+  if (err.response?.status === 413) return "Lote muito grande. Reduza o número de arquivos por vez.";
+  if (err.response?.status === 422) return `Erro de validação: ${JSON.stringify(err.response.data?.detail)}`;
+  if (err.response?.status === 500) return "Erro interno no servidor. Verifique os logs do backend.";
+  
+  return err?.response?.data?.detail || err?.message || "Erro desconhecido.";
+}
+
 export function DropZoneIngestao() {
   const [stage, setStage] = useState<Stage>("idle");
   const [arquivos, setArquivos] = useState<ArquivoItem[]>([]);
+  const [lotes, setLotes] = useState<LoteStatus[]>([]);
+  const [progresso, setProgresso] = useState(0); // 0-100
   const [resultado, setResultado] = useState<ResultadoIngestao | null>(null);
   const [erro, setErro] = useState<string>("");
 
-  const simularProgresso = (callback: () => void) => {
-    // Simula progressão realista dos estágios de processamento
-    setTimeout(() => setStage("analisando_ia"), 800);
-    setTimeout(() => setStage("extraindo_dados"), 2500);
-    setTimeout(() => setStage("criando_inquerito"), 4000);
-    setTimeout(callback, 5500);
-  };
-
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
-
-    setArquivos(acceptedFiles.map((f) => ({ name: f.name, size: f.size, type: f.type })));
+    
+    const arquivosLimitados = acceptedFiles.slice(0, MAX_FILES);
+    setArquivos(arquivosLimitados.map((f) => ({ name: f.name, size: f.size, type: f.type })));
     setStage("uploading");
     setErro("");
     setResultado(null);
+    setProgresso(0);
 
-    try {
-      const formData = new FormData();
-      acceptedFiles.forEach((file) => formData.append("files", file));
+    // Divide em lotes
+    const batches: File[][] = [];
+    for (let i = 0; i < arquivosLimitados.length; i += BATCH_SIZE) {
+      batches.push(arquivosLimitados.slice(i, i + BATCH_SIZE));
+    }
 
-      const response = await apiMultipart.post("/ingestao/iniciar", formData);
-      const data: ResultadoIngestao = response.data;
+    const statusLotes: LoteStatus[] = batches.map((_, i) => ({
+      lote: i + 1,
+      total: batches.length,
+      concluido: false
+    }));
+    setLotes([...statusLotes]);
 
-      simularProgresso(() => {
-        setResultado(data);
-        setStage("concluido");
-      });
-    } catch (err: any) {
+    let ultimoResultado: ResultadoIngestao | null = null;
+    let algumErro = false;
+
+    for (let i = 0; i < batches.length; i++) {
+      const batch = batches[i];
+      
+      // Estágio visual progressivo
+      if (i === 0) setStage("uploading");
+      else if (i === Math.floor(batches.length * 0.4)) setStage("analisando_ia");
+      else if (i === Math.floor(batches.length * 0.7)) setStage("extraindo_dados");
+      else if (i === batches.length - 1) setStage("criando_inquerito");
+
+      try {
+        const formData = new FormData();
+        batch.forEach((file) => formData.append("files", file));
+
+        const response = await apiMultipart.post("/ingestao/iniciar", formData, {
+          timeout: 120_000, // 2 min por lote
+        });
+        
+        ultimoResultado = response.data;
+        statusLotes[i] = { ...statusLotes[i], concluido: true };
+      } catch (err: any) {
+        const msg = diagnosarErro(err);
+        statusLotes[i] = { ...statusLotes[i], concluido: false, erro: msg };
+        
+        // Se for erro de rede, para imediatamente
+        if (err.code === "ERR_NETWORK" || !err.response) {
+          setLotes([...statusLotes]);
+          setStage("erro");
+          setErro(msg);
+          return;
+        }
+        algumErro = true;
+      }
+
+      setLotes([...statusLotes]);
+      setProgresso(Math.round(((i + 1) / batches.length) * 100));
+    }
+
+    if (ultimoResultado && !algumErro) {
+      setResultado(ultimoResultado);
+      setStage("concluido");
+    } else if (algumErro) {
       setStage("erro");
-      setErro(err?.response?.data?.detail || err?.message || "Erro desconhecido.");
+      const errosMsg = statusLotes.filter((l) => l.erro).map((l) => `Lote ${l.lote}: ${l.erro}`).join("\n");
+      setErro(errosMsg || "Alguns lotes falharam.");
     }
   }, []);
 
@@ -92,59 +145,55 @@ export function DropZoneIngestao() {
       "image/jpeg": [".jpg", ".jpeg"],
       "image/tiff": [".tiff", ".tif"],
     },
-    disabled: stage !== "idle" && stage !== "concluido" && stage !== "erro",
+    disabled: !["idle", "concluido", "erro"].includes(stage),
     multiple: true,
+    maxFiles: MAX_FILES,
   });
 
-  const resetar = () => {
-    setStage("idle");
-    setArquivos([]);
-    setResultado(null);
-    setErro("");
-  };
+  const resetar = () => { setStage("idle"); setArquivos([]); setLotes([]); setResultado(null); setErro(""); setProgresso(0); };
 
   const isProcessing = ["uploading", "analisando_ia", "extraindo_dados", "criando_inquerito"].includes(stage);
+  const isNetworkError = erro.includes("conectar ao backend") || erro.includes("FastAPI");
 
   return (
     <div className="space-y-4">
+      {/* Aviso de backend necessário */}
+      <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-500/8 border border-amber-500/20 text-sm text-amber-300">
+        <Info className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
+        <span>
+          O backend FastAPI precisa estar rodando localmente: <code className="bg-black/30 px-1.5 py-0.5 rounded text-amber-200 text-xs">uvicorn app.main:app --reload</code>
+        </span>
+      </div>
+
       {/* Drop Zone */}
       <div
         {...getRootProps()}
         className={cn(
           "relative border-2 border-dashed rounded-2xl p-10 text-center transition-all duration-300 cursor-pointer group",
-          isDragActive
-            ? "border-blue-500 bg-blue-500/10 scale-[1.01]"
-            : stage === "concluido"
-            ? "border-green-500/60 bg-green-500/5"
-            : stage === "erro"
-            ? "border-red-500/60 bg-red-500/5"
-            : isProcessing
-            ? "border-amber-500/40 bg-amber-500/5 cursor-not-allowed"
+          isDragActive ? "border-blue-500 bg-blue-500/10 scale-[1.01]"
+            : stage === "concluido" ? "border-green-500/60 bg-green-500/5"
+            : isNetworkError ? "border-orange-500/60 bg-orange-500/5"
+            : stage === "erro" ? "border-red-500/60 bg-red-500/5"
+            : isProcessing ? "border-amber-500/40 bg-amber-500/5 cursor-not-allowed"
             : "border-zinc-700 bg-zinc-900/50 hover:border-blue-500/50 hover:bg-blue-500/5"
         )}
       >
         <input {...getInputProps()} />
-
-        {/* Icon / Animation */}
         <div className="flex flex-col items-center gap-4">
           {isProcessing ? (
-            <div className="relative">
-              <Loader2 className="w-14 h-14 text-amber-400 animate-spin" />
-            </div>
+            <Loader2 className="w-14 h-14 text-amber-400 animate-spin" />
           ) : stage === "concluido" ? (
             <CheckCircle2 className="w-14 h-14 text-green-400 animate-bounce" />
+          ) : isNetworkError ? (
+            <WifiOff className="w-14 h-14 text-orange-400" />
           ) : stage === "erro" ? (
             <AlertTriangle className="w-14 h-14 text-red-400" />
           ) : (
-            <CloudUpload
-              className={cn(
-                "w-14 h-14 transition-transform duration-300",
-                isDragActive ? "text-blue-400 scale-110" : "text-zinc-500 group-hover:text-blue-400 group-hover:scale-110"
-              )}
-            />
+            <CloudUpload className={cn("w-14 h-14 transition-transform duration-300",
+              isDragActive ? "text-blue-400 scale-110" : "text-zinc-500 group-hover:text-blue-400 group-hover:scale-110"
+            )} />
           )}
 
-          {/* Text */}
           {stage === "idle" && (
             <>
               <div>
@@ -152,7 +201,7 @@ export function DropZoneIngestao() {
                   {isDragActive ? "Solte os arquivos aqui!" : "Arraste os documentos do inquérito"}
                 </p>
                 <p className="text-zinc-500 text-sm mt-1">
-                  PDF, PNG, JPG ou TIFF • O sistema criará o inquérito automaticamente
+                  PDF, PNG, JPG ou TIFF • Até {MAX_FILES} arquivos • Enviados em lotes de {BATCH_SIZE}
                 </p>
               </div>
               <span className="text-xs text-zinc-600 bg-zinc-800 px-4 py-1.5 rounded-full">
@@ -162,9 +211,16 @@ export function DropZoneIngestao() {
           )}
 
           {isProcessing && (
-            <div className="text-center animate-pulse">
-              <p className="text-lg font-medium text-amber-300">{STAGES_LABELS[stage]}</p>
-              <p className="text-zinc-500 text-sm mt-1">Isso pode levar alguns instantes...</p>
+            <div className="text-center w-full max-w-sm">
+              <p className="text-lg font-medium text-amber-300 animate-pulse">{STAGES_LABELS[stage]}</p>
+              {/* Barra de Progresso */}
+              <div className="mt-3 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-amber-400 rounded-full transition-all duration-500"
+                  style={{ width: `${progresso}%` }}
+                />
+              </div>
+              <p className="text-zinc-600 text-xs mt-1">{progresso}% completo</p>
             </div>
           )}
 
@@ -176,42 +232,73 @@ export function DropZoneIngestao() {
           )}
 
           {stage === "erro" && (
-            <div className="text-center">
-              <p className="text-lg font-semibold text-red-400">Falha no envio</p>
-              <p className="text-zinc-400 text-sm mt-1 max-w-md">{erro}</p>
+            <div className="text-center max-w-md">
+              <p className="text-lg font-semibold text-red-400">
+                {isNetworkError ? "Backend não encontrado" : "Falha no envio"}
+              </p>
+              <pre className="text-zinc-400 text-xs mt-2 whitespace-pre-wrap text-left bg-black/30 rounded-lg p-3">
+                {erro}
+              </pre>
             </div>
           )}
         </div>
       </div>
 
-      {/* Lista de Arquivos */}
-      {arquivos.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-widest">Arquivos enviados</p>
-          {arquivos.map((f, i) => (
-            <div key={i} className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5">
-              {f.type?.startsWith("image") ? (
-                <FileImage className="w-4 h-4 text-blue-400 shrink-0" />
-              ) : (
-                <FileText className="w-4 h-4 text-red-400 shrink-0" />
-              )}
-              <span className="text-sm text-zinc-300 flex-1 truncate">{f.name}</span>
-              <span className="text-xs text-zinc-600">{formatBytes(f.size)}</span>
-              {stage === "concluido" && <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />}
-              {stage === "erro" && <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />}
-            </div>
-          ))}
+      {/* Progresso de Lotes */}
+      {lotes.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-widest">
+            Lotes ({lotes.filter((l) => l.concluido).length}/{lotes.length} enviados)
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {lotes.map((l, i) => (
+              <div
+                key={i}
+                title={l.erro || `Lote ${l.lote}`}
+                className={cn(
+                  "w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold transition-all",
+                  l.concluido ? "bg-green-500/20 text-green-400 border border-green-500/40"
+                    : l.erro ? "bg-red-500/20 text-red-400 border border-red-500/40"
+                    : "bg-zinc-800 text-zinc-500 border border-zinc-700"
+                )}
+              >
+                {l.lote}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
+      {/* Lista de Arquivos */}
+      {arquivos.length > 0 && (
+        <details className="group">
+          <summary className="text-xs font-semibold text-zinc-500 uppercase tracking-widest cursor-pointer hover:text-zinc-300 transition-colors">
+            Arquivos ({arquivos.length}) ▾
+          </summary>
+          <div className="mt-2 space-y-1.5 max-h-64 overflow-y-auto pr-1">
+            {arquivos.map((f, i) => (
+              <div key={i} className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2">
+                {f.type?.startsWith("image") ? (
+                  <FileImage className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                ) : (
+                  <FileText className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                )}
+                <span className="text-xs text-zinc-300 flex-1 truncate">{f.name}</span>
+                <span className="text-xs text-zinc-600 shrink-0">{formatBytes(f.size)}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
       {/* Ações pós-conclusão */}
-      {(stage === "concluido" || stage === "erro") && (
+      {["concluido", "erro"].includes(stage) && (
         <div className="flex gap-3">
           <button
             onClick={resetar}
             className="flex items-center gap-2 px-4 py-2 text-sm text-zinc-400 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
           >
-            <X className="w-3.5 h-3.5" /> Enviar Outros Documentos
+            <X className="w-3.5 h-3.5" /> Enviar Outros Arquivos
           </button>
           {stage === "concluido" && (
             <a

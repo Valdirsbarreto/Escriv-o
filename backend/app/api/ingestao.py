@@ -4,14 +4,20 @@ Endpoints para início de fluxo de ingestão e orquestração.
 """
 
 import uuid
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+import logging
+from typing import List
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
 from app.services.storage import StorageService
 from app.workers.orchestrator import orchestrate_new_inquerito
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ingestao", tags=["Ingestão"])
+
+EXTENSOES_PERMITIDAS = {".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".tif"}
+TAMANHO_MAX_ARQUIVO = 50 * 1024 * 1024  # 50 MB por arquivo
+
 
 class IngestaoIniciaResponse(BaseModel):
     id_sessao: str
@@ -19,47 +25,66 @@ class IngestaoIniciaResponse(BaseModel):
     mensagem: str
     arquivos_recebidos: List[str]
 
+
 @router.post("/iniciar", response_model=IngestaoIniciaResponse)
 async def iniciar_ingestao(
     files: List[UploadFile] = File(...),
 ):
     """
-    Recebe um lote de arquivos e inicia a orquestração de um novo inquérito.
+    Recebe um lote de arquivos (max 50 MB / arquivo) e inicia a orquestração.
+    O frontend envia em batches de 10; cada chamada é independente.
     """
     if not files:
         raise HTTPException(status_code=400, detail="Nenhum arquivo enviado.")
 
     id_sessao = str(uuid.uuid4())
-    logger_msg = f"Iniciando ingestão de {len(files)} arquivos (Sessão: {id_sessao})"
-    
+    logger.info(f"[INGESTÃO] Sessão {id_sessao} — recebendo {len(files)} arquivo(s).")
+
     storage = StorageService()
     storage_paths = []
     filenames = []
+    ignorados = []
 
     for file in files:
-        if not file.filename.lower().endswith((".pdf", ".png", ".jpg", ".jpeg", ".tiff")):
+        nome = file.filename or "arquivo"
+        ext = "." + nome.rsplit(".", 1)[-1].lower() if "." in nome else ""
+        
+        if ext not in EXTENSOES_PERMITIDAS:
+            ignorados.append(nome)
             continue
-        
-        content = await file.read()
-        storage_path = f"temporario/{id_sessao}/{file.filename}"
-        await storage.upload_file(content, storage_path, file.content_type)
-        
-        storage_paths.append(storage_path)
-        filenames.append(file.filename)
+
+        try:
+            content = await file.read()
+            if len(content) > TAMANHO_MAX_ARQUIVO:
+                logger.warning(f"[INGESTÃO] Arquivo {nome} excede 50 MB, ignorado.")
+                ignorados.append(nome)
+                continue
+
+            storage_path = f"temporario/{id_sessao}/{nome}"
+            await storage.upload_file(content, storage_path, file.content_type or "application/octet-stream")
+            storage_paths.append(storage_path)
+            filenames.append(nome)
+        except Exception as e:
+            logger.error(f"[INGESTÃO] Erro ao processar {nome}: {e}")
+            ignorados.append(nome)
 
     if not storage_paths:
-        raise HTTPException(status_code=400, detail="Nenhum arquivo válido (PDF/Imagens) enviado.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Nenhum arquivo válido encontrado. Ignorados: {ignorados}"
+        )
 
-    # Disparar Orquestrador
+    # Disparar Orquestrador em background
     try:
         orchestrate_new_inquerito.delay(storage_paths, filenames)
+        logger.info(f"[INGESTÃO] Orquestrador acionado para sessão {id_sessao}.")
     except Exception as e:
-        # Log error if Celery is down, but keep moving for MVP
-        pass
+        logger.warning(f"[INGESTÃO] Celery indisponível ({e}). Arquivos salvos, orquestração será manual.")
 
+    aviso = f" ({len(ignorados)} ignorados)" if ignorados else ""
     return IngestaoIniciaResponse(
         id_sessao=id_sessao,
         status="processando",
-        mensagem=f"Recebidos {len(storage_paths)} arquivos. O Orquestrador IA está analisando para criar o inquérito automaticamente.",
+        mensagem=f"Recebidos {len(storage_paths)} arquivo(s){aviso}. O Orquestrador IA está analisando para criar o inquérito automaticamente.",
         arquivos_recebidos=filenames
     )
