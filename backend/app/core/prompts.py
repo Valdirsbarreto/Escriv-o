@@ -213,3 +213,104 @@ NÃO INVENTE informações. Baseie-se exclusivamente nos resumos fornecidos.
 Resumos dos volumes:
 {resumos_volumes}
 """
+
+# ── Prompts dos Agentes Especializados (Sprint 6) ─────────────────────────────
+
+PROMPT_FICHA_PESSOA = """Você é um analista de inteligência policial especializado em montagem de fichas investigativas.
+Com base nos dados estruturados abaixo sobre a pessoa "{nome}", elabore uma ficha investigativa completa.
+
+Retorne EXCLUSIVAMENTE um JSON com a seguinte estrutura:
+{{
+  "nome": "Nome completo",
+  "cpf": "CPF se disponível",
+  "tipo_envolvimento": "investigado|vitima|testemunha|outro",
+  "perfil_resumido": "2-3 linhas descrevendo o papel da pessoa no inquérito",
+  "contatos": [{{"tipo": "telefone|email", "valor": "..."}}],
+  "enderecos": ["endereços conhecidos"],
+  "vinculos_empresariais": ["empresas associadas"],
+  "eventos_cronologicos": ["datas e fatos relevantes"],
+  "pontos_de_atencao": ["flags investigativas, inconsistências, ou alertas"],
+  "documentos_mencionados": ["docs onde aparece"]
+}}
+
+NÃO INVENTE dados. Se um campo não for disponível, use null ou lista vazia.
+
+Dados disponíveis:
+{dados_consolidados}
+"""
+
+PROMPT_FICHA_EMPRESA = """Você é um analista de inteligência policial especializado em investigação empresarial.
+Com base nos dados abaixo sobre a empresa "{nome}", elabore uma ficha investigativa.
+
+Retorne EXCLUSIVAMENTE um JSON com a seguinte estrutura:
+{{
+  "nome": "Razão social",
+  "cnpj": "CNPJ se disponível",
+  "tipo_participacao": "alvo|fachada|fornecedor|outro",
+  "perfil_resumido": "Papel da empresa no inquérito",
+  "enderecos": ["endereços registrados"],
+  "possiveis_socios": ["nomes de pessoas associadas"],
+  "transacoes_suspeitas": ["movimentos financeiros identificados"],
+  "pontos_de_atencao": ["alertas investigativos"],
+  "documentos_mencionados": ["docs onde aparece"]
+}}
+
+NÃO INVENTE dados. Se um campo não for disponível, use null ou lista vazia.
+
+Dados disponíveis:
+{dados_consolidados}
+"""
+
+PROMPT_CAUTELAR = """Você é um assistente jurídico-policial especializado em minutas de atos processuais brasileiros.
+Elabore a minuta do documento abaixo com base nas instruções e no contexto do inquérito.
+
+**Tipo de documento:** {tipo_cautelar}
+**Inquérito:** {numero_inquerito}
+**Autoridade:** {autoridade}
+**Instruções específicas do delegado:** {instrucoes}
+
+**Contexto relevante do inquérito:**
+{contexto}
+
+Produza a minuta completa e formal, em linguagem jurídico-policial brasileira, com:
+- Cabeçalho adequado ao tipo de documento
+- Fundamentação legal (cite artigos do CPP, CP ou legislação específica)
+- Qualificação do(s) destinatário(s) quando aplicável
+- Objeto claro e objetivo do ato
+- Prazo e forma de cumprimento quando cabível
+- Espaço para assinatura da autoridade
+"""
+
+PROMPT_ANALISE_EXTRATO = """Você é um analista financeiro forense especializado em detecção de lavagem de dinheiro e fraudes.
+Analise o extrato bancário abaixo e extraia as informações estruturadas.
+
+Retorne EXCLUSIVAMENTE um JSON com a seguinte estrutura:
+{{
+  "titular_conta": "nome/CPF/CNPJ se mencionado",
+  "banco": "nome do banco",
+  "periodo": {{"inicio": "DD/MM/AAAA", "fim": "DD/MM/AAAA"}},
+  "saldo_inicial": 0.00,
+  "saldo_final": 0.00,
+  "total_creditos": 0.00,
+  "total_debitos": 0.00,
+  "transacoes": [
+    {{
+      "data": "DD/MM/AAAA",
+      "tipo": "credito|debito",
+      "valor": 0.00,
+      "descricao": "histórico",
+      "contraparte": "nome da contraparte se identificável",
+      "suspeita": true|false,
+      "motivo_suspeita": "explicação se suspeita"
+    }}
+  ],
+  "contrapartes_frequentes": [{{"nome": "...", "total_transacoes": 0, "valor_total": 0.00}}],
+  "alertas": ["Padrões suspeitos identificados, e.g. fracionamento, movimentação atípica"],
+  "score_suspeicao": 0
+}}
+
+NÃO INVENTE dados. Use null para campos não identificáveis. O score_suspeicao vai de 0 a 10.
+
+Texto do extrato:
+{texto_extrato}
+"""
