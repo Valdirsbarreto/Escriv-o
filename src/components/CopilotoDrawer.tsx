@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Send, Bot, User } from "lucide-react";
 import { useState } from "react";
 import { sendMessage, createSessao } from "@/lib/api";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export function CopilotoDrawer() {
   const { isCopilotoOpen, setCopilotoOpen, inqueritoAtivoId, sessaoChatId, setSessaoChatId } = useAppStore();
@@ -66,12 +68,47 @@ export function CopilotoDrawer() {
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.role === "user" ? "bg-blue-600" : "bg-zinc-800"}`}>
                   {msg.role === "user" ? <User size={16} /> : <Bot size={16} />}
                 </div>
-                <div className={`px-4 py-2 rounded-2xl max-w-[80%] text-sm ${
+                <div className={`px-4 py-2 rounded-2xl max-w-[85%] text-sm overflow-hidden ${
                   msg.role === "user" 
                     ? "bg-blue-600 text-white rounded-tr-none" 
                     : "bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-tl-none"
                 }`}>
-                  {msg.text}
+                  {msg.role === "user" ? (
+                    msg.text
+                  ) : (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        p: ({ node, ...props }) => <p className="mb-3 last:mb-0 leading-relaxed" {...props} />,
+                        a: ({ node, ...props }) => <a target="_blank" className="text-blue-400 hover:text-blue-300 underline underline-offset-2 font-medium" {...props} />,
+                        ul: ({ node, ...props }) => <ul className="list-disc pl-5 mb-3 space-y-1" {...props} />,
+                        ol: ({ node, ...props }) => <ol className="list-decimal pl-5 mb-3 space-y-1" {...props} />,
+                        li: ({ node, ...props }) => <li className="pl-1" {...props} />,
+                        strong: ({ node, ...props }) => <strong className="font-semibold text-zinc-100" {...props} />,
+                        blockquote: ({ node, ...props }) => <blockquote className="border-l-2 border-zinc-600 pl-3 italic text-zinc-400 mb-3" {...props} />,
+                        code: ({ node, className, children, ...props }: any) => {
+                          const match = /language-(\w+)/.exec(className || "");
+                          const inline = !match && !className?.includes("language-");
+                          return inline ? (
+                            <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-200 text-xs font-mono" {...props}>
+                              {children}
+                            </code>
+                          ) : (
+                            <div className="bg-zinc-950 border border-zinc-800 rounded-md overflow-hidden mb-3">
+                              <div className="bg-zinc-900 px-3 py-1 text-[10px] text-zinc-500 font-mono uppercase border-b border-zinc-800">{match?.[1] || "code"}</div>
+                              <pre className="p-3 overflow-x-auto text-xs font-mono text-zinc-200">
+                                <code className={className} {...props}>
+                                  {children}
+                                </code>
+                              </pre>
+                            </div>
+                          );
+                        },
+                      }}
+                    >
+                      {msg.text}
+                    </ReactMarkdown>
+                  )}
                 </div>
               </div>
             ))}
