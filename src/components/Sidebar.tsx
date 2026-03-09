@@ -4,9 +4,11 @@ import Link from "next/link";
 import { FolderOpen, LayoutDashboard, Settings, UserSearch, FileText, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
+import { usePathname } from "next/navigation";
 
 export function Sidebar() {
   const { toggleCopiloto } = useAppStore();
+  const pathname = usePathname();
 
   return (
     <div className="w-64 border-r border-zinc-800 bg-zinc-950/50 flex flex-col h-screen sticky top-0">
@@ -18,9 +20,9 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 px-4 space-y-2">
-        <NavItem href="/" icon={<LayoutDashboard size={18} />} label="Dashboard" active />
+        <NavItem href="/" icon={<LayoutDashboard size={18} />} label="Dashboard" active={pathname === "/"} />
         <NavItem href="#" icon={<FolderOpen size={18} />} label="Inquéritos" />
-        <NavItem href="#" icon={<UserSearch size={18} />} label="Agente OSINT" />
+        <NavItem href="/agentes/osint" icon={<UserSearch size={18} />} label="Agente OSINT" active={pathname === "/agentes/osint"} />
         <NavItem href="#" icon={<FileText size={18} />} label="Cautelares" />
       </nav>
 

@@ -49,3 +49,24 @@ export const sendMessage = async (
   });
   return response.data;
 };
+
+// APIs Agente OSINT
+export const getPessoas = async (inqueritoId: string) => {
+  const response = await api.get(`/inqueritos/${inqueritoId}/indices/pessoas`);
+  return response.data;
+};
+
+export const getEmpresas = async (inqueritoId: string) => {
+  const response = await api.get(`/inqueritos/${inqueritoId}/indices/empresas`);
+  return response.data;
+};
+
+export const gerarFichaPessoa = async (inqueritoId: string, pessoaId: string) => {
+  const response = await api.post(`/agentes/ficha/pessoa/${pessoaId}?inquerito_id=${inqueritoId}`);
+  return response.data;
+};
+
+export const gerarFichaEmpresa = async (inqueritoId: string, empresaId: string) => {
+  const response = await api.post(`/agentes/ficha/empresa/${empresaId}?inquerito_id=${inqueritoId}`);
+  return response.data;
+};
