@@ -5,6 +5,7 @@ Endpoints para CRUD de inquéritos, transição de estado e upload de documentos
 
 import hashlib
 import uuid
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
@@ -38,6 +39,37 @@ from app.services.storage import StorageService
 router = APIRouter(prefix="/inqueritos", tags=["Inquéritos"])
 
 
+# ── Parser de Delegacias ──────────────────────────────────────────
+
+DELEGACIAS_MAP = {
+    "911": {"nome": "Delegacia de Defraudações", "tipo": "especializada"},
+    "912": {"nome": "Delegacia de Roubos e Furtos", "tipo": "especializada"},
+    "913": {"nome": "Delegacia de Roubos e Furtos de Automóveis", "tipo": "especializada"},
+    "914": {"nome": "Delegacia de Repressão a Entorpecentes", "tipo": "especializada"},
+    "915": {"nome": "Delegacia de Homicídios da Capital", "tipo": "especializada"},
+    "918": {"nome": "Delegacia de Crimes contra o Consumidor", "tipo": "especializada"},
+    "919": {"nome": "Delegacia de Roubos e Furtos de Carga", "tipo": "especializada"},
+    "920": {"nome": "Delegacia de Crimes contra o Meio Ambiente", "tipo": "especializada"},
+    "921": {"nome": "Delegacia Fazendária", "tipo": "especializada"},
+    "059": {"nome": "59ª DP Duque de Caxias", "tipo": "territorial"},
+    "064": {"nome": "64ª DP São João de Meriti", "tipo": "territorial"},
+    "072": {"nome": "72ª DP São Gonçalo", "tipo": "territorial"},
+    "077": {"nome": "77ª DP Icaraí", "tipo": "territorial"},
+    "105": {"nome": "105ª DP Petrópolis", "tipo": "territorial"},
+}
+
+def parse_inquerito(numero_ip: str):
+    """Extrai informações do número do inquérito (formato RJ: DDD-NNNNNN/AAAA)"""
+    match = re.match(r'^(\d{3})-(\d{1,6})/(\d{4})$', numero_ip.strip())
+    if match:
+        return {
+            "delegacia_codigo": match.group(1),
+            "sequencial": match.group(2),
+            "ano": match.group(3)
+        }
+    return None
+
+
 # ── CRUD ──────────────────────────────────────────────────────────
 
 
@@ -47,6 +79,26 @@ async def criar_inquerito(
     db: AsyncSession = Depends(get_db),
 ):
     """Cria um novo inquérito no estado 'recebido'."""
+    origem_cod = None
+    origem_nome = None
+    
+    parsed = parse_inquerito(dados.numero)
+    if parsed:
+        origem_cod = parsed["delegacia_codigo"]
+        if not dados.ano:
+            dados.ano = int(parsed["ano"])
+        # Busca nome no dicionario
+        deleg_info = DELEGACIAS_MAP.get(origem_cod)
+        if deleg_info:
+            origem_nome = deleg_info["nome"]
+
+    # Inicialmente, se não for marcado como redistribuído via payload
+    atual_cod = dados.delegacia_atual_codigo or origem_cod
+    atual_nome = dados.delegacia_atual_nome or origem_nome
+    if not dados.redistribuido:
+        atual_cod = origem_cod
+        atual_nome = origem_nome
+
     inquerito = Inquerito(
         numero=dados.numero,
         delegacia=dados.delegacia,
@@ -55,6 +107,11 @@ async def criar_inquerito(
         prioridade=dados.prioridade,
         classificacao_estrategica=dados.classificacao_estrategica,
         estado_atual=EstadoInquerito.RECEBIDO.value,
+        delegacia_origem_codigo=origem_cod,
+        delegacia_origem_nome=origem_nome,
+        delegacia_atual_codigo=atual_cod,
+        delegacia_atual_nome=atual_nome,
+        redistribuido=dados.redistribuido,
     )
     db.add(inquerito)
     await db.flush()

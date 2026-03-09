@@ -21,8 +21,18 @@ class Inquerito(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     numero: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    delegacia: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    delegacia: Mapped[str | None] = mapped_column(String(200), nullable=True) # Campo legado/aberto
     ano: Mapped[int | None] = mapped_column(nullable=True)
+    
+    # Novos campos de Identidade de Delegacia (Sprint F4)
+    delegacia_origem_codigo: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    delegacia_origem_nome: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    
+    delegacia_atual_codigo: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    delegacia_atual_nome: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    
+    redistribuido: Mapped[bool] = mapped_column(default=False)
+    
     descricao: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     estado_atual: Mapped[str] = mapped_column(

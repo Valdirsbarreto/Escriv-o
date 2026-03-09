@@ -31,6 +31,9 @@ export default function InqueritosPage() {
   const [novoDel, setNovoDel] = useState("");
   const [novoAno, setNovoAno] = useState(new Date().getFullYear());
   const [novoDesc, setNovoDesc] = useState("");
+  const [redistribuido, setRedistribuido] = useState(false);
+  const [novoDelAtualCod, setNovoDelAtualCod] = useState("");
+  
   const [criando, setCriando] = useState(false);
 
   const fetchInqueritos = () => {
@@ -53,11 +56,13 @@ export default function InqueritosPage() {
     try {
       const resp = await api.post("/inqueritos/", {
         numero: novoNum,
-        delegacia: novoDel,
+        delegacia: novoDel || undefined,
         ano: novoAno,
         descricao: novoDesc,
         prioridade: "normal",
-        classificacao_estrategica: "padrao"
+        classificacao_estrategica: "padrao",
+        redistribuido: redistribuido,
+        delegacia_atual_codigo: redistribuido ? novoDelAtualCod : undefined
       });
       setIsDialogOpen(false);
       setNovoNum("");
@@ -129,6 +134,32 @@ export default function InqueritosPage() {
                 />
               </div>
               <div className="space-y-2">
+                <label className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                  <input 
+                    type="checkbox" 
+                    checked={redistribuido} 
+                    onChange={(e) => setRedistribuido(e.target.checked)}
+                    className="rounded border-zinc-700 bg-zinc-900" 
+                  />
+                  Inquérito redistribuído
+                </label>
+              </div>
+              
+              {redistribuido && (
+                <div className="space-y-2 border-l-2 border-blue-500 pl-3">
+                  <label className="text-sm font-medium text-zinc-300">Código da Delegacia Atual</label>
+                  <Input 
+                    placeholder="Ex: 910 ou 064" 
+                    value={novoDelAtualCod} onChange={(e) => setNovoDelAtualCod(e.target.value)}
+                    className="bg-zinc-900 border-zinc-800 focus-visible:ring-blue-500"
+                  />
+                  <p className="text-xs text-zinc-500">
+                    O sistema usará apenas o DDD inicial do inquérito como DP de Origem. Preencha aqui a DP de destino.
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-2">
                 <label className="text-sm font-medium text-zinc-300">Resumo dos Fatos</label>
                 <Input 
                   placeholder="Objeto principal da investigação" 
@@ -175,14 +206,18 @@ export default function InqueritosPage() {
             >
               <CardHeader>
                 <CardTitle className="text-lg flex items-center justify-between">
-                  <span className="font-semibold text-zinc-100 group-hover:text-blue-400 transition-colors">
-                    {inq.numero}/{inq.ano} - {inq.delegacia}
+                  <span className="font-semibold text-zinc-100 group-hover:text-blue-400 transition-colors flex items-center gap-2">
+                    {inq.numero}/{inq.ano} 
+                    {inq.redistribuido && <Badge variant="outline" className="text-blue-400 border-blue-400/30 bg-blue-400/10 text-[10px]">REDIST</Badge>}
                   </span>
                   <Badge variant="outline" className="bg-zinc-800 text-zinc-300 border-zinc-700">
                     {inq.estado_atual}
                   </Badge>
                 </CardTitle>
                 <CardDescription className="line-clamp-2 mt-2 text-zinc-400">
+                  <span className="block text-xs font-medium text-zinc-300 mb-1">
+                    {inq.redistribuido ? `Atual: ${inq.delegacia_atual_nome || inq.delegacia_atual_codigo || inq.delegacia}` : (inq.delegacia_origem_nome || inq.delegacia)}
+                  </span>
                   {inq.descricao || "Sem resumo fático"}
                 </CardDescription>
               </CardHeader>

@@ -13,14 +13,19 @@ from pydantic import BaseModel, Field
 class InqueritoCreate(BaseModel):
     """Schema para criação de um novo inquérito."""
     numero: str = Field(..., min_length=1, max_length=100, description="Número do inquérito")
-    delegacia: Optional[str] = Field(None, max_length=200, description="Delegacia responsável")
+    delegacia: Optional[str] = Field(None, max_length=200, description="Delegacia responsável (legado)")
     ano: Optional[int] = Field(None, ge=1900, le=2100, description="Ano do inquérito")
+    
+    # Delegacia Atual / Redistribuição
+    delegacia_atual_codigo: Optional[str] = Field(None, description="Código da delegacia atual (se redistribuído)")
+    delegacia_atual_nome: Optional[str] = Field(None, description="Nome da delegacia atual")
+    redistribuido: bool = Field(False, description="Indica se houve redistribuição")
+    
     descricao: Optional[str] = Field(None, description="Descrição livre do caso")
     prioridade: Optional[str] = Field("media", description="alta, media ou baixa")
     classificacao_estrategica: Optional[str] = Field(
         None, description="Ex: alta_probabilidade, moderada, baixa_probabilidade, triagem, prescricao"
     )
-
 
 class InqueritoUpdate(BaseModel):
     """Schema para atualização parcial."""
@@ -34,6 +39,13 @@ class InqueritoResponse(BaseModel):
     id: UUID
     numero: str
     delegacia: Optional[str]
+    
+    delegacia_origem_codigo: Optional[str]
+    delegacia_origem_nome: Optional[str]
+    delegacia_atual_codigo: Optional[str]
+    delegacia_atual_nome: Optional[str]
+    redistribuido: bool
+    
     ano: Optional[int]
     descricao: Optional[str]
     estado_atual: str

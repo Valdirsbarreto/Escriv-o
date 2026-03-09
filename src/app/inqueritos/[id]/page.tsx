@@ -80,9 +80,19 @@ export default function InqueritoDetalhePage() {
           >
             <ArrowLeft size={16}/> Voltar para lista
           </button>
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-100">
-            {inquerito.numero}/{inquerito.ano} - {inquerito.delegacia}
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-zinc-100">
+              {inquerito.numero}/{inquerito.ano}
+            </h1>
+            {inquerito.redistribuido && (
+              <Badge variant="outline" className="text-blue-400 border-blue-400/30 bg-blue-400/10">REDISTRIBUÍDO</Badge>
+            )}
+          </div>
+          <p className="text-zinc-400 mt-1">
+            {inquerito.redistribuido 
+              ? `Origem: ${inquerito.delegacia_origem_nome || inquerito.delegacia} → Atual: ${inquerito.delegacia_atual_nome || inquerito.delegacia_atual_codigo}` 
+              : (inquerito.delegacia_origem_nome || inquerito.delegacia)}
+          </p>
           <div className="flex items-center gap-3 mt-3">
             <Badge variant="outline" className="bg-zinc-900 border-zinc-700 text-zinc-300">
               {inquerito.estado_atual.toUpperCase()}

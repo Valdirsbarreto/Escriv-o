@@ -20,6 +20,7 @@ from app.models.contato import Contato
 from app.models.evento_cronologico import EventoCronologico
 from app.models.resumo_cache import ResumoCache
 from app.models.resultado_agente import ResultadoAgente
+from app.models.delegacia import Delegacia
 
 __all__ = [
     "Inquerito",
@@ -39,4 +40,5 @@ __all__ = [
     "EventoCronologico",
     "ResumoCache",
     "ResultadoAgente",
+    "Delegacia",
 ]
