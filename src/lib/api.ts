@@ -78,3 +78,8 @@ export const gerarFichaEmpresa = async (inqueritoId: string, empresaId: string) 
   const response = await api.post(`/agentes/ficha/empresa/${empresaId}?inquerito_id=${inqueritoId}`);
   return response.data;
 };
+
+export const iniciarIngestao = async (formData: FormData) => {
+  const response = await apiMultipart.post("/ingestao/iniciar", formData);
+  return response.data;
+};

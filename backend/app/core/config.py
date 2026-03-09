@@ -52,9 +52,9 @@ class Settings(BaseSettings):
     LLM_STANDARD_API_KEY: Optional[str] = None
 
     # ── LLM Camada Premium ─────────────────────────────────
-    LLM_PREMIUM_PROVIDER: str = "openai"
-    LLM_PREMIUM_MODEL: str = "gpt-4.1"
-    LLM_PREMIUM_BASE_URL: str = "https://api.openai.com/v1"
+    LLM_PREMIUM_PROVIDER: str = "google"
+    LLM_PREMIUM_MODEL: str = "gemini-pro-latest"
+    LLM_PREMIUM_BASE_URL: str = "https://generativelanguage.googleapis.com"
     LLM_PREMIUM_API_KEY: Optional[str] = None
 
     # ── Gemini (Google) ────────────────────────────────────

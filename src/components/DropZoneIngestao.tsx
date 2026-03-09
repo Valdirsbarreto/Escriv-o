@@ -157,13 +157,6 @@ export function DropZoneIngestao() {
 
   return (
     <div className="space-y-4">
-      {/* Aviso de backend necessário */}
-      <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-500/8 border border-amber-500/20 text-sm text-amber-300">
-        <Info className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
-        <span>
-          O backend FastAPI precisa estar rodando localmente: <code className="bg-black/30 px-1.5 py-0.5 rounded text-amber-200 text-xs">uvicorn app.main:app --reload</code>
-        </span>
-      </div>
 
       {/* Drop Zone */}
       <div
