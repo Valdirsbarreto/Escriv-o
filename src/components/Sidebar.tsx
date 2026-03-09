@@ -21,7 +21,7 @@ export function Sidebar() {
 
       <nav className="flex-1 px-4 space-y-2">
         <NavItem href="/" icon={<LayoutDashboard size={18} />} label="Dashboard" active={pathname === "/"} />
-        <NavItem href="#" icon={<FolderOpen size={18} />} label="Inquéritos" />
+        <NavItem href="/inqueritos" icon={<FolderOpen size={18} />} label="Inquéritos" active={pathname.startsWith("/inquerito")} />
         <NavItem href="/agentes/osint" icon={<UserSearch size={18} />} label="Agente OSINT" active={pathname === "/agentes/osint"} />
         <NavItem href="#" icon={<FileText size={18} />} label="Cautelares" />
       </nav>
