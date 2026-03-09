@@ -12,6 +12,8 @@ from app.models.tarefa_agente import TarefaAgente
 from app.models.auditoria import Auditoria
 from app.models.volume import Volume
 from app.models.log_ingestao import LogIngestao
+from app.models.sessao_chat import SessaoChat
+from app.models.mensagem_chat import MensagemChat
 
 __all__ = [
     "Inquerito",
@@ -23,4 +25,6 @@ __all__ = [
     "Auditoria",
     "Volume",
     "LogIngestao",
+    "SessaoChat",
+    "MensagemChat",
 ]

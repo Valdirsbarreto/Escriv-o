@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.inqueritos import router as inqueritos_router
 from app.api.busca import router as busca_router
+from app.api.copiloto import router as copiloto_router
 
 
 @asynccontextmanager
@@ -54,6 +55,7 @@ app.add_middleware(
 # Routers
 app.include_router(inqueritos_router, prefix="/api/v1")
 app.include_router(busca_router, prefix="/api/v1")
+app.include_router(copiloto_router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["Sistema"])
