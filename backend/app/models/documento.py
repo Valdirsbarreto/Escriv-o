@@ -23,7 +23,9 @@ class Documento(Base):
         UUID(as_uuid=True), ForeignKey("inqueritos.id"), nullable=False, index=True
     )
     nome_arquivo: Mapped[str] = mapped_column(String(500), nullable=False)
-    tipo_documento: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    tipo_documento: Mapped[str | None] = mapped_column(String(100), nullable=True) # Ex: "application/pdf"
+    tipo_peca: Mapped[str | None] = mapped_column(String(100), nullable=True) # Classificação AI (ex: Ocorrencia, Portaria)
+    titulo_detectado: Mapped[str | None] = mapped_column(String(500), nullable=True)
     hash_arquivo: Mapped[str | None] = mapped_column(String(128), nullable=True)
     total_paginas: Mapped[int] = mapped_column(Integer, default=0)
     texto_extraido: Mapped[str | None] = mapped_column(Text, nullable=True)

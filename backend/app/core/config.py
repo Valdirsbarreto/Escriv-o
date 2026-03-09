@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     LLM_PREMIUM_API_KEY: Optional[str] = None
 
     model_config = {
-        "env_file": ".env",
+        "env_file": (".env", "../.env"),
         "env_file_encoding": "utf-8",
         "extra": "ignore",
     }

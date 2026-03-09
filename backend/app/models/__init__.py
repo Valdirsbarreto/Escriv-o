@@ -14,6 +14,10 @@ from app.models.volume import Volume
 from app.models.log_ingestao import LogIngestao
 from app.models.sessao_chat import SessaoChat
 from app.models.mensagem_chat import MensagemChat
+from app.models.empresa import Empresa
+from app.models.endereco import Endereco
+from app.models.contato import Contato
+from app.models.evento_cronologico import EventoCronologico
 
 __all__ = [
     "Inquerito",
@@ -27,4 +31,8 @@ __all__ = [
     "LogIngestao",
     "SessaoChat",
     "MensagemChat",
+    "Empresa",
+    "Endereco",
+    "Contato",
+    "EventoCronologico",
 ]

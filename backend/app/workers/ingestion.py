@@ -248,11 +248,89 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
                                detalhes=str(e),
                                duracao_ms=int((time.time() - t0) * 1000))
 
-            # ── 7. [FUTURO] Classificação de peças ────────────
-            # TODO (Sprint 4): Classificar tipo de peça de cada chunk
-
-            # ── 8. [FUTURO] Extração de entidades ─────────────
-            # TODO (Sprint 4): Extrair pessoas, empresas, datas, etc.
+            # ── 7. Classificação e 8. Extração de Identidades (NER) ────────────
+            t0 = time.time()
+            logger.info("[INGESTÃO] Executando Extrator LLM Econômico (Classificação e NER)")
+            try:
+                from app.services.extractor_service import ExtractorService
+                from app.models.pessoa import Pessoa
+                from app.models.empresa import Empresa
+                from app.models.endereco import Endereco
+                from app.models.contato import Contato
+                from app.models.evento_cronologico import EventoCronologico
+                
+                extractor = ExtractorService()
+                texto_analise = extraction["texto_completo"]
+                
+                import asyncio
+                # Executar corrotinas no sync context
+                loop = asyncio.new_event_loop()
+                async def run_extraction():
+                    cat = await extractor.classificar_documento(texto_analise)
+                    ent = await extractor.extrair_entidades(texto_analise)
+                    return cat, ent
+                
+                categoria, entidades = loop.run_until_complete(run_extraction())
+                loop.close()
+                
+                doc.tipo_peca = categoria
+                logger.info(f"[INGESTÃO] Documento classificado como: {categoria}")
+                
+                # Inserir entidades
+                for p_dict in entidades.get("pessoas", []):
+                    db.add(Pessoa(
+                        inquerito_id=uuid.UUID(inquerito_id),
+                        nome=p_dict.get("nome", "Desconhecido")[:300],
+                        cpf=p_dict.get("cpf", "")[:14],
+                        tipo_pessoa=p_dict.get("tipo", "")[:50]
+                    ))
+                for e_dict in entidades.get("empresas", []):
+                    db.add(Empresa(
+                        inquerito_id=uuid.UUID(inquerito_id),
+                        nome=e_dict.get("nome", "Desconhecida")[:300],
+                        cnpj=e_dict.get("cnpj", "")[:18],
+                        tipo_empresa=e_dict.get("tipo", "")[:50]
+                    ))
+                for end_dict in entidades.get("enderecos", []):
+                    db.add(Endereco(
+                        inquerito_id=uuid.UUID(inquerito_id),
+                        endereco_completo=end_dict.get("endereco_completo", "Não informado"),
+                        cidade=end_dict.get("cidade", "")[:100],
+                        estado=end_dict.get("estado", "")[:2],
+                        cep=end_dict.get("cep", "")[:10]
+                    ))
+                for tel_dict in entidades.get("telefones", []):
+                    db.add(Contato(
+                        inquerito_id=uuid.UUID(inquerito_id),
+                        tipo_contato="telefone",
+                        valor=tel_dict.get("numero", "")[:255]
+                    ))
+                for em_dict in entidades.get("emails", []):
+                    db.add(Contato(
+                        inquerito_id=uuid.UUID(inquerito_id),
+                        tipo_contato="email",
+                        valor=em_dict.get("endereco", "")[:255]
+                    ))
+                for cron_dict in entidades.get("cronologia", []):
+                    desc = cron_dict.get("descricao")
+                    if desc:
+                        db.add(EventoCronologico(
+                            inquerito_id=uuid.UUID(inquerito_id),
+                            data_fato_str=cron_dict.get("data", "")[:50],
+                            descricao=desc,
+                            documento_id=uuid.UUID(documento_id)
+                        ))
+                
+                db.commit()
+                _log_etapa(db, documento_id, inquerito_id, "extracao_entidades", "concluido",
+                           duracao_ms=int((time.time() - t0) * 1000),
+                           dados_extras={"categoria": categoria, "entidades_extraidas": len(entidades.get("pessoas", []))})
+                           
+            except Exception as e:
+                logger.warning(f"[INGESTÃO] Falha na extração de entidades/classificação: {e}")
+                _log_etapa(db, documento_id, inquerito_id, "extracao_entidades", "erro",
+                           detalhes=str(e),
+                           duracao_ms=int((time.time() - t0) * 1000))
 
             # ── 9. [FUTURO] Resumos hierárquicos ──────────────
             # TODO (Sprint 5): Gerar resumos por página, documento, volume, caso

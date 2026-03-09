@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.api.inqueritos import router as inqueritos_router
 from app.api.busca import router as busca_router
 from app.api.copiloto import router as copiloto_router
+from app.api.indices import router as indices_router
 
 
 @asynccontextmanager
@@ -32,21 +33,16 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Escrivão AI",
-    description=(
-        "Sistema de apoio à análise de inquéritos policiais. "
-        "Ingestão assíncrona, RAG vetorial, copiloto investigativo, "
-        "agentes especializados e auditoria factual obrigatória."
-    ),
-    version="0.2.0 — Sprint 2",
+    title="Escrivão AI API",
+    description="API do backend do sistema Escrivão AI. Sprint 4: Classificação e Índices.",
+    version="0.4.0",
     lifespan=lifespan,
 )
 
 # CORS
-origins = [o.strip() for o in settings.CORS_ORIGINS.split(",")]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -56,6 +52,7 @@ app.add_middleware(
 app.include_router(inqueritos_router, prefix="/api/v1")
 app.include_router(busca_router, prefix="/api/v1")
 app.include_router(copiloto_router, prefix="/api/v1")
+app.include_router(indices_router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["Sistema"])

@@ -34,15 +34,33 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Executa migrations com conexão ao banco."""
+    from app.core.config import settings
+    from app.core.database import _encode_password_in_url
+    
+    sync_url = _encode_password_in_url(settings.DATABASE_URL_SYNC)
+    
+    config_section = config.get_section(config.config_ini_section, {})
+    config_section["sqlalchemy.url"] = sync_url
+
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        config_section,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
+    
+    import ssl
+    connect_args = {}
+    if "supabase" in sync_url or "localhost" not in sync_url:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        connect_args["ssl_context"] = ctx # Para psycopg2 o kwarg é ssl_context
+
     with connectable.connect() as connection:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
+            **({"connect_args": connect_args} if connect_args else {})
         )
         with context.begin_transaction():
             context.run_migrations()
