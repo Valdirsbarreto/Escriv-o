@@ -13,21 +13,27 @@ class Settings(BaseSettings):
     # ── Aplicação ──────────────────────────────────────────
     APP_ENV: str = "development"
     APP_SECRET_KEY: str = "troque-esta-chave-em-producao"
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,https://*.vercel.app"
 
-    # ── Banco de Dados ─────────────────────────────────────
-    DATABASE_URL: str = "postgresql+asyncpg://escrivao:escrivao_dev_2024@localhost:5432/escrivao_db"
-    DATABASE_URL_SYNC: str = "postgresql://escrivao:escrivao_dev_2024@localhost:5432/escrivao_db"
+    # ── Banco de Dados (Supabase) ──────────────────────────
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:senha@localhost:5432/postgres"
+    DATABASE_URL_SYNC: str = "postgresql://postgres:senha@localhost:5432/postgres"
 
-    # ── Redis ──────────────────────────────────────────────
+    # ── Supabase ───────────────────────────────────────────
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_ANON_KEY: Optional[str] = None
+    SUPABASE_SERVICE_KEY: Optional[str] = None
+    SUPABASE_STORAGE_BUCKET: str = "inqueritos"
+
+    # ── Redis (Docker) ─────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # ── Qdrant ─────────────────────────────────────────────
+    # ── Qdrant (Docker) ────────────────────────────────────
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION: str = "escrivao_chunks"
 
-    # ── MinIO / S3 ─────────────────────────────────────────
+    # ── MinIO / S3 (Docker) ────────────────────────────────
     S3_ENDPOINT_URL: str = "http://localhost:9000"
     S3_ACCESS_KEY: str = "escrivao"
     S3_SECRET_KEY: str = "escrivao_minio_2024"
