@@ -82,6 +82,65 @@ async def listar_cronologia(
     result = await db.execute(
         select(EventoCronologico)
         .where(EventoCronologico.inquerito_id == inquerito_id)
-        # TODO: melhor sort logic mixando data_fato e data_fato_str
     )
     return result.scalars().all()
+
+
+# ── Endpoints de Resumo Hierárquico (Sprint 5) ────────────────────────────────
+
+from app.models.resumo_cache import ResumoCache
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
+
+
+class ResumoOut(BaseModel):
+    nivel: str
+    texto_resumo: str
+    modelo_llm: Optional[str] = None
+    tokens_usados: Optional[int] = None
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/resumo", response_model=ResumoOut, tags=["Resumos"])
+async def obter_resumo_caso(
+    inquerito_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """Retorna o Resumo Executivo do inquérito (nível caso)."""
+    result = await db.execute(
+        select(ResumoCache)
+        .where(ResumoCache.inquerito_id == inquerito_id)
+        .where(ResumoCache.nivel == "caso")
+    )
+    resumo = result.scalar_one_or_none()
+    if not resumo:
+        raise HTTPException(
+            status_code=404,
+            detail="Resumo executivo ainda não gerado. O inquérito pode estar sendo processado."
+        )
+    return resumo
+
+
+@router.get("/resumo/documento/{documento_id}", response_model=ResumoOut, tags=["Resumos"])
+async def obter_resumo_documento(
+    inquerito_id: uuid.UUID,
+    documento_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """Retorna o resumo de um documento específico."""
+    result = await db.execute(
+        select(ResumoCache)
+        .where(ResumoCache.inquerito_id == inquerito_id)
+        .where(ResumoCache.nivel == "documento")
+        .where(ResumoCache.referencia_id == documento_id)
+    )
+    resumo = result.scalar_one_or_none()
+    if not resumo:
+        raise HTTPException(
+            status_code=404,
+            detail="Resumo do documento ainda não gerado."
+        )
+    return resumo

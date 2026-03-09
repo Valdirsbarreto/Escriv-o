@@ -51,6 +51,7 @@ class CopilotoService:
         total_documentos: int = 0,
         max_chunks: int = 8,
         auditar: bool = True,
+        db=None,  # AsyncSession opcional para buscar resumo do caso
     ) -> Dict[str, Any]:
         """
         Processa uma mensagem do usuário e retorna resposta com fontes.
@@ -94,6 +95,20 @@ class CopilotoService:
         # ── 2. Montar contexto ────────────────────────────
         contexto_partes = []
         fontes = []
+
+        # Injetar resumo executivo do caso no topo do contexto (Sprint 5)
+        if db is not None:
+            try:
+                from app.services.summary_service import SummaryService
+                summary_svc = SummaryService()
+                resumo_caso = await summary_svc.obter_resumo_caso(db, uuid.UUID(inquerito_id))
+                if resumo_caso:
+                    contexto_partes.append(
+                        f"### Resumo Executivo do Inquérito\n{resumo_caso}\n\n---"
+                    )
+                    logger.info("[COPILOTO] Resumo do caso injetado no contexto RAG")
+            except Exception as e:
+                logger.warning(f"[COPILOTO] Falha ao buscar resumo do caso: {e}")
 
         for i, r in enumerate(resultados, 1):
             payload = r.get("payload", {})

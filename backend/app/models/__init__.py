@@ -18,6 +18,7 @@ from app.models.empresa import Empresa
 from app.models.endereco import Endereco
 from app.models.contato import Contato
 from app.models.evento_cronologico import EventoCronologico
+from app.models.resumo_cache import ResumoCache
 
 __all__ = [
     "Inquerito",
@@ -35,4 +36,5 @@ __all__ = [
     "Endereco",
     "Contato",
     "EventoCronologico",
+    "ResumoCache",
 ]

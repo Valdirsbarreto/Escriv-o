@@ -154,3 +154,62 @@ Retorne um JSON VAZIO para as listas onde nenhuma entidade for encontrada. NÃO 
 Texto para análise:
 {texto}
 """
+
+# ── Prompts de Resumo Hierárquico (Sprint 5) ─────────────────────────────────
+
+PROMPT_RESUMO_PAGINA = """Você é um analista forense especializado em inquéritos policiais brasileiros.
+Leia o trecho de página abaixo e escreva um resumo CONCISO em no máximo 3 linhas.
+Foco: fatos objetivos, nomes de pessoas, datas, valores e atos processuais relevantes.
+NÃO INVENTE informações. Se o texto for ininteligível, escreva "Página sem conteúdo relevante".
+
+Texto da página:
+{texto}
+"""
+
+PROMPT_RESUMO_DOCUMENTO = """Você é um analista forense especializado em inquéritos policiais brasileiros.
+Leia os trechos abaixo referentes ao documento "{nome_arquivo}" (tipo: {tipo_peca}) e escreva um resumo investigativo.
+
+O resumo deve conter (quando disponível):
+1. Tipo e objetivo do documento
+2. Principais fatos descritos
+3. Pessoas mencionadas e seus papéis
+4. Datas e locais relevantes
+5. Relevância investigativa (por que este documento importa)
+
+Seja objetivo. Máximo de 10 linhas. NÃO INVENTE fatos.
+
+Texto do documento:
+{texto}
+"""
+
+PROMPT_RESUMO_VOLUME = """Você é um analista forense especializado em inquéritos policiais.
+Com base nos resumos individuais dos documentos abaixo, escreva um resumo consolidado do VOLUME {numero_volume}.
+
+O resumo do volume deve:
+- Identificar os principais documentos e sua relevância
+- Destacar os fatos mais importantes do conjunto
+- Indicar as pessoas e empresas mencionadas com maior frequência
+- Apontar inconsistências ou destaques entre os documentos
+
+Máximo de 15 linhas. NÃO INVENTE informações não presentes nos resumos.
+
+Resumos dos documentos:
+{resumos_documentos}
+"""
+
+PROMPT_RESUMO_CASO = """Você é um analista forense sênior responsável por produzir o Resumo Executivo de um inquérito policial.
+Com base nos resumos dos volumes abaixo, produza um relatório executivo do inquérito "{numero_inquerito}".
+
+O Resumo Executivo deve conter:
+1. **Fato em Apuração** — descrição do evento/crime investigado
+2. **Principais Suspeitos/Investigados** — com contexto de sua participação
+3. **Vítimas** — quem são e o prejuízo sofrido
+4. **Estado da Investigação** — o que já foi apurado e o que falta
+5. **Pontos Críticos** — lacunas probatórias, riscos de prescrição, diligências urgentes
+
+Use linguagem técnico-jurídica, seja objetivo e preciso. Máximo de 20 linhas.
+NÃO INVENTE informações. Baseie-se exclusivamente nos resumos fornecidos.
+
+Resumos dos volumes:
+{resumos_volumes}
+"""

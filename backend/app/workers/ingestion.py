@@ -332,8 +332,15 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
                            detalhes=str(e),
                            duracao_ms=int((time.time() - t0) * 1000))
 
-            # ── 9. [FUTURO] Resumos hierárquicos ──────────────
-            # TODO (Sprint 5): Gerar resumos por página, documento, volume, caso
+            # ── 9. Disparar task de Resumos Hierárquicos (Sprint 5) ───────────
+            try:
+                from app.workers.summary_task import generate_summaries_task
+                generate_summaries_task.delay(inquerito_id, documento_id)
+                logger.info(f"[INGESTÃO] Task de resumos disparada para doc={documento_id}")
+                _log_etapa(db, documento_id, inquerito_id, "resumos_agendados", "concluido",
+                           dados_extras={"task": "generate_summaries_task"})
+            except Exception as e:
+                logger.warning(f"[INGESTÃO] Falha ao agendar resumos: {e}")
 
             # ── 10. Atualizar status ──────────────────────────
             doc.status_processamento = "concluido"
