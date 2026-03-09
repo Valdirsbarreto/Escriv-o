@@ -19,7 +19,7 @@ async def test_health_check():
     data = response.json()
     assert data["status"] == "ok"
     assert data["service"] == "escrivao-ai"
-    assert data["sprint"] == 1
+    assert data["sprint"] == 2
 
 
 @pytest.mark.asyncio

@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.api.inqueritos import router as inqueritos_router
+from app.api.busca import router as busca_router
 
 
 @asynccontextmanager
@@ -36,7 +37,7 @@ app = FastAPI(
         "Ingestão assíncrona, RAG vetorial, copiloto investigativo, "
         "agentes especializados e auditoria factual obrigatória."
     ),
-    version="0.1.0 — Sprint 1",
+    version="0.2.0 — Sprint 2",
     lifespan=lifespan,
 )
 
@@ -52,6 +53,7 @@ app.add_middleware(
 
 # Routers
 app.include_router(inqueritos_router, prefix="/api/v1")
+app.include_router(busca_router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["Sistema"])
@@ -60,8 +62,8 @@ async def health_check():
     return {
         "status": "ok",
         "service": "escrivao-ai",
-        "version": "0.1.0",
-        "sprint": 1,
+        "version": "0.2.0",
+        "sprint": 2,
         "timestamp": datetime.utcnow().isoformat(),
     }
 
@@ -72,10 +74,11 @@ async def root():
     return {
         "nome": "Escrivão AI",
         "descricao": "Sistema de Apoio à Análise de Inquéritos Policiais",
-        "versao": "0.1.0 — Sprint 1",
+        "versao": "0.2.0 — Sprint 2",
         "documentacao": "/docs",
         "health": "/health",
         "endpoints": {
             "inqueritos": "/api/v1/inqueritos",
+            "busca": "/api/v1/busca",
         },
     }
