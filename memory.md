@@ -1,6 +1,6 @@
 # Escrivão AI — Memória do Projeto
 
-**Atualizado em:** 09 de março de 2026 — 15h20 (horário de Brasília)
+**Atualizado em:** 09 de março de 2026 — 20h58 (horário de Brasília)
 
 ---
 
@@ -55,14 +55,14 @@
 - Migration Alembic aplicada no Supabase
 - Novos endpoints `/api/v1/inqueritos/{id}/indices/{pessoas|empresas|enderecos|contatos|cronologia}`
 
+### ✅ Sprint 5 — Resumos Hierárquicos (`f3a718c` - aprox)
+- Geração assíncrona (Celery) de resumos por página → documento → volume → caso completo
+- Armazenamento em cache de resumos para evitar reprocessamento
+- Exibição injetada no contexto base dos endpoints de consulta do copiloto
+
 ---
 
 ## 3. Próximos Passos
-
-### ⏳ Sprint 5 — Resumos Hierárquicos
-- Geração assíncrona (Celery) de resumos por página → documento → volume → caso completo
-- Armazenamento em cache de resumos para evitar reprocessamento
-- Exibição nos endpoints de consulta do copiloto
 
 ### ⏳ Sprint 6 → 12 — Agentes Especializados e OSINT
 Ver blueprint `investigacao_ai_v3_blueprint-3.md` (raiz do projeto) para detalhes.

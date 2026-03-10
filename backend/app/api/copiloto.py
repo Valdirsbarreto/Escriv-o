@@ -162,6 +162,7 @@ async def enviar_mensagem(
         total_paginas=inquerito.total_paginas,
         total_documentos=inquerito.total_documentos,
         auditar=dados.auditar,
+        db=db,
     )
 
     # Salvar resposta do assistente

@@ -8,7 +8,7 @@ from datetime import datetime
 
 from sqlalchemy import String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 from app.core.database import Base
 
@@ -28,6 +28,12 @@ class Pessoa(Base):
     )  # testemunha, vitima, investigado, outro
     cpf: Mapped[str | None] = mapped_column(String(14), nullable=True)
     observacoes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # Dossiê Dinâmico - Resumo persistente do indivíduo (Memória de Contexto)
+    resumo_contexto: Mapped[str | None] = mapped_column(Text, nullable=True)
+    
+    # Estrutura JSON para citações: [{"texto": "...", "documento_id": "...", "pagina": 1}]
+    citacoes_json: Mapped[dict | list | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
