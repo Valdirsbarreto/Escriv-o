@@ -45,28 +45,39 @@ async def iniciar_ingestao(
     filenames = []
     ignorados = []
 
+    import re
+    import unicodedata
+
+    def slugify(text: str) -> str:
+        text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+        text = re.sub(r'[^\w\s\.-]', '', text).strip().lower()
+        return re.sub(r'[-\s]+', '-', text)
+
     for file in files:
-        nome = file.filename or "arquivo"
-        ext = "." + nome.rsplit(".", 1)[-1].lower() if "." in nome else ""
+        nome_original = file.filename or "arquivo"
+        nome = slugify(nome_original)
+        ext = "." + nome_original.rsplit(".", 1)[-1].lower() if "." in nome_original else ""
+        if not nome.endswith(ext):
+            nome += ext
         
         if ext not in EXTENSOES_PERMITIDAS:
-            ignorados.append(nome)
+            ignorados.append(nome_original)
             continue
 
         try:
             content = await file.read()
             if len(content) > TAMANHO_MAX_ARQUIVO:
-                logger.warning(f"[INGESTÃO] Arquivo {nome} excede 50 MB, ignorado.")
-                ignorados.append(nome)
+                logger.warning(f"[INGESTÃO] Arquivo {nome_original} excede 50 MB, ignorado.")
+                ignorados.append(nome_original)
                 continue
 
             storage_path = f"temporario/{id_sessao}/{nome}"
             await storage.upload_file(content, storage_path, file.content_type or "application/octet-stream")
             storage_paths.append(storage_path)
-            filenames.append(nome)
+            filenames.append(nome_original)
         except Exception as e:
-            logger.error(f"[INGESTÃO] Erro ao processar {nome}: {e}")
-            ignorados.append(nome)
+            logger.error(f"[INGESTÃO] Erro ao processar {nome_original}: {e}")
+            ignorados.append(nome_original)
 
     if not storage_paths:
         raise HTTPException(
