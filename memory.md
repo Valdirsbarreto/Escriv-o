@@ -64,6 +64,10 @@
 
 ## 3. Próximos Passos
 
+### ⏳ Próxima Sessão — Separação de Repositórios
+- Separar o projeto em dois repositórios distintos (Frontend Next.js e Backend FastAPI).
+- Objetivo: Facilitar o deploy, evitar conflitos de build (ex: Vercel vs Railway) e preparar a arquitetura para escalabilidade com novos agentes.
+
 ### ⏳ Sprint 6 → 12 — Agentes Especializados e OSINT
 Ver blueprint `investigacao_ai_v3_blueprint-3.md` (raiz do projeto) para detalhes.
 
