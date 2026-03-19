@@ -91,40 +91,47 @@ export function DropZoneIngestao() {
     let algumErro = false;
 
     for (let i = 0; i < batches.length; i++) {
-      const batch = batches[i];
-      
-      // Estágio visual progressivo
-      if (i === 0) setStage("uploading");
-      else if (i === Math.floor(batches.length * 0.4)) setStage("analisando_ia");
-      else if (i === Math.floor(batches.length * 0.7)) setStage("extraindo_dados");
-      else if (i === batches.length - 1) setStage("criando_inquerito");
-
-      try {
-        const formData = new FormData();
-        batch.forEach((file) => formData.append("files", file));
-
-        const response = await apiMultipart.post("/ingestao/iniciar", formData, {
-          timeout: 120_000, // 2 min por lote
-        });
+        const batch = batches[i];
+        const baseProgresso = (i / batches.length) * 100;
         
-        ultimoResultado = response.data;
-        statusLotes[i] = { ...statusLotes[i], concluido: true };
-      } catch (err: any) {
-        const msg = diagnosarErro(err);
-        statusLotes[i] = { ...statusLotes[i], concluido: false, erro: msg };
-        
-        // Se for erro de rede, para imediatamente
-        if (err.code === "ERR_NETWORK" || !err.response) {
-          setLotes([...statusLotes]);
-          setStage("erro");
-          setErro(msg);
-          return;
+        // Estágio visual progressivo baseado no lote
+        if (i === 0) setStage("uploading");
+        else if (i === Math.floor(batches.length * 0.4)) setStage("analisando_ia");
+        else if (i === Math.floor(batches.length * 0.7)) setStage("extraindo_dados");
+        else if (i === batches.length - 1) setStage("criando_inquerito");
+
+        try {
+            const formData = new FormData();
+            batch.forEach((file) => formData.append("files", file));
+
+            const response = await apiMultipart.post("/ingestao/iniciar", formData, {
+                timeout: 120_000,
+                onUploadProgress: (progressEvent) => {
+                    if (progressEvent.total) {
+                        const uploadPercent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                        const progressoReal = baseProgresso + (uploadPercent / batches.length);
+                        setProgresso(Math.round(progressoReal));
+                    }
+                },
+            });
+            
+            ultimoResultado = response.data;
+            statusLotes[i] = { ...statusLotes[i], concluido: true };
+        } catch (err: any) {
+            const msg = diagnosarErro(err);
+            statusLotes[i] = { ...statusLotes[i], concluido: false, erro: msg };
+            
+            if (err.code === "ERR_NETWORK" || !err.response) {
+                setLotes([...statusLotes]);
+                setStage("erro");
+                setErro(msg);
+                return;
+            }
+            algumErro = true;
         }
-        algumErro = true;
-      }
 
-      setLotes([...statusLotes]);
-      setProgresso(Math.round(((i + 1) / batches.length) * 100));
+        setLotes([...statusLotes]);
+        setProgresso(Math.round(((i + 1) / batches.length) * 100));
     }
 
     if (ultimoResultado && !algumErro) {
