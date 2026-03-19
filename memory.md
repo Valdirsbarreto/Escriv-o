@@ -1,6 +1,6 @@
 # Escrivão AI — Memória do Projeto
 
-**Atualizado em:** 09 de março de 2026 — 20h58 (horário de Brasília)
+**Atualizado em:** 18 de março de 2026 — 23h45 (horário de Brasília)
 
 ---
 
@@ -60,13 +60,21 @@
 - Armazenamento em cache de resumos para evitar reprocessamento
 - Exibição injetada no contexto base dos endpoints de consulta do copiloto
 
+### ✅ Sessão de Qualidade e Deploy (18/03/2026)
+- Criação e validação de bateria de testes unitários para Auditoria Factual (`tests/test_auditoria.py`).
+- Mapeamento e solução de falha de conexão Vercel ↔ Railway (Ajuste de configuração de porta e ambiente local vs remoto).
+- Resolução de queda por dependência síncrona ausente (`psycopg2-binary` injetado no `requirements.txt`).
+- Descongelamento do projeto Supabase pausado e injeção correta das chaves `S3_ACCESS_KEY` do ambiente Storage.
+
 ---
 
 ## 3. Próximos Passos
 
-### ⏳ Próxima Sessão — Separação de Repositórios
-- Separar o projeto em dois repositórios distintos (Frontend Next.js e Backend FastAPI).
-- Objetivo: Facilitar o deploy, evitar conflitos de build (ex: Vercel vs Railway) e preparar a arquitetura para escalabilidade com novos agentes.
+### ⏳ Próxima Sessão (19/03 em diante)
+- **Teste Real de Ingestão de Documentos**: Fazer o upload guiado de um PDF no dashboard para verificar a comunicação ponta-a-ponta (Armazenamento S3 → Quebra em Chunks → Indexação Qdrant → Salvamento no DB).
+
+### ⏳ Separação de Repositórios (Opcional)
+- Separar o projeto em dois repositórios distintos (Frontend Next.js e Backend FastAPI) para evitar build cruzado.
 
 ### ⏳ Sprint 6 → 12 — Agentes Especializados e OSINT
 Ver blueprint `investigacao_ai_v3_blueprint-3.md` (raiz do projeto) para detalhes.
