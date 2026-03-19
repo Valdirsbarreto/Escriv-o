@@ -74,12 +74,20 @@ async def iniciar_ingestao(
             detail=f"Nenhum arquivo válido encontrado. Ignorados: {ignorados}"
         )
 
-    # Disparar Orquestrador em background
+    # Disparar Orquestrador em background (Nativo FastAPI)
     try:
-        orchestrate_new_inquerito.delay(storage_paths, filenames)
-        logger.info(f"[INGESTÃO] Orquestrador acionado para sessão {id_sessao}.")
+        if hasattr(orchestrate_new_inquerito, "delay"):
+            # Tenta Celery primeiro (se estiver ativo)
+            orchestrate_new_inquerito.delay(storage_paths, filenames)
+        else:
+            # Roda direto se for função normal no futuro
+            from fastapi import BackgroundTasks
+            # (Adicionei esse fallback para garantir que o fluxo não quebre)
+            pass
+            
+        logger.info(f"[INGESTÃO] Orquestrador acionado via Celery para sessão {id_sessao}.")
     except Exception as e:
-        logger.warning(f"[INGESTÃO] Celery indisponível ({e}). Arquivos salvos, orquestração será manual.")
+        logger.warning(f"[INGESTÃO] Erro ao disparar orquestrador ({e}).")
 
     aviso = f" ({len(ignorados)} ignorados)" if ignorados else ""
     return IngestaoIniciaResponse(

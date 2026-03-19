@@ -76,8 +76,10 @@
 ### ⏳ Separação de Repositórios (Opcional)
 - Separar o projeto em dois repositórios distintos (Frontend Next.js e Backend FastAPI) para evitar build cruzado.
 
-### ⏳ Sprint 6 → 12 — Agentes Especializados e OSINT
-Ver blueprint `investigacao_ai_v3_blueprint-3.md` (raiz do projeto) para detalhes.
+### ⏳ Sprint 6 → Agentes Especializados e OSINT
+- **Treinamento Especializado (RAG):** Fazer a ingestão separada (`escrivao_conhecimento`) dos Manuais da PF, Tipologias do COAF/ENCCLA e Legislação para servir de fundamentação em tempo real para os agentes.
+- **Painel de Triagem OSINT:** Desenvolver a tela no Frontend (Vercel) listando todas as "Pessoas Envolvidas" extraídas do inquérito, com *checkbox*. Ao selecionar e acionar a API, enriquecer os dados dessas pessoas (Endereços, Telefones, WhatsApp, Vínculos) e devolver ao DB para alimentar o Agente Relator.
+- Ver blueprint `investigacao_ai_v3_blueprint-3.md` (raiz do projeto) para o restante da arquitetura de agentes.
 
 ---
 
