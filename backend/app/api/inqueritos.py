@@ -73,7 +73,7 @@ def parse_inquerito(numero_ip: str):
 # ── CRUD ──────────────────────────────────────────────────────────
 
 
-@router.post("/", response_model=InqueritoResponse, status_code=201)
+@router.post("", response_model=InqueritoResponse, status_code=201)
 async def criar_inquerito(
     dados: InqueritoCreate,
     db: AsyncSession = Depends(get_db),
@@ -119,7 +119,7 @@ async def criar_inquerito(
     return inquerito
 
 
-@router.get("/", response_model=InqueritoListResponse)
+@router.get("", response_model=InqueritoListResponse)
 async def listar_inqueritos(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),

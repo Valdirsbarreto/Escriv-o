@@ -75,6 +75,22 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+# ── Auto-Sincronização de Redis (Railway) ──────────────────────────
+# Se o REDISPASSWORD estiver presente (injetado pela Railway), montamos a URL final
+# para garantir que a autenticação seja incluída.
+import os
+_redis_host = os.getenv("REDISHOST")
+_redis_pwd = os.getenv("REDISPASSWORD")
+_redis_port = os.getenv("REDISPORT", "6379")
+
+if _redis_host and _redis_pwd:
+    # Formato: redis://:senha@host:porta/0
+    settings.REDIS_URL = f"redis://:{_redis_pwd}@{_redis_host}:{_redis_port}/0"
+elif _redis_host:
+    # Sem senha
+    settings.REDIS_URL = f"redis://{_redis_host}:{_redis_port}/0"
+
+
 # ── Auto-Sincronização de Banco de Dados (PostgreSQL Sync vs Async) ──────────
 # Se estivermos em produção e o DATABASE_URL_SYNC ainda for o default (localhost),
 # vamos derivá-lo automaticamente do DATABASE_URL principal, removendo o driver '+asyncpg'.
