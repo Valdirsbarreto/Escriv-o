@@ -74,3 +74,11 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# ── Auto-Sincronização de Banco de Dados (PostgreSQL Sync vs Async) ──────────
+# Se estivermos em produção e o DATABASE_URL_SYNC ainda for o default (localhost),
+# vamos derivá-lo automaticamente do DATABASE_URL principal, removendo o driver '+asyncpg'.
+if "localhost" not in settings.DATABASE_URL and "localhost" in settings.DATABASE_URL_SYNC:
+    # Transforma postgresql+asyncpg://... em postgresql://...
+    settings.DATABASE_URL_SYNC = settings.DATABASE_URL.replace("+asyncpg", "")
+

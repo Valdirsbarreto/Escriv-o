@@ -84,15 +84,16 @@ def orchestrate_new_inquerito(self, storage_paths: List[str], filenames: List[st
                 inquerito.estado_atual = EstadoInquerito.INDEXANDO.value
 
             inquerito_id = inquerito.id
+            db.commit() # Salvamos o inquérito imediatamente para aparecer no Dashboard
 
             # 4. Registrar documentos e disparar ingestão individual
             from app.workers.ingestion import ingest_document
             
-            for path, fname in zip(storage_paths, filenames):
-                # Calcular hash (opcional mas bom para evitar duplicados no mesmo IP)
-                # Como já está no S3, poderíamos fazer stream, mas para simplificar:
-                doc_hash = hashlib.sha256(fname.encode()).hexdigest() # Simplificado para o MVP
+            # Recarrega o inquerito para a sessão após o commit anterior
+            inquerito = db.merge(inquerito)
 
+            for path, fname in zip(storage_paths, filenames):
+                doc_hash = hashlib.sha256(fname.encode()).hexdigest()
                 documento = Documento(
                     inquerito_id=inquerito_id,
                     nome_arquivo=fname,
@@ -111,6 +112,7 @@ def orchestrate_new_inquerito(self, storage_paths: List[str], filenames: List[st
             personagens = analise.get("personagens", [])
             orchestrator.salvar_personagens_e_contexto(db, inquerito_id, personagens)
             
+            # Novo Loop para fechar relatório (opcional se quiser commit separado)
             relatorio = loop.run_until_complete(
                 orchestrator.gerar_relatorio_contextualizado(
                     inquerito_id, 
@@ -121,6 +123,7 @@ def orchestrate_new_inquerito(self, storage_paths: List[str], filenames: List[st
             
             db.commit()
             logger.info(f"[ORQUESTRADOR] Orquestração concluída para IP {numero_ip}")
+
 
             return {
                 "status": "sucesso",
