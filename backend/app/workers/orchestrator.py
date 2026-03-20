@@ -43,7 +43,7 @@ def orchestrate_new_inquerito(self, storage_paths: List[str], filenames: List[st
 
             async def _run_async():
                 content = await storage.download_file(primary_path)
-                extraction = pdf_service.extract_with_ocr(content, max_pages=3)
+                extraction = pdf_service.extract_with_ocr(content)
                 texto_inicial = extraction["texto_completo"]
                 analise = await orchestrator.analisar_documentos_iniciais(texto_inicial)
                 return extraction, texto_inicial, analise
