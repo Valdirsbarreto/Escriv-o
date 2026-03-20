@@ -4,4 +4,4 @@ providers = ["python"]
 aptPkgs = ["tesseract-ocr", "poppler-utils"]
 
 [start]
-cmd = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+cmd = "celery -A app.workers.celery_app worker --loglevel=info --concurrency=2 & uvicorn app.main:app --host 0.0.0.0 --port $PORT"

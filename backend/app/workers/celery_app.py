@@ -25,4 +25,6 @@ celery_app.conf.update(
     # Retry config
     task_default_retry_delay=30,
     task_max_retries=3,
+    # Evita warning de deprecação no Celery 6
+    broker_connection_retry_on_startup=True,
 )
