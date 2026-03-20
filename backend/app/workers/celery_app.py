@@ -10,7 +10,11 @@ celery_app = Celery(
     "escrivao",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
-    include=["app.workers.ingestion"],
+    include=[
+        "app.workers.ingestion",
+        "app.workers.orchestrator",
+        "app.workers.summary_task",
+    ],
 )
 
 celery_app.conf.update(
