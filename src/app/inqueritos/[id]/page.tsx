@@ -10,16 +10,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2 } from "lucide-react";
 
 export default function InqueritoDetalhePage() {
@@ -128,25 +127,29 @@ export default function InqueritoDetalhePage() {
         </div>
         
         <div className="flex gap-3">
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
+          <Dialog>
+            <DialogTrigger asChild>
               <Button variant="outline" className="border-red-800 text-red-500 hover:bg-red-500/10 hover:text-red-400">
                 <Trash2 size={16} className="mr-2"/> Excluir
               </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent className="bg-zinc-900 border-zinc-800">
-              <AlertDialogHeader>
-                <AlertDialogTitle className="text-zinc-100">Excluir inquérito?</AlertDialogTitle>
-                <AlertDialogDescription className="text-zinc-400">
+            </DialogTrigger>
+            <DialogContent className="bg-zinc-900 border-zinc-800" showCloseButton={false}>
+              <DialogHeader>
+                <DialogTitle className="text-zinc-100">Excluir inquérito?</DialogTitle>
+                <DialogDescription className="text-zinc-400">
                   Todos os documentos, vetores e dados do inquérito <strong className="text-zinc-200">{inquerito?.numero}/{inquerito?.ano}</strong> serão permanentemente removidos. Esta ação não pode ser desfeita.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700">Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete} className="bg-red-700 hover:bg-red-600 text-white">Excluir permanentemente</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <DialogClose render={<Button variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700" />}>
+                  Cancelar
+                </DialogClose>
+                <Button onClick={handleDelete} className="bg-red-700 hover:bg-red-600 text-white">
+                  Excluir permanentemente
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="bg-blue-600 hover:bg-blue-700 text-white">
             {uploading ? (
