@@ -29,6 +29,10 @@ export const getInquerito = async (id: string) => {
   return response.data;
 };
 
+export const deleteInquerito = async (id: string) => {
+  await api.delete(`/inqueritos/${id}`);
+};
+
 export const getInqueritoResumo = async (id: string) => {
   const response = await api.get(`/inqueritos/${id}/indices/resumo`);
   return response.data;

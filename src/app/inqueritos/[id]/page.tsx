@@ -4,18 +4,30 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAppStore } from "@/store/app";
 import { api } from "@/lib/api";
+import { deleteInquerito } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, BrainCircuit } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2 } from "lucide-react";
 
 export default function InqueritoDetalhePage() {
   const params = useParams();
   const router = useRouter();
   const inqId = params.id as string;
-  const { setInqueritoAtivoId, toggleCopiloto } = useAppStore();
-  
+  const { setInqueritoAtivoId, setCopilotoOpen } = useAppStore();
+
   const [inquerito, setInq] = useState<any>(null);
   const [documentos, setDocumentos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,8 +53,22 @@ export default function InqueritoDetalhePage() {
   };
 
   useEffect(() => {
-    if (inqId) fetchDados();
+    if (inqId) {
+      fetchDados();
+      setCopilotoOpen(true);
+    }
+    return () => setCopilotoOpen(false);
   }, [inqId]);
+
+  const handleDelete = async () => {
+    try {
+      await deleteInquerito(inqId);
+      router.push("/inqueritos");
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao excluir inquérito.");
+    }
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -102,9 +128,26 @@ export default function InqueritoDetalhePage() {
         </div>
         
         <div className="flex gap-3">
-          <Button onClick={toggleCopiloto} variant="outline" className="border-blue-500 text-blue-400 hover:bg-blue-500/10 hover:text-blue-300">
-            <BrainCircuit size={18} className="mr-2"/> Copiloto
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" className="border-red-800 text-red-500 hover:bg-red-500/10 hover:text-red-400">
+                <Trash2 size={16} className="mr-2"/> Excluir
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="bg-zinc-900 border-zinc-800">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-zinc-100">Excluir inquérito?</AlertDialogTitle>
+                <AlertDialogDescription className="text-zinc-400">
+                  Todos os documentos, vetores e dados do inquérito <strong className="text-zinc-200">{inquerito?.numero}/{inquerito?.ano}</strong> serão permanentemente removidos. Esta ação não pode ser desfeita.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700">Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDelete} className="bg-red-700 hover:bg-red-600 text-white">Excluir permanentemente</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
           <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="bg-blue-600 hover:bg-blue-700 text-white">
             {uploading ? (
               <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin mr-2" />
@@ -113,11 +156,11 @@ export default function InqueritoDetalhePage() {
             )}
             {uploading ? "Enviando..." : "Anexar Petição/PDF"}
           </Button>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileChange} 
-            className="hidden" 
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            className="hidden"
             accept=".pdf,.png,.jpg,.jpeg"
           />
         </div>

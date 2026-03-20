@@ -393,6 +393,45 @@ async def upload_documento(
     )
 
 
+@router.delete("/{inquerito_id}", status_code=204)
+async def excluir_inquerito(
+    inquerito_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Exclui um inquérito e todos os seus dados (documentos, vetores, arquivos)."""
+    result = await db.execute(
+        select(Inquerito).where(Inquerito.id == inquerito_id)
+    )
+    inquerito = result.scalar_one_or_none()
+    if not inquerito:
+        raise HTTPException(status_code=404, detail="Inquérito não encontrado")
+
+    # Buscar documentos para limpar storage
+    docs_result = await db.execute(
+        select(Documento).where(Documento.inquerito_id == inquerito_id)
+    )
+    documentos = docs_result.scalars().all()
+
+    # Remover arquivos do storage
+    storage = StorageService()
+    for doc in documentos:
+        try:
+            await storage.delete_file(doc.storage_path)
+        except Exception:
+            pass  # Não bloqueia se arquivo já não existe
+
+    # Remover vetores do Qdrant
+    try:
+        from app.services.qdrant_service import QdrantService
+        qdrant = QdrantService()
+        qdrant.delete_by_inquerito(str(inquerito_id))
+    except Exception:
+        pass  # Não bloqueia se coleção não existe
+
+    # Excluir o inquérito (cascata cuida dos documentos e transições no banco)
+    await db.delete(inquerito)
+
+
 @router.get("/{inquerito_id}/documentos", response_model=list[DocumentoResponse])
 async def listar_documentos(
     inquerito_id: uuid.UUID,
