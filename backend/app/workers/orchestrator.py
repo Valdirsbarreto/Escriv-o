@@ -7,6 +7,7 @@ import logging
 import time
 import uuid
 import hashlib
+import re
 from typing import List
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
@@ -22,6 +23,26 @@ from app.core.state_machine import EstadoInquerito
 
 logger = logging.getLogger(__name__)
 sync_engine = create_engine(settings.DATABASE_URL_SYNC)
+
+# Padrões comuns de número de IP no RJ: 033-07699-2016, 033.07699/2016, 07699/2016
+_IP_PATTERNS = [
+    re.compile(r'(\d{3})[-.](\d{4,6})[/\-\.](\d{4})'),  # 033-07699-2016
+    re.compile(r'(\d{4,6})[/\-](\d{4})'),                 # 07699/2016
+]
+
+def _extrair_numero_ip_dos_filenames(filenames: List[str]):
+    """Tenta extrair número do IP dos nomes dos arquivos antes de chamar o LLM."""
+    for fname in filenames:
+        nome = fname.replace('_', '-').replace(' ', '-')
+        for pattern in _IP_PATTERNS:
+            m = pattern.search(nome)
+            if m:
+                grupos = m.groups()
+                if len(grupos) == 3:
+                    return f"{grupos[0]}-{grupos[1]}-{grupos[2]}", int(grupos[2])
+                elif len(grupos) == 2:
+                    return f"{grupos[0]}-{grupos[1]}", int(grupos[1])
+    return None, None
 
 @celery_app.task(bind=True, max_retries=2)
 def orchestrate_new_inquerito(self, storage_paths: List[str], filenames: List[str]):
@@ -55,8 +76,10 @@ def orchestrate_new_inquerito(self, storage_paths: List[str], filenames: List[st
 
             # 3. Criar o Inquérito (ou recuperar se já existir)
             meta = analise.get("inquerito", {})
-            numero_ip = meta.get("numero") or f"TEMP-{uuid.uuid4().hex[:6].upper()}"
-            ano = meta.get("ano") or time.localtime().tm_year
+            # Prioridade: filename > LLM > TEMP
+            numero_fname, ano_fname = _extrair_numero_ip_dos_filenames(filenames)
+            numero_ip = numero_fname or meta.get("numero") or f"TEMP-{uuid.uuid4().hex[:6].upper()}"
+            ano = ano_fname or meta.get("ano") or time.localtime().tm_year
             delegacia_cod = meta.get("delegacia_codigo")
             delegacia_nome = meta.get("delegacia_nome")
 
