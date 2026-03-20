@@ -430,6 +430,7 @@ async def excluir_inquerito(
 
     # Excluir o inquérito (cascata cuida dos documentos e transições no banco)
     await db.delete(inquerito)
+    await db.commit()
 
 
 @router.get("/{inquerito_id}/documentos", response_model=list[DocumentoResponse])
