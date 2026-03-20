@@ -1,7 +1,6 @@
 "use client";
 
 import { useAppStore } from "@/store/app";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -48,18 +47,24 @@ export function CopilotoDrawer() {
     }
   };
 
+  if (!isCopilotoOpen) return null;
+
   return (
-    <Sheet open={isCopilotoOpen} onOpenChange={setCopilotoOpen}>
-      <SheetContent className="w-[400px] sm:w-[540px] bg-zinc-950 border-zinc-800 flex flex-col p-0">
-        <SheetHeader className="p-6 border-b border-zinc-800">
-          <SheetTitle className="flex items-center gap-2 text-zinc-100">
-            <Bot className="text-blue-500" />
-            Copiloto Investigativo
-          </SheetTitle>
-          <SheetDescription className="text-zinc-500">
-            {inqueritoAtivoId ? "Contexto ativo: Inquérito selecionado" : "Nenhum inquérito ativo selecionado. Escolha um na dashboard."}
-          </SheetDescription>
-        </SheetHeader>
+    <aside className="w-[420px] shrink-0 bg-zinc-950 border-l border-zinc-800 flex flex-col max-h-screen sticky top-0">
+        <div className="p-6 border-b border-zinc-800 flex items-start justify-between">
+          <div>
+            <h2 className="flex items-center gap-2 text-zinc-100 font-semibold">
+              <Bot className="text-blue-500" />
+              Copiloto Investigativo
+            </h2>
+            <p className="text-sm text-zinc-500 mt-1">
+              {inqueritoAtivoId ? "Contexto ativo: Inquérito selecionado" : "Nenhum inquérito ativo selecionado."}
+            </p>
+          </div>
+          <button onClick={() => setCopilotoOpen(false)} className="text-zinc-500 hover:text-zinc-300 transition-colors mt-0.5">
+            ✕
+          </button>
+        </div>
 
         <ScrollArea className="flex-1 p-6">
           <div className="flex flex-col gap-4 pb-4">
@@ -142,7 +147,6 @@ export function CopilotoDrawer() {
             </Button>
           </form>
         </div>
-      </SheetContent>
-    </Sheet>
+    </aside>
   );
 }
