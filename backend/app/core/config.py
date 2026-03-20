@@ -76,19 +76,23 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # ── Auto-Sincronização de Redis (Railway) ──────────────────────────
-# Priorizamos a URL completa se estiver no ambiente (REDIS_URL ou REDIS_PRIVATE_URL)
+# Priorizamos a URL completa se estiver no ambiente (REDIS_URL ou REDIS_PRIVATE_URL).
+# Se a URL não contiver autenticação mas REDISPASSWORD estiver definido, injetamos.
 # Caso contrário, construímos a partir das variáveis individuais da Railway.
 import os
 
 _env_redis_url = os.getenv("REDIS_URL") or os.getenv("REDIS_PRIVATE_URL")
+_redis_pwd = os.getenv("REDISPASSWORD")
 
 if _env_redis_url:
+    # Se a URL não tem auth (sem '@') mas temos senha, injetar
+    if _redis_pwd and "@" not in _env_redis_url:
+        _env_redis_url = _env_redis_url.replace("redis://", f"redis://:{_redis_pwd}@", 1)
     settings.REDIS_URL = _env_redis_url
 else:
     _redis_host = os.getenv("REDISHOST")
-    _redis_pwd = os.getenv("REDISPASSWORD")
     _redis_port = os.getenv("REDISPORT", "6379")
-    
+
     if _redis_host and _redis_pwd:
         # Formato: redis://:senha@host:porta/0
         settings.REDIS_URL = f"redis://:{_redis_pwd}@{_redis_host}:{_redis_port}/0"
