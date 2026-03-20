@@ -5,6 +5,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v
 // Instância do Axios (JSON)
 export const api = axios.create({
   baseURL: BASE_URL,
+  timeout: 15000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -14,6 +15,7 @@ export const api = axios.create({
 // Não definir Content-Type aqui — o browser seta o boundary automagicamente
 export const apiMultipart = axios.create({
   baseURL: BASE_URL,
+  timeout: 60000, // upload pode demorar mais
 });
 
 // APIs Inquéritos
