@@ -128,10 +128,8 @@ export default function InqueritoDetalhePage() {
         
         <div className="flex gap-3">
           <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="border-red-800 text-red-500 hover:bg-red-500/10 hover:text-red-400">
-                <Trash2 size={16} className="mr-2"/> Excluir
-              </Button>
+            <DialogTrigger render={<Button variant="outline" className="border-red-800 text-red-500 hover:bg-red-500/10 hover:text-red-400" />}>
+              <Trash2 size={16} className="mr-2"/> Excluir
             </DialogTrigger>
             <DialogContent className="bg-zinc-900 border-zinc-800" showCloseButton={false}>
               <DialogHeader>
