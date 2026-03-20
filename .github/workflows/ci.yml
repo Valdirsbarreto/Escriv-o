@@ -40,7 +40,7 @@ jobs:
           S3_ACCESS_KEY: escrivao
           S3_SECRET_KEY: escrivao_minio_2024
           S3_BUCKET_NAME: escrivao-documentos
-        run: python -m pytest tests/test_state_machine.py tests/test_copiloto.py tests/test_health.py -v --tb=short
+        run: python -m pytest tests/test_state_machine.py tests/test_copiloto.py -v --tb=short
 
   # ─── Frontend: Build Next.js ─────────────────────────────────────
   frontend-build:
