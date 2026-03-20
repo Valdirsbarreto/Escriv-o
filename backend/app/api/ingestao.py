@@ -91,14 +91,17 @@ async def iniciar_ingestao(
             # Tenta Celery primeiro (se estiver ativo)
             orchestrate_new_inquerito.delay(storage_paths, filenames)
         else:
-            # Roda direto se for função normal no futuro
-            from fastapi import BackgroundTasks
-            # (Adicionei esse fallback para garantir que o fluxo não quebre)
-            pass
+            # Fallback para processamento imediato (não recomendado em prod)
+            logger.warning("[INGESTÃO] Celery indisponível. Orquestração não iniciada.")
+            raise HTTPException(status_code=503, detail="Serviço de processamento (Celery/Redis) indisponível.")
             
         logger.info(f"[INGESTÃO] Orquestrador acionado via Celery para sessão {id_sessao}.")
     except Exception as e:
-        logger.warning(f"[INGESTÃO] Erro ao disparar orquestrador ({e}).")
+        logger.error(f"[INGESTÃO] Falha ao disparar orquestrador ({e}).")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Não foi possível iniciar o processamento dos documentos: {str(e)}"
+        )
 
     aviso = f" ({len(ignorados)} ignorados)" if ignorados else ""
     return IngestaoIniciaResponse(

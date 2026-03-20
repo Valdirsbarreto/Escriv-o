@@ -81,22 +81,22 @@ export default function Home() {
               <Card key={inq.id} className="bg-zinc-900 border-zinc-800 hover:border-blue-500/50 transition-colors cursor-pointer group">
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center justify-between">
-                    {inq.numero_procedimento || "S/ Número"}
+                    {inq.numero || "S/ Número"}
                     <Badge variant="outline" className="bg-zinc-800 text-zinc-300 border-zinc-700">
                       {inq.estado_atual}
                     </Badge>
                   </CardTitle>
                   <CardDescription className="line-clamp-2 mt-2 text-zinc-400">
-                    {inq.titulo || "Inquérito sem título"}
+                    {inq.descricao || "Inquérito sem descrição"}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="flex items-center text-sm text-zinc-500 gap-4">
                     <span className="flex items-center gap-1">
-                      <FolderOpen className="w-4 h-4" /> {inq.total_paginas || 0} páginas
+                      <FolderOpen className="w-4 h-4" /> {inq.total_documentos || 0} arquivos
                     </span>
                     <span className="flex items-center gap-1">
-                      <Clock className="w-4 h-4" /> Editado recém
+                      <Clock className="w-4 h-4" /> {new Date(inq.created_at).toLocaleDateString("pt-BR")}
                     </span>
                   </div>
                 </CardContent>

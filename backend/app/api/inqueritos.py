@@ -377,9 +377,12 @@ async def upload_documento(
         from app.workers.ingestion import ingest_document
         result = ingest_document.delay(str(documento.id), str(inquerito_id))
         task_id = result.id
-    except Exception:
-        # Se o Celery não estiver disponível, marca para processamento posterior
-        pass
+    except Exception as e:
+        logger.error(f"[INGESTÃO] Falha ao disparar ingestora ({e})")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Não foi possível iniciar o processamento do documento: {str(e)}"
+        )
 
     return UploadResponse(
         documento_id=documento.id,
