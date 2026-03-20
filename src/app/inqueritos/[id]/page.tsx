@@ -17,7 +17,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogClose,
 } from "@/components/ui/dialog";
 import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2 } from "lucide-react";
 
@@ -31,6 +30,8 @@ export default function InqueritoDetalhePage() {
   const [documentos, setDocumentos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDados = async () => {
@@ -60,11 +61,14 @@ export default function InqueritoDetalhePage() {
   }, [inqId]);
 
   const handleDelete = async () => {
+    setDeleting(true);
     try {
       await deleteInquerito(inqId);
+      setDeleteDialogOpen(false);
       router.push("/inqueritos");
     } catch (e) {
       console.error(e);
+      setDeleting(false);
       alert("Erro ao excluir inquérito.");
     }
   };
@@ -127,7 +131,7 @@ export default function InqueritoDetalhePage() {
         </div>
         
         <div className="flex gap-3">
-          <Dialog>
+          <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
             <DialogTrigger render={<Button variant="outline" className="border-red-800 text-red-500 hover:bg-red-500/10 hover:text-red-400" />}>
               <Trash2 size={16} className="mr-2"/> Excluir
             </DialogTrigger>
@@ -139,11 +143,13 @@ export default function InqueritoDetalhePage() {
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
-                <DialogClose render={<Button variant="outline" className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700" />}>
+                <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting} className="bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700">
                   Cancelar
-                </DialogClose>
-                <Button onClick={handleDelete} className="bg-red-700 hover:bg-red-600 text-white">
-                  Excluir permanentemente
+                </Button>
+                <Button onClick={handleDelete} disabled={deleting} className="bg-red-700 hover:bg-red-600 text-white">
+                  {deleting ? (
+                    <><div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin mr-2" />Excluindo...</>
+                  ) : "Excluir permanentemente"}
                 </Button>
               </DialogFooter>
             </DialogContent>
