@@ -40,16 +40,16 @@ def orchestrate_new_inquerito(self, storage_paths: List[str], filenames: List[st
             primary_path = storage_paths[0]
             
             import asyncio
-            loop = asyncio.new_event_loop()
-            content = loop.run_until_complete(storage.download_file(primary_path))
-            
-            # Extração rápida das primeiras páginas para o orquestrador
-            extraction = pdf_service.extract_with_ocr(content, max_pages=3)
-            texto_inicial = extraction["texto_completo"]
 
-            # 2. Chamar Inteligência do Orquestrador
-            analise = loop.run_until_complete(orchestrator.analisar_documentos_iniciais(texto_inicial))
-            loop.close()
+            async def _run_async():
+                content = await storage.download_file(primary_path)
+                extraction = pdf_service.extract_with_ocr(content, max_pages=3)
+                texto_inicial = extraction["texto_completo"]
+                analise = await orchestrator.analisar_documentos_iniciais(texto_inicial)
+                return extraction, texto_inicial, analise
+
+            loop = asyncio.new_event_loop()
+            extraction, texto_inicial, analise = loop.run_until_complete(_run_async())
 
             logger.info(f"[ORQUESTRADOR] Analise concluída: {analise.get('inquerito')}")
 
@@ -112,15 +112,15 @@ def orchestrate_new_inquerito(self, storage_paths: List[str], filenames: List[st
             personagens = analise.get("personagens", [])
             orchestrator.salvar_personagens_e_contexto(db, inquerito_id, personagens)
             
-            # Novo Loop para fechar relatório (opcional se quiser commit separado)
             relatorio = loop.run_until_complete(
                 orchestrator.gerar_relatorio_contextualizado(
-                    inquerito_id, 
+                    inquerito_id,
                     str(analise)
                 )
             )
+            loop.close()
             inquerito.resumo_executivo = relatorio
-            
+
             db.commit()
             logger.info(f"[ORQUESTRADOR] Orquestração concluída para IP {numero_ip}")
 
