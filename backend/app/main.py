@@ -42,14 +42,18 @@ app = FastAPI(
 )
 
 # CORS — suporta múltiplos domínios separados por vírgula (incluindo Vercel)
-_cors_origins_raw = settings.CORS_ORIGINS.split(",")
+_cors_origins_raw = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
 _allow_all = settings.APP_ENV != "production"  # em dev, libera tudo
+
+# Filtra origens com wildcard da lista literal (não suportado pelo navegador em Access-Control-Allow-Origin)
+# FastAPI usa allow_origin_regex para tratar esses casos.
+_literal_origins = [o for o in _cors_origins_raw if "*" not in o]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if _allow_all else [o.strip() for o in _cors_origins_raw],
+    allow_origins=["*"] if _allow_all else _literal_origins,
     allow_origin_regex=r"https://.*\.vercel\.app" if not _allow_all else None,
-    allow_credentials=not _allow_all,  # credentials não funciona com allow_origins=["*"]
+    allow_credentials=True,  # Necessário para cookies/sessões se houver
     allow_methods=["*"],
     allow_headers=["*"],
 )
