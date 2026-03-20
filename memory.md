@@ -1,6 +1,6 @@
 # Escrivão AI — Memória do Projeto
 
-**Atualizado em:** 18 de março de 2026 — 23h45 (horário de Brasília)
+**Atualizado em:** 19 de março de 2026 — 23h45 (horário de Brasília)
 
 ---
 
@@ -60,26 +60,21 @@
 - Armazenamento em cache de resumos para evitar reprocessamento
 - Exibição injetada no contexto base dos endpoints de consulta do copiloto
 
-### ✅ Sessão de Qualidade e Deploy (18/03/2026)
-- Criação e validação de bateria de testes unitários para Auditoria Factual (`tests/test_auditoria.py`).
-- Mapeamento e solução de falha de conexão Vercel ↔ Railway (Ajuste de configuração de porta e ambiente local vs remoto).
-- Resolução de queda por dependência síncrona ausente (`psycopg2-binary` injetado no `requirements.txt`).
-- Descongelamento do projeto Supabase pausado e injeção correta das chaves `S3_ACCESS_KEY` do ambiente Storage.
+### ✅ Sessão de Deployment e Estabilidade (19/03/2026)
+- **Correção Crítica Celery/Railway:** Resolvido erro de "module not found" no worker da Railway (ajuste de `app.core.celery_app` para `app.workers.celery_app` no `railway.toml`).
+- **Ajuste de CORS (Vercel):** Refatoração do middleware CORS no `main.py` para suportar `allow_origin_regex` corretamente com subdomínios da Vercel (`*.vercel.app`).
+- **Sincronização de DB no Worker:** Implementada lógica no `config.py` para derivar automaticamente a `DATABASE_URL_SYNC` a partir da `DATABASE_URL` assíncrona, garantindo que o Worker acesse o Supabase corretamente na Railway.
+- **Resiliência do Orquestrador:** Alterado fluxo de ingestão no `orchestrate_new_inquerito.py` para realizar o **commit imediato** do inquérito no banco. Isso garante que o inquérito apareça no Dashboard instantaneamente após o upload, mesmo enquanto a IA ainda processa os detalhes.
+- **Push para Produção:** Versão `9908aed` implantada com sucesso e pronta para teste real de ingestão múltipla.
 
 ---
 
 ## 3. Próximos Passos
 
-### ⏳ Próxima Sessão (19/03 em diante)
-- **Teste Real de Ingestão de Documentos**: Fazer o upload guiado de um PDF no dashboard para verificar a comunicação ponta-a-ponta (Armazenamento S3 → Quebra em Chunks → Indexação Qdrant → Salvamento no DB).
-
-### ⏳ Separação de Repositórios (Opcional)
-- Separar o projeto em dois repositórios distintos (Frontend Next.js e Backend FastAPI) para evitar build cruzado.
-
-### ⏳ Sprint 6 → Agentes Especializados e OSINT
-- **Treinamento Especializado (RAG):** Fazer a ingestão separada (`escrivao_conhecimento`) dos Manuais da PF, Tipologias do COAF/ENCCLA e Legislação para servir de fundamentação em tempo real para os agentes.
-- **Painel de Triagem OSINT:** Desenvolver a tela no Frontend (Vercel) listando todas as "Pessoas Envolvidas" extraídas do inquérito, com *checkbox*. Ao selecionar e acionar a API, enriquecer os dados dessas pessoas (Endereços, Telefones, WhatsApp, Vínculos) e devolver ao DB para alimentar o Agente Relator.
-- Ver blueprint `investigacao_ai_v3_blueprint-3.md` (raiz do projeto) para o restante da arquitetura de agentes.
+### ⏳ Próxima Sessão (20/03 em diante)
+- **Validação Final de Ingestão**: Confirmar se o novo fluxo de commit imediato resolveu a visibilidade no Dashboard após o upload de múltiplos PDFs.
+- **Depuração de IA no Worker**: Monitorar logs da Railway para garantir que a extração de personagens e o relatório inicial estão sendo gerados sem timeouts.
+- **Sprint 6 → Agentes Especializados e OSINT**: Iniciar a tela de triagem OSINT para enriquecimento de dados de pessoas.
 
 ---
 
