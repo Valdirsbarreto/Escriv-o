@@ -26,21 +26,13 @@ jobs:
           cache: "pip"
           cache-dependency-path: backend/requirements.txt
 
-      - name: Instalar dependências
-        run: pip install -r requirements.txt
+      - name: Instalar dependências (CI — sem torch/ML pesado)
+        run: pip install -r requirements-ci.txt
 
-      - name: Rodar testes (pytest)
+      - name: Rodar testes unitários (sem serviços externos)
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DATABASE_URL_SYNC: ${{ secrets.DATABASE_URL_SYNC }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          LLM_ECONOMICO_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          LLM_STANDARD_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          LLM_PREMIUM_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          LLM_ECONOMICO_MODEL: deepseek/deepseek-chat
-          LLM_STANDARD_MODEL: gemini-flash-latest
-          LLM_PREMIUM_MODEL: gemini-pro-latest
+          APP_SECRET_KEY: chave-ci-apenas-nao-producao
+          APP_ENV: testing
           REDIS_URL: redis://localhost:6379/0
           QDRANT_HOST: localhost
           QDRANT_PORT: "6333"
@@ -48,9 +40,7 @@ jobs:
           S3_ACCESS_KEY: escrivao
           S3_SECRET_KEY: escrivao_minio_2024
           S3_BUCKET_NAME: escrivao-documentos
-          APP_SECRET_KEY: chave-ci-apenas-nao-producao
-          APP_ENV: testing
-        run: python -m pytest tests/ -v --tb=short
+        run: python -m pytest tests/test_state_machine.py tests/test_copiloto.py tests/test_health.py -v --tb=short
 
   # ─── Frontend: Build Next.js ─────────────────────────────────────
   frontend-build:
