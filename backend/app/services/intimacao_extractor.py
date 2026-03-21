@@ -30,14 +30,15 @@ class IntimacaoExtractor:
         is_image = content_type in ("image/png", "image/jpeg", "image/jpg", "image/tiff")
 
         if is_image:
-            # Processa imagem diretamente via pytesseract
+            # Processa imagem via Gemini Vision (primário) → Tesseract (fallback)
             try:
-                import pytesseract
                 from PIL import Image
                 import io as _io
                 img = Image.open(_io.BytesIO(content))
-                texto = pytesseract.image_to_string(img, lang="por", config="--psm 6")
-                return texto.strip()
+                texto = self.pdf_extractor._ocr_gemini(img, page_num=1)
+                if not texto:
+                    texto = self.pdf_extractor._ocr_tesseract(img, page_num=1)
+                return texto
             except Exception as e:
                 logger.error(f"[INTIMACAO] OCR de imagem falhou: {e}")
                 return ""
