@@ -1,7 +1,7 @@
 providers = ["python"]
 
 [phases.setup]
-aptPkgs = ["tesseract-ocr", "poppler-utils"]
+aptPkgs = ["tesseract-ocr", "tesseract-ocr-por", "poppler-utils"]
 
 [start]
 cmd = "celery -A app.workers.celery_app worker --loglevel=info --concurrency=2 & uvicorn app.main:app --host 0.0.0.0 --port $PORT"
