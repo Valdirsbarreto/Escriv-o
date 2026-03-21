@@ -272,7 +272,10 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
                 
                 categoria, entidades = loop.run_until_complete(run_extraction())
                 loop.close()
-                
+
+                if entidades is None:
+                    entidades = {}
+
                 doc.tipo_peca = categoria
                 logger.info(f"[INGESTÃO] Documento classificado como: {categoria}")
                 

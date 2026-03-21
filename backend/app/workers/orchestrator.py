@@ -115,6 +115,7 @@ def orchestrate_new_inquerito(self, storage_paths: List[str], filenames: List[st
             # Recarrega o inquerito para a sessão após o commit anterior
             inquerito = db.merge(inquerito)
 
+            doc_ids = []
             for path, fname in zip(storage_paths, filenames):
                 doc_hash = hashlib.sha256(fname.encode()).hexdigest()
                 documento = Documento(
@@ -126,9 +127,7 @@ def orchestrate_new_inquerito(self, storage_paths: List[str], filenames: List[st
                 )
                 db.add(documento)
                 db.flush()
-                
-                # Disparar ingestão padrão
-                ingest_document.delay(str(documento.id), str(inquerito_id))
+                doc_ids.append(str(documento.id))
                 inquerito.total_documentos += 1
 
             # 5. Salvar Personagens Identificados e Gerar Relatório Inicial
@@ -145,6 +144,9 @@ def orchestrate_new_inquerito(self, storage_paths: List[str], filenames: List[st
             inquerito.resumo_executivo = relatorio
 
             db.commit()
+            # Disparar ingestão APÓS commit — evita race condition "documento não encontrado"
+            for doc_id in doc_ids:
+                ingest_document.delay(doc_id, str(inquerito_id))
             logger.info(f"[ORQUESTRADOR] Orquestração concluída para IP {numero_ip}")
 
 
