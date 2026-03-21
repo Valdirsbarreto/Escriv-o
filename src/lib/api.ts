@@ -91,6 +91,13 @@ export const iniciarIngestao = async (formData: FormData) => {
 };
 
 // APIs OSINT
+export const osintSugestao = async (inqueritoId: string) => {
+  const response = await api.get(`/agentes/osint/sugestao/${inqueritoId}`, {
+    timeout: 30000,
+  });
+  return response.data;
+};
+
 export const osintLote = async (
   inqueritoId: string,
   itens: { pessoa_id: string; perfil: number | null }[]

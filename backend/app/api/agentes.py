@@ -249,6 +249,35 @@ async def osint_lote(
 
 
 @router.get(
+    "/osint/sugestao/{inquerito_id}",
+    summary="Análise de personagens e sugestão de perfil OSINT (Copiloto)",
+)
+async def osint_sugestao_personagens(
+    inquerito_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Para cada personagem do inquérito, analisa os dados já presentes nos autos (RAG)
+    e sugere o perfil de enriquecimento OSINT (P1–P4) com justificativa.
+
+    - Sem chamadas LLM nem direct.data — determinístico e gratuito
+    - Staleness: ✓ = dado fresco (< 2 anos) | ⚠ = desatualizado | — = não encontrado
+    - Custo total estimado calculado automaticamente
+    """
+    from app.services.copiloto_osint_service import CopilotoOsintService
+
+    svc = CopilotoOsintService()
+    try:
+        resultado = await svc.analisar_personagens(db, inquerito_id)
+        return {"status": "ok", "analise": resultado}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro na análise de personagens: {str(e)[:200]}"
+        )
+
+
+@router.get(
     "/osint/custo/{inquerito_id}",
     summary="Resumo de custo OSINT do inquérito",
 )
