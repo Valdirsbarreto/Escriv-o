@@ -61,7 +61,11 @@ class PDFExtractorService:
     ) -> Dict[int, str]:
         """
         Aplica OCR seletivo nas páginas especificadas.
-        Usa pdf2image para converter PDF→imagem, depois pytesseract.
+        Estratégia: Gemini Vision (primário) → Tesseract (fallback).
+
+        Gemini Vision é superiror para scans de inquéritos brasileiros
+        (carimbos, selos, fontes mistas, baixa resolução, rotação).
+        Custo negligível: ~$0.01/1000 páginas com gemini-2.0-flash-lite.
 
         Args:
             pdf_content: bytes do PDF
@@ -75,41 +79,79 @@ class PDFExtractorService:
 
         try:
             from pdf2image import convert_from_bytes
-            import pytesseract
         except ImportError as e:
-            logger.warning(f"[OCR] Dependências de OCR não disponíveis: {e}")
-            return {p: "[OCR não disponível - instale pytesseract e poppler]" for p in page_numbers}
+            logger.warning(f"[OCR] pdf2image não disponível: {e}")
+            return {p: "" for p in page_numbers}
 
         for page_num in page_numbers:
             try:
-                # Converte apenas a página específica
                 images = convert_from_bytes(
                     pdf_content,
                     first_page=page_num,
                     last_page=page_num,
                     dpi=dpi,
                 )
-
-                if images:
-                    # OCR com idioma pt-br (requer tessdata 'por')
-                    texto = pytesseract.image_to_string(
-                        images[0],
-                        lang="por",
-                        config="--psm 6",  # Assume bloco uniforme de texto
-                    )
-                    texto = texto.strip()
-                    resultados[page_num] = texto
-                    logger.info(
-                        f"[OCR] Página {page_num}: {len(texto)} chars extraídos"
-                    )
-                else:
+                if not images:
                     resultados[page_num] = ""
+                    continue
+
+                pil_image = images[0]
+                texto = self._ocr_gemini(pil_image, page_num)
+
+                # Fallback para Tesseract se Gemini falhar ou retornar vazio
+                if not texto:
+                    texto = self._ocr_tesseract(pil_image, page_num)
+
+                resultados[page_num] = texto
+                logger.info(f"[OCR] Página {page_num}: {len(texto)} chars extraídos")
 
             except Exception as e:
                 logger.error(f"[OCR] Erro na página {page_num}: {e}")
-                resultados[page_num] = f"[Erro OCR: {str(e)[:100]}]"
+                resultados[page_num] = ""
 
         return resultados
+
+    def _ocr_gemini(self, pil_image, page_num: int) -> str:
+        """OCR via Gemini Vision (gemini-2.0-flash-lite). Primário."""
+        try:
+            import google.generativeai as genai
+            from app.core.config import settings
+
+            if not settings.GEMINI_API_KEY:
+                return ""
+
+            genai.configure(api_key=settings.GEMINI_API_KEY)
+            model = genai.GenerativeModel("gemini-2.0-flash-lite")
+
+            prompt = (
+                "Extraia todo o texto desta imagem exatamente como aparece, "
+                "mantendo a estrutura original. "
+                "É um documento oficial brasileiro (inquérito policial) em português. "
+                "Retorne apenas o texto, sem comentários ou formatação markdown."
+            )
+            response = model.generate_content([prompt, pil_image])
+            texto = response.text.strip() if response.text else ""
+            logger.info(f"[OCR-Gemini] Página {page_num}: {len(texto)} chars")
+            return texto
+
+        except Exception as e:
+            logger.warning(f"[OCR-Gemini] Falha na página {page_num}: {e}")
+            return ""
+
+    def _ocr_tesseract(self, pil_image, page_num: int) -> str:
+        """OCR via Tesseract (fallback). Requer tesseract-ocr-por instalado."""
+        try:
+            import pytesseract
+            texto = pytesseract.image_to_string(
+                pil_image,
+                lang="por",
+                config="--psm 6",
+            ).strip()
+            logger.info(f"[OCR-Tesseract] Página {page_num}: {len(texto)} chars")
+            return texto
+        except Exception as e:
+            logger.warning(f"[OCR-Tesseract] Falha na página {page_num}: {e}")
+            return ""
 
     def extract_with_ocr(self, content: bytes, force_ocr: bool = False) -> Dict:
         """
