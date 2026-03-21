@@ -18,7 +18,150 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles } from "lucide-react";
+import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle } from "lucide-react";
+
+// ── Etapas do pipeline ────────────────────────────────────────────────────────
+
+const ETAPAS_LABEL: Record<string, string> = {
+  download: "Download",
+  extracao: "Extração/OCR",
+  chunking: "Chunks",
+  embedding: "Embeddings",
+  indexacao: "Indexação",
+  extracao_entidades: "Entidades",
+  resumos_agendados: "Resumos",
+  pipeline_completo: "Concluído",
+};
+
+function ProgressoPipeline({ inqId, onConcluido }: { inqId: string; onConcluido: () => void }) {
+  const [progresso, setProgresso] = useState<any>(null);
+  const [concluido, setConcluido] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const poll = async () => {
+    try {
+      const res = await api.get(`/inqueritos/${inqId}/progresso`);
+      const data = res.data;
+      setProgresso(data);
+      if (data.percentual >= 100 && data.sintese_pronta) {
+        setConcluido(true);
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        setTimeout(onConcluido, 2000);
+      }
+    } catch {
+      // silencioso
+    }
+  };
+
+  useEffect(() => {
+    poll();
+    intervalRef.current = setInterval(poll, 3000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [inqId]);
+
+  if (!progresso || progresso.total === 0) return null;
+  // Não mostrar se tudo já estava concluído antes de qualquer poll processando
+  if (progresso.processando === 0 && progresso.pendentes === 0 && progresso.sintese_pronta && progresso.erros === 0) return null;
+
+  const pct = progresso.percentual;
+  const barColor = progresso.erros > 0 ? "bg-red-500" : concluido ? "bg-green-500" : "bg-blue-500";
+
+  return (
+    <div className="border border-zinc-800 rounded-xl bg-zinc-900/60 p-5 space-y-4">
+      {/* Cabeçalho */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {concluido ? (
+            <CheckCircle2 size={16} className="text-green-400" />
+          ) : (
+            <Loader2 size={16} className="text-blue-400 animate-spin" />
+          )}
+          <span className="text-sm font-medium text-zinc-200">
+            {concluido ? "Pipeline concluído" : "Processando autos..."}
+          </span>
+        </div>
+        <span className="text-xs text-zinc-500">
+          {progresso.concluidos}/{progresso.total} docs · {pct}%
+        </span>
+      </div>
+
+      {/* Barra geral */}
+      <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-700 ${barColor}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+
+      {/* Etapas globais */}
+      <div className="flex gap-1 flex-wrap">
+        {Object.entries(ETAPAS_LABEL).map(([key, label]) => {
+          const atingida = progresso.docs.some((d: any) =>
+            d.ultima_etapa === key && d.ultima_etapa_status === "concluido"
+          );
+          const atual = progresso.docs.some((d: any) => d.ultima_etapa === key && d.status === "processando");
+          return (
+            <span
+              key={key}
+              className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+                atingida
+                  ? "bg-green-500/15 border-green-500/30 text-green-400"
+                  : atual
+                  ? "bg-blue-500/15 border-blue-500/30 text-blue-400"
+                  : "bg-zinc-800 border-zinc-700 text-zinc-600"
+              }`}
+            >
+              {label}
+            </span>
+          );
+        })}
+        {/* Síntese */}
+        <span
+          className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+            progresso.sintese_pronta
+              ? "bg-blue-500/15 border-blue-500/30 text-blue-400"
+              : "bg-zinc-800 border-zinc-700 text-zinc-600"
+          }`}
+        >
+          ✨ Síntese
+        </span>
+      </div>
+
+      {/* Por documento */}
+      <div className="space-y-2">
+        {progresso.docs.map((doc: any) => (
+          <div key={doc.id} className="flex items-center gap-3">
+            <div className="shrink-0">
+              {doc.status === "concluido" ? (
+                <CheckCircle2 size={13} className="text-green-400" />
+              ) : doc.status === "erro" ? (
+                <AlertCircle size={13} className="text-red-400" />
+              ) : (
+                <Loader2 size={13} className="text-blue-400 animate-spin" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="text-xs text-zinc-400 truncate max-w-[200px]">{doc.nome}</span>
+                <span className="text-[10px] text-zinc-600 shrink-0 ml-2">
+                  {doc.ultima_etapa ? (ETAPAS_LABEL[doc.ultima_etapa] ?? doc.ultima_etapa) : "aguardando"}
+                </span>
+              </div>
+              <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    doc.status === "erro" ? "bg-red-500" : doc.status === "concluido" ? "bg-green-500" : "bg-blue-500"
+                  }`}
+                  style={{ width: `${doc.percentual}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function InqueritoDetalhePage() {
   const params = useParams();
@@ -33,6 +176,7 @@ export default function InqueritoDetalhePage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
+  const [gerandoSintese, setGerandoSintese] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDados = async () => {
@@ -112,6 +256,18 @@ export default function InqueritoDetalhePage() {
     }
   };
 
+  const handleGerarSintese = async () => {
+    setGerandoSintese(true);
+    try {
+      await api.post(`/inqueritos/${inqId}/gerar-sintese`);
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao acionar geração da Síntese Investigativa.");
+    } finally {
+      setGerandoSintese(false);
+    }
+  };
+
   if (loading) return <div className="p-8 text-zinc-500 animate-pulse">Carregando autos...</div>;
 
   return (
@@ -188,6 +344,8 @@ export default function InqueritoDetalhePage() {
         </div>
       </div>
 
+      <ProgressoPipeline inqId={inqId} onConcluido={fetchDados} />
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Info lateral esquerdo */}
         <div className="space-y-6">
@@ -219,6 +377,17 @@ export default function InqueritoDetalhePage() {
                 >
                   <RefreshCw size={12} className={reprocessing ? "animate-spin" : ""}/>
                   {reprocessing ? "Reprocessando..." : "Reprocessar travados"}
+                </button>
+              )}
+              {documentos.every(d => d.status_processamento === "concluido" || d.status_processamento === "sintetico") &&
+               !documentos.some(d => d.tipo_peca === "sintese_investigativa") && (
+                <button
+                  onClick={handleGerarSintese}
+                  disabled={gerandoSintese}
+                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors disabled:opacity-50"
+                >
+                  <Sparkles size={12} className={gerandoSintese ? "animate-pulse" : ""}/>
+                  {gerandoSintese ? "Gerando síntese..." : "Gerar Síntese Investigativa"}
                 </button>
               )}
             </div>

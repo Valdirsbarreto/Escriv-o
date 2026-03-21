@@ -48,7 +48,8 @@ def generate_summaries_task(self, inquerito_id: str, documento_id: str):
             ctx.verify_mode = ssl.CERT_NONE
             connect_args["ssl"] = ctx
 
-        engine = create_async_engine(async_url, connect_args=connect_args if connect_args else {})
+        from sqlalchemy.pool import NullPool
+        engine = create_async_engine(async_url, connect_args=connect_args if connect_args else {}, poolclass=NullPool)
         AsyncSession_ = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
         service = SummaryService()
 
@@ -176,7 +177,8 @@ def generate_analise_task(self, inquerito_id: str):
             ctx.verify_mode = ssl.CERT_NONE
             connect_args["ssl"] = ctx
 
-        engine = create_async_engine(async_url, connect_args=connect_args if connect_args else {})
+        from sqlalchemy.pool import NullPool
+        engine = create_async_engine(async_url, connect_args=connect_args if connect_args else {}, poolclass=NullPool)
         AsyncSession_ = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
         inq_uuid = uuid.UUID(inquerito_id)

@@ -489,3 +489,120 @@ async def listar_documentos(
         .order_by(Documento.created_at)
     )
     return result.scalars().all()
+
+
+@router.post("/{inquerito_id}/gerar-sintese")
+async def gerar_sintese(
+    inquerito_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Dispara (ou re-dispara) a geração da Síntese Investigativa para um inquérito.
+    Útil para inquéritos indexados antes do deploy do recurso.
+    """
+    inq = await db.get(Inquerito, inquerito_id)
+    if not inq:
+        raise HTTPException(status_code=404, detail="Inquérito não encontrado")
+
+    docs_result = await db.execute(
+        select(Documento)
+        .where(Documento.inquerito_id == inquerito_id)
+        .where(Documento.status_processamento == "concluido")
+        .where(Documento.tipo_peca != "sintese_investigativa")
+    )
+    if not docs_result.scalars().all():
+        raise HTTPException(status_code=422, detail="Nenhum documento indexado neste inquérito")
+
+    from app.workers.summary_task import generate_analise_task
+    generate_analise_task.delay(str(inquerito_id))
+
+    return {"status": "agendado", "mensagem": "Síntese Investigativa em geração. Aguarde alguns minutos."}
+
+
+@router.get("/{inquerito_id}/progresso")
+async def progresso_pipeline(
+    inquerito_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Retorna o progresso em tempo real do pipeline de ingestão.
+    Inclui status por documento (última etapa registrada) e estado da Síntese Investigativa.
+    """
+    from app.models.log_ingestao import LogIngestao
+
+    # Documentos reais (excluindo sintético)
+    docs_result = await db.execute(
+        select(Documento)
+        .where(Documento.inquerito_id == inquerito_id)
+        .where(Documento.tipo_peca != "sintese_investigativa")
+        .order_by(Documento.created_at)
+    )
+    docs = docs_result.scalars().all()
+
+    total = len(docs)
+    if total == 0:
+        return {"total": 0, "concluidos": 0, "percentual": 0, "docs": [], "sintese_pronta": False}
+
+    # Última etapa de cada documento via LogIngestao
+    ETAPAS_ORDEM = [
+        "download", "extracao", "chunking", "embedding",
+        "indexacao", "extracao_entidades", "resumos_agendados", "pipeline_completo",
+    ]
+
+    docs_info = []
+    concluidos = 0
+    erros = 0
+
+    for doc in docs:
+        logs_result = await db.execute(
+            select(LogIngestao)
+            .where(LogIngestao.documento_id == doc.id)
+            .order_by(LogIngestao.created_at.desc())
+            .limit(1)
+        )
+        ultimo_log = logs_result.scalar_one_or_none()
+
+        ultima_etapa = ultimo_log.etapa if ultimo_log else None
+        ultima_status = ultimo_log.status if ultimo_log else None
+
+        # Progresso dentro do doc (0–8)
+        etapa_idx = ETAPAS_ORDEM.index(ultima_etapa) + 1 if ultima_etapa in ETAPAS_ORDEM else 0
+        doc_pct = round((etapa_idx / len(ETAPAS_ORDEM)) * 100)
+
+        if doc.status_processamento == "concluido":
+            concluidos += 1
+            doc_pct = 100
+        elif doc.status_processamento == "erro":
+            erros += 1
+
+        docs_info.append({
+            "id": str(doc.id),
+            "nome": doc.nome_arquivo,
+            "status": doc.status_processamento,
+            "ultima_etapa": ultima_etapa,
+            "ultima_etapa_status": ultima_status,
+            "percentual": doc_pct,
+        })
+
+    # Síntese Investigativa
+    sintese_result = await db.execute(
+        select(Documento)
+        .where(Documento.inquerito_id == inquerito_id)
+        .where(Documento.tipo_peca == "sintese_investigativa")
+    )
+    sintese_pronta = sintese_result.scalar_one_or_none() is not None
+
+    # Percentual geral: 90% para indexação + 10% para síntese
+    base_pct = round((concluidos / total) * 90)
+    percentual = base_pct + (10 if sintese_pronta else 0)
+
+    return {
+        "total": total,
+        "concluidos": concluidos,
+        "processando": sum(1 for d in docs if d.status_processamento == "processando"),
+        "pendentes": sum(1 for d in docs if d.status_processamento == "pendente"),
+        "erros": erros,
+        "percentual": percentual,
+        "sintese_pronta": sintese_pronta,
+        "docs": docs_info,
+    }
