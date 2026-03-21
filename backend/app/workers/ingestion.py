@@ -379,6 +379,14 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
                         db.add(transicao)
                         logger.info("[INGESTÃO] Inquérito transitou para TRIAGEM")
 
+                    # Disparar análise analítica automática quando todos os docs estão prontos
+                    try:
+                        from app.workers.summary_task import generate_analise_task
+                        generate_analise_task.delay(inquerito_id)
+                        logger.info(f"[INGESTÃO] Análise analítica agendada — inquerito={inquerito_id}")
+                    except Exception as e:
+                        logger.warning(f"[INGESTÃO] Falha ao agendar análise analítica: {e}")
+
                 db.commit()
 
             duracao_total = int((time.time() - pipeline_start) * 1000)

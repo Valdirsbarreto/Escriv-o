@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw } from "lucide-react";
+import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles } from "lucide-react";
 
 export default function InqueritoDetalhePage() {
   const params = useParams();
@@ -233,34 +233,49 @@ export default function InqueritoDetalhePage() {
                   <p className="text-sm">Faça o upload do inquérito físico em PDF para a IA indexar.</p>
                 </div>
               ) : (
-                documentos.map((doc) => (
-                  <div key={doc.id} className="flex justify-between items-center bg-zinc-900 border border-zinc-800 p-4 rounded-lg hover:border-zinc-700 transition-colors">
-                    <div className="flex items-center gap-4">
-                      <div className="bg-zinc-950 p-2 rounded text-blue-400 border border-zinc-800">
-                        <FileText size={20}/>
+                [...documentos]
+                  .sort((a, b) => {
+                    if (a.tipo_peca === "analise_analitica") return -1;
+                    if (b.tipo_peca === "analise_analitica") return 1;
+                    return 0;
+                  })
+                  .map((doc) => {
+                    const isSintetico = doc.status_processamento === "sintetico";
+                    return (
+                      <div key={doc.id} className={`flex justify-between items-center p-4 rounded-lg border transition-colors ${isSintetico ? "bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40" : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"}`}>
+                        <div className="flex items-center gap-4">
+                          <div className={`p-2 rounded border ${isSintetico ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-zinc-950 text-blue-400 border-zinc-800"}`}>
+                            {isSintetico ? <Sparkles size={20}/> : <FileText size={20}/>}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-zinc-200 truncate max-w-sm">{doc.nome_arquivo}</p>
+                            <p className="text-xs text-zinc-500 mt-0.5">
+                              {isSintetico ? "Gerado automaticamente pela IA" : `Criado em ${new Date(doc.created_at).toLocaleDateString()}`}
+                            </p>
+                          </div>
+                        </div>
+                        <div>
+                          {isSintetico ? (
+                            <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 px-2 py-0.5 text-xs font-normal">
+                              <Sparkles size={12} className="mr-1 inline"/> Análise AI
+                            </Badge>
+                          ) : doc.status_processamento === "concluido" ? (
+                            <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/20 px-2 py-0.5 text-xs font-normal">
+                              <CheckCircle2 size={12} className="mr-1 inline"/> Indexado
+                            </Badge>
+                          ) : doc.status_processamento === "processando" ? (
+                            <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30 px-2 py-0.5 text-xs font-normal">
+                              Lendo IA...
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-zinc-800 text-zinc-400 border-zinc-700 px-2 py-0.5 text-xs font-normal">
+                              {doc.status_processamento}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-zinc-200 truncate max-w-sm">{doc.nome_arquivo}</p>
-                        <p className="text-xs text-zinc-500 mt-0.5">Criado em {new Date(doc.created_at).toLocaleDateString()}</p>
-                      </div>
-                    </div>
-                    <div>
-                      {doc.status_processamento === "concluido" ? (
-                        <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/20 px-2 py-0.5 text-xs font-normal">
-                          <CheckCircle2 size={12} className="mr-1 inline"/> Indexado
-                        </Badge>
-                      ) : doc.status_processamento === "processando" ? (
-                        <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30 px-2 py-0.5 text-xs font-normal">
-                          Lendo IA...
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="bg-zinc-800 text-zinc-400 border-zinc-700 px-2 py-0.5 text-xs font-normal">
-                          {doc.status_processamento}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                ))
+                    );
+                  })
               )}
             </div>
           </ScrollArea>
