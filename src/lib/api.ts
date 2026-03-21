@@ -45,21 +45,18 @@ export const getInqueritoIndices = async (id: string, tipo: string) => {
 
 // APIs Copiloto
 export const createSessao = async (inqueritoId: string) => {
-  const response = await api.post("/copiloto/sessao", { inquerito_id: inqueritoId });
+  const response = await api.post("/copiloto/sessoes", { inquerito_id: inqueritoId });
   return response.data;
 };
 
 export const sendMessage = async (
-  sessaoId: string, 
-  inqueritoId: string, 
+  sessaoId: string,
+  _inqueritoId: string,
   query: string
 ) => {
-  // O endpoint real é POST /copiloto/chat
-  const response = await api.post("/copiloto/chat", {
-    sessao_id: sessaoId,
-    inquerito_id: inqueritoId,
-    query: query,
-    auditar_fatos: true
+  const response = await api.post(`/copiloto/chat/${sessaoId}`, {
+    mensagem: query,
+    auditar: true,
   });
   return response.data;
 };
