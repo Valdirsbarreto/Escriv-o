@@ -20,11 +20,12 @@ Custos estimados (referência cardápio direct.data 2026):
   processos_tj              R$ 2,00
 """
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,6 +61,27 @@ CUSTOS: Dict[str, Decimal] = {
 }
 
 CACHE_TTL_HORAS = 24
+
+# Perfis de profundidade OSINT — quais APIs são acionadas por nível
+_P1 = ["cadastro_pf_plus", "historico_veiculos_pf"]
+_P2 = [*_P1, "mandados_prisao", "pep", "obito"]
+_P3 = [*_P2, "aml", "ceis", "cnep"]
+_P4 = [*_P3, "processos_tj", "ofac", "lista_onu"]
+
+APIS_POR_PERFIL: Dict[int, List[str]] = {
+    1: _P1,
+    2: _P2,
+    3: _P3,
+    4: _P4,
+}
+
+# Custo estimado por perfil (soma dos custos das APIs incluídas)
+CUSTO_POR_PERFIL: Dict[int, Decimal] = {
+    1: Decimal("3.40"),   # cadastro_pf_plus + historico_veiculos
+    2: Decimal("5.68"),   # P1 + mandados + pep + obito
+    3: Decimal("7.76"),   # P2 + aml + ceis + cnep
+    4: Decimal("11.76"),  # P3 + processos_tj + ofac + lista_onu
+}
 
 
 class OsintService:
@@ -254,6 +276,99 @@ class OsintService:
         )
 
         return resultado
+
+    # ── Enriquecimento por Perfil (P1–P4) ─────────────────────────────────────
+
+    async def enriquecer_por_perfil(
+        self,
+        db: AsyncSession,
+        inquerito_id: uuid.UUID,
+        pessoa_id: uuid.UUID,
+        perfil: int,
+    ) -> Dict[str, Any]:
+        """
+        Enriquece uma Pessoa com o conjunto de APIs correspondente ao perfil:
+          P1 (1) — Localização: cadastro + veículos
+          P2 (2) — Triagem Criminal: P1 + mandados + PEP + óbito
+          P3 (3) — Investigação: P2 + AML + CEIS + CNEP
+          P4 (4) — Profundo: P3 + processos TJ + OFAC + ONU
+
+        Retorna dict com resultados de cada API + metadados do perfil.
+        """
+        if perfil not in APIS_POR_PERFIL:
+            return {"erro": f"Perfil inválido: {perfil}. Use 1, 2, 3 ou 4."}
+
+        pessoa = await db.get(Pessoa, pessoa_id)
+        if not pessoa or not pessoa.cpf:
+            return {"erro": "CPF não disponível para consulta OSINT"}
+
+        cpf = _limpar_documento(pessoa.cpf)
+        apis = APIS_POR_PERFIL[perfil]
+        resultado: Dict[str, Any] = {
+            "perfil": perfil,
+            "custo_estimado": float(CUSTO_POR_PERFIL[perfil]),
+            "apis_executadas": apis,
+            "cpf": f"***{cpf[-4:]}",
+            "nome_interno": pessoa.nome,
+        }
+
+        # Mapeamento de chave → coroutine factory
+        api_map = {
+            "cadastro_pf_plus":     ("cadastro",          lambda: self.dd.cadastro_pf_plus(cpf)),
+            "historico_veiculos_pf":("historico_veiculos", lambda: self.dd.historico_veiculos_pf(cpf)),
+            "mandados_prisao":      ("mandados_prisao",    lambda: self.dd.mandados_prisao(cpf)),
+            "pep":                  ("pep",                lambda: self.dd.pep(cpf)),
+            "obito":                ("obito",              lambda: self.dd.obito(cpf)),
+            "aml":                  ("aml",                lambda: self.dd.aml(cpf)),
+            "ceis":                 ("ceis",               lambda: self.dd.ceis(cpf)),
+            "cnep":                 ("cnep",               lambda: self.dd.cnep(cpf)),
+            "processos_tj":         ("processos_tj",       lambda: self.dd.processos_tj(cpf)),
+            "ofac":                 ("ofac",               lambda: self.dd.ofac(pessoa.nome or "")),
+            "lista_onu":            ("lista_onu",          lambda: self.dd.lista_onu(pessoa.nome or "")),
+        }
+
+        for api_key in apis:
+            if api_key not in api_map:
+                continue
+            chave_resultado, fn = api_map[api_key]
+            resultado[chave_resultado] = await self._consultar(
+                db, inquerito_id, api_key, cpf, fn
+            )
+
+        return resultado
+
+    async def enriquecer_lote(
+        self,
+        db: AsyncSession,
+        inquerito_id: uuid.UUID,
+        itens: List[Dict[str, Any]],  # [{pessoa_id, perfil}]
+    ) -> List[Dict[str, Any]]:
+        """
+        Executa enriquecimento em lote para múltiplas pessoas em paralelo.
+        Itens com perfil=None (Ignorar) são registrados mas não consultados.
+
+        Retorna lista de resultados na mesma ordem dos itens de entrada.
+        """
+        async def _processar(item: Dict[str, Any]) -> Dict[str, Any]:
+            pessoa_id = item["pessoa_id"]
+            perfil = item.get("perfil")  # None = Ignorar
+
+            if perfil is None:
+                return {
+                    "pessoa_id": str(pessoa_id),
+                    "perfil": None,
+                    "status": "ignorado",
+                    "mensagem": "Delegado optou por não investigar este personagem.",
+                }
+
+            try:
+                dados = await self.enriquecer_por_perfil(db, inquerito_id, pessoa_id, perfil)
+                return {"pessoa_id": str(pessoa_id), "perfil": perfil, "status": "concluido", "dados": dados}
+            except Exception as e:
+                logger.error(f"[OSINT lote] pessoa_id={pessoa_id} perfil={perfil} erro: {e}")
+                return {"pessoa_id": str(pessoa_id), "perfil": perfil, "status": "erro", "mensagem": str(e)[:200]}
+
+        return await asyncio.gather(*[_processar(item) for item in itens])
 
     # ── Consulta Veicular Avulsa ───────────────────────────────────────────────
 

@@ -91,6 +91,18 @@ export const iniciarIngestao = async (formData: FormData) => {
 };
 
 // APIs OSINT
+export const osintLote = async (
+  inqueritoId: string,
+  itens: { pessoa_id: string; perfil: number | null }[]
+) => {
+  const response = await api.post(
+    "/agentes/osint/lote",
+    { inquerito_id: inqueritoId, itens },
+    { timeout: 120000 }
+  );
+  return response.data;
+};
+
 export const osintConsultaAvulsa = async (params: {
   cpf?: string;
   cnpj?: string;

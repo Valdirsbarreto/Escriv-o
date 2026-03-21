@@ -5,7 +5,7 @@ Conforme blueprint §9 (Agentes Especializados).
 """
 
 import uuid
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
@@ -194,6 +194,58 @@ async def osint_consulta_avulsa(
         return {"status": "concluido", "dados": dados}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro na consulta avulsa: {str(e)[:200]}")
+
+
+class OsintLoteItem(BaseModel):
+    pessoa_id: uuid.UUID
+    perfil: Optional[int] = None  # None = Ignorar; 1-4 = profundidade
+
+
+class OsintLoteRequest(BaseModel):
+    inquerito_id: uuid.UUID
+    itens: List[OsintLoteItem]
+
+
+@router.post(
+    "/osint/lote",
+    summary="Enriquecimento OSINT em lote por perfil de profundidade",
+)
+async def osint_lote(
+    body: OsintLoteRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Executa enriquecimento OSINT para múltiplas pessoas em paralelo.
+
+    Cada item define `pessoa_id` e `perfil`:
+    - `null` → Ignorar (registra decisão, sem consulta)
+    - `1` → P1 Localização (cadastro + veículos) ~R$ 3,40
+    - `2` → P2 Triagem Criminal (P1 + mandados + PEP + óbito) ~R$ 5,68
+    - `3` → P3 Investigação (P2 + AML + CEIS + CNEP) ~R$ 7,76
+    - `4` → P4 Profundo (P3 + processos TJ + OFAC + ONU) ~R$ 11,76
+    """
+    if not body.itens:
+        raise HTTPException(status_code=422, detail="Lista de itens não pode ser vazia.")
+
+    osint = OsintService()
+    try:
+        itens = [{"pessoa_id": item.pessoa_id, "perfil": item.perfil} for item in body.itens]
+        resultados = await osint.enriquecer_lote(db, body.inquerito_id, itens)
+
+        custo_total = sum(
+            r.get("dados", {}).get("custo_estimado", 0.0)
+            for r in resultados
+            if r.get("status") == "concluido"
+        )
+
+        return {
+            "status": "concluido",
+            "total_processados": len(resultados),
+            "custo_estimado_total": round(custo_total, 2),
+            "resultados": resultados,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro no lote OSINT: {str(e)[:200]}")
 
 
 @router.get(
