@@ -279,40 +279,40 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
                 doc.tipo_peca = categoria
                 logger.info(f"[INGESTÃO] Documento classificado como: {categoria}")
                 
-                # Inserir entidades
-                for p_dict in entidades.get("pessoas", []):
+                # Inserir entidades (usar `or ""` antes de slice: LLM pode retornar null)
+                for p_dict in entidades.get("pessoas", []) or []:
                     db.add(Pessoa(
                         inquerito_id=uuid.UUID(inquerito_id),
-                        nome=p_dict.get("nome", "Desconhecido")[:300],
-                        cpf=p_dict.get("cpf", "")[:14],
-                        tipo_pessoa=p_dict.get("tipo", "")[:50]
+                        nome=(p_dict.get("nome") or "Desconhecido")[:300],
+                        cpf=(p_dict.get("cpf") or "")[:14],
+                        tipo_pessoa=(p_dict.get("tipo") or "")[:50]
                     ))
-                for e_dict in entidades.get("empresas", []):
+                for e_dict in entidades.get("empresas", []) or []:
                     db.add(Empresa(
                         inquerito_id=uuid.UUID(inquerito_id),
-                        nome=e_dict.get("nome", "Desconhecida")[:300],
-                        cnpj=e_dict.get("cnpj", "")[:18],
-                        tipo_empresa=e_dict.get("tipo", "")[:50]
+                        nome=(e_dict.get("nome") or "Desconhecida")[:300],
+                        cnpj=(e_dict.get("cnpj") or "")[:18],
+                        tipo_empresa=(e_dict.get("tipo") or "")[:50]
                     ))
-                for end_dict in entidades.get("enderecos", []):
+                for end_dict in entidades.get("enderecos", []) or []:
                     db.add(Endereco(
                         inquerito_id=uuid.UUID(inquerito_id),
-                        endereco_completo=end_dict.get("endereco_completo", "Não informado"),
-                        cidade=end_dict.get("cidade", "")[:100],
-                        estado=end_dict.get("estado", "")[:2],
-                        cep=end_dict.get("cep", "")[:10]
+                        endereco_completo=(end_dict.get("endereco_completo") or "Não informado"),
+                        cidade=(end_dict.get("cidade") or "")[:100],
+                        estado=(end_dict.get("estado") or "")[:2],
+                        cep=(end_dict.get("cep") or "")[:10]
                     ))
-                for tel_dict in entidades.get("telefones", []):
+                for tel_dict in entidades.get("telefones", []) or []:
                     db.add(Contato(
                         inquerito_id=uuid.UUID(inquerito_id),
                         tipo_contato="telefone",
-                        valor=tel_dict.get("numero", "")[:255]
+                        valor=(tel_dict.get("numero") or "")[:255]
                     ))
-                for em_dict in entidades.get("emails", []):
+                for em_dict in entidades.get("emails", []) or []:
                     db.add(Contato(
                         inquerito_id=uuid.UUID(inquerito_id),
                         tipo_contato="email",
-                        valor=em_dict.get("endereco", "")[:255]
+                        valor=(em_dict.get("endereco") or "")[:255]
                     ))
                 for cron_dict in entidades.get("cronologia", []):
                     desc = cron_dict.get("descricao")

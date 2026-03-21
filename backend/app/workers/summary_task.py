@@ -201,9 +201,9 @@ def generate_analise_task(self, inquerito_id: str):
             todos_docs = docs_result.scalars().all()
 
             if not todos_docs:
-                logger.warning(f"[SINTESE-TASK] Sem documentos indexados: {inquerito_id}")
+                logger.warning(f"[SINTESE-TASK] Sem documentos indexados ainda: {inquerito_id}")
                 await engine.dispose()
-                return {"status": "sem_documentos"}
+                raise Exception("sem_documentos_ainda")  # força retry com backoff
 
             service = SummaryService()
             resumos_partes = []
@@ -213,9 +213,9 @@ def generate_analise_task(self, inquerito_id: str):
                     resumos_partes.append(f"**{d.nome_arquivo}** (tipo: {d.tipo_peca or 'não classificado'})\n{r}")
 
             if not resumos_partes:
-                logger.warning(f"[SINTESE-TASK] Nenhum resumo disponível: {inquerito_id}")
+                logger.warning(f"[SINTESE-TASK] Nenhum resumo disponível ainda: {inquerito_id}")
                 await engine.dispose()
-                return {"status": "sem_resumos"}
+                raise Exception("sem_resumos_ainda")  # força retry com backoff
 
             resumos_str = "\n\n---\n\n".join(resumos_partes)
 
