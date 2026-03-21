@@ -4,9 +4,12 @@ Endpoints para CRUD de inquéritos, transição de estado e upload de documentos
 """
 
 import hashlib
+import logging
 import uuid
 import re
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy import select, func, text
@@ -489,6 +492,34 @@ async def listar_documentos(
         .order_by(Documento.created_at)
     )
     return result.scalars().all()
+
+
+@router.patch("/{inquerito_id}/numero")
+async def corrigir_numero(
+    inquerito_id: uuid.UUID,
+    dados: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Substitui manualmente o número do inquérito (útil para números TEMP-)."""
+    novo_numero = (dados.get("numero") or "").strip()
+    if not novo_numero:
+        raise HTTPException(status_code=422, detail="Campo 'numero' é obrigatório")
+
+    inq = await db.get(Inquerito, inquerito_id)
+    if not inq:
+        raise HTTPException(status_code=404, detail="Inquérito não encontrado")
+
+    numero_anterior = inq.numero
+    inq.numero = novo_numero
+
+    # Tentar extrair ano do número (formato XXX-YYYYY-AAAA ou YYYYY-AAAA)
+    m = re.search(r'[/\-](\d{4})$', novo_numero)
+    if m and not inq.ano:
+        inq.ano = int(m.group(1))
+
+    await db.commit()
+    logger.info(f"[INQUERITO] Número atualizado {numero_anterior} → {novo_numero} (id={inquerito_id})")
+    return {"numero": novo_numero, "numero_anterior": numero_anterior}
 
 
 @router.post("/{inquerito_id}/gerar-sintese")

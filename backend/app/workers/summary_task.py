@@ -6,6 +6,7 @@ Conforme blueprint §6.4 (Resumos Hierárquicos).
 
 import asyncio
 import logging
+import re
 import uuid
 
 from sqlalchemy import select
@@ -119,7 +120,7 @@ def generate_summaries_task(self, inquerito_id: str, documento_id: str):
                 await service.resumir_caso(
                     db=db,
                     inquerito_id=inq_uuid,
-                    numero_inquerito=inq.numero_procedimento or str(inquerito_id),
+                    numero_inquerito=inq.numero or str(inquerito_id),
                     resumos_volumes=[resumo_vol_texto],
                     forcar=True,  # Regerar sempre que nova doc é adicionada
                 )
@@ -218,6 +219,40 @@ def generate_analise_task(self, inquerito_id: str):
 
             resumos_str = "\n\n---\n\n".join(resumos_partes)
 
+            # ── 1b. Auto-substituição de número TEMP ────────────────────────────
+            if inq.numero.startswith("TEMP-"):
+                _IP_PATS = [
+                    re.compile(r'\b(\d{3})[-.](\d{4,6})[/\-\.](\d{4})\b'),
+                    re.compile(r'\bIP\s*[:\-]?\s*(\d{4,6})[/\-](\d{4})\b', re.IGNORECASE),
+                    re.compile(r'\b(\d{4,6})[/\-](\d{4})\b'),
+                ]
+                numero_encontrado = None
+                ano_encontrado = None
+                for d in todos_docs:
+                    if not d.texto_extraido:
+                        continue
+                    trecho = d.texto_extraido[:8000]
+                    for pat in _IP_PATS:
+                        m = pat.search(trecho)
+                        if m:
+                            grupos = m.groups()
+                            if len(grupos) == 3:
+                                numero_encontrado = f"{grupos[0]}-{grupos[1]}-{grupos[2]}"
+                                ano_encontrado = int(grupos[2])
+                            else:
+                                numero_encontrado = f"{grupos[0]}-{grupos[1]}"
+                                ano_encontrado = int(grupos[1])
+                            break
+                    if numero_encontrado:
+                        break
+
+                if numero_encontrado:
+                    inq.numero = numero_encontrado
+                    if not inq.ano:
+                        inq.ano = ano_encontrado
+                    await db.flush()
+                    logger.info(f"[SINTESE-TASK] Número TEMP substituído por {numero_encontrado}")
+
             # ── 2. Personagens ─────────────────────────────────────────────────
             pessoas_result = await db.execute(
                 select(Pessoa).where(Pessoa.inquerito_id == inq_uuid)
@@ -256,7 +291,7 @@ def generate_analise_task(self, inquerito_id: str):
             cronologia_str = "\n".join(cronologia_linhas) if cronologia_linhas else "Nenhum evento cronológico identificado."
 
             # ── 4. Montar prompt e chamar LLM premium ──────────────────────────
-            numero = inq.numero_procedimento or inquerito_id
+            numero = inq.numero or inquerito_id
             prompt = PROMPT_SINTESE_INVESTIGATIVA.format(
                 numero_inquerito=numero,
                 resumos_documentos=resumos_str,

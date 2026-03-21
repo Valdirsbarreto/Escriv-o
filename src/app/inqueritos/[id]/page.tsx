@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle } from "lucide-react";
+import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check } from "lucide-react";
 
 // ── Etapas do pipeline ────────────────────────────────────────────────────────
 
@@ -177,6 +177,9 @@ export default function InqueritoDetalhePage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
   const [gerandoSintese, setGerandoSintese] = useState(false);
+  const [editandoNumero, setEditandoNumero] = useState(false);
+  const [novoNumero, setNovoNumero] = useState("");
+  const [salvandoNumero, setSalvandoNumero] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDados = async () => {
@@ -256,6 +259,22 @@ export default function InqueritoDetalhePage() {
     }
   };
 
+  const handleSalvarNumero = async () => {
+    if (!novoNumero.trim()) return;
+    setSalvandoNumero(true);
+    try {
+      await api.patch(`/inqueritos/${inqId}/numero`, { numero: novoNumero.trim() });
+      await fetchDados();
+      setEditandoNumero(false);
+      setNovoNumero("");
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao atualizar número do inquérito.");
+    } finally {
+      setSalvandoNumero(false);
+    }
+  };
+
   const handleGerarSintese = async () => {
     setGerandoSintese(true);
     try {
@@ -280,10 +299,45 @@ export default function InqueritoDetalhePage() {
           >
             <ArrowLeft size={16}/> Voltar para lista
           </button>
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight text-zinc-100">
-              {inquerito.numero}/{inquerito.ano}
-            </h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            {editandoNumero ? (
+              <div className="flex items-center gap-2">
+                <input
+                  autoFocus
+                  value={novoNumero}
+                  onChange={e => setNovoNumero(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") handleSalvarNumero(); if (e.key === "Escape") setEditandoNumero(false); }}
+                  placeholder="Ex: 033-07699-2024"
+                  className="text-xl font-bold bg-zinc-800 border border-zinc-600 rounded px-3 py-1 text-zinc-100 focus:outline-none focus:border-blue-500 w-56"
+                />
+                <button onClick={handleSalvarNumero} disabled={salvandoNumero} className="text-green-400 hover:text-green-300 disabled:opacity-50">
+                  {salvandoNumero ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
+                </button>
+                <button onClick={() => setEditandoNumero(false)} className="text-zinc-500 hover:text-zinc-300">
+                  <X size={18} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <h1 className="text-3xl font-bold tracking-tight text-zinc-100">
+                  {inquerito.numero.startsWith("TEMP-") ? inquerito.numero : `${inquerito.numero}/${inquerito.ano}`}
+                </h1>
+                {inquerito.numero.startsWith("TEMP-") && (
+                  <Badge variant="outline" className="text-yellow-400 border-yellow-400/30 bg-yellow-400/10 text-xs">
+                    Nº provisório
+                  </Badge>
+                )}
+                {inquerito.numero.startsWith("TEMP-") && (
+                  <button
+                    onClick={() => { setNovoNumero(""); setEditandoNumero(true); }}
+                    className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                    title="Corrigir número"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                )}
+              </div>
+            )}
             {inquerito.redistribuido && (
               <Badge variant="outline" className="text-blue-400 border-blue-400/30 bg-blue-400/10">REDISTRIBUÍDO</Badge>
             )}
