@@ -448,6 +448,35 @@ async def excluir_inquerito(
     await db.commit()
 
 
+@router.post("/{inquerito_id}/reprocessar", status_code=200)
+async def reprocessar_documentos_travados(
+    inquerito_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Reprocessa documentos travados em 'processando' ou 'erro'."""
+    result = await db.execute(
+        select(Documento)
+        .where(Documento.inquerito_id == inquerito_id)
+        .where(Documento.status_processamento.in_(["processando", "erro"]))
+    )
+    travados = result.scalars().all()
+
+    if not travados:
+        return {"reprocessados": 0, "mensagem": "Nenhum documento travado encontrado."}
+
+    from app.workers.ingestion import ingest_document
+
+    count = 0
+    for doc in travados:
+        doc.status_processamento = "pendente"
+        await db.flush()
+        ingest_document.delay(str(doc.id), str(inquerito_id))
+        count += 1
+
+    await db.commit()
+    return {"reprocessados": count, "mensagem": f"{count} documento(s) reenfileirado(s) para processamento."}
+
+
 @router.get("/{inquerito_id}/documentos", response_model=list[DocumentoResponse])
 async def listar_documentos(
     inquerito_id: uuid.UUID,

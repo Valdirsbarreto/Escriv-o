@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2 } from "lucide-react";
+import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw } from "lucide-react";
 
 export default function InqueritoDetalhePage() {
   const params = useParams();
@@ -32,6 +32,7 @@ export default function InqueritoDetalhePage() {
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDados = async () => {
@@ -70,6 +71,20 @@ export default function InqueritoDetalhePage() {
       console.error(e);
       setDeleting(false);
       alert("Erro ao excluir inquérito.");
+    }
+  };
+
+  const handleReprocessar = async () => {
+    setReprocessing(true);
+    try {
+      const res = await api.post(`/inqueritos/${inqId}/reprocessar`);
+      await fetchDados();
+      alert(res.data.mensagem);
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao reprocessar documentos.");
+    } finally {
+      setReprocessing(false);
     }
   };
 
@@ -194,7 +209,19 @@ export default function InqueritoDetalhePage() {
             <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
               <FolderOpen className="text-blue-500"/> Autos Físicos Digitalizados
             </h2>
-            <span className="text-sm text-zinc-500">{documentos.length} peças anexadas</span>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-zinc-500">{documentos.length} peças anexadas</span>
+              {documentos.some(d => d.status_processamento === "processando" || d.status_processamento === "erro") && (
+                <button
+                  onClick={handleReprocessar}
+                  disabled={reprocessing}
+                  className="text-xs text-yellow-500 hover:text-yellow-400 flex items-center gap-1 transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw size={12} className={reprocessing ? "animate-spin" : ""}/>
+                  {reprocessing ? "Reprocessando..." : "Reprocessar travados"}
+                </button>
+              )}
+            </div>
           </div>
           
           <ScrollArea className="h-[500px] w-full pr-4">
