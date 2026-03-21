@@ -36,7 +36,10 @@ const ETAPAS_LABEL: Record<string, string> = {
 function ProgressoPipeline({ inqId, onConcluido }: { inqId: string; onConcluido: () => void }) {
   const [progresso, setProgresso] = useState<any>(null);
   const [concluido, setConcluido] = useState(false);
+  const [gerandoSintese, setGerandoSintese] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollCount = useRef(0);
+  const MAX_POLLS_IDLE = 40; // ~2min sem progresso → para de pedir síntese automaticamente
 
   const poll = async () => {
     try {
@@ -47,9 +50,34 @@ function ProgressoPipeline({ inqId, onConcluido }: { inqId: string; onConcluido:
         setConcluido(true);
         if (intervalRef.current) clearInterval(intervalRef.current);
         setTimeout(onConcluido, 2000);
+        return;
+      }
+      // Se todos os docs concluídos mas síntese não pronta, conta polls ociosos
+      if (data.processando === 0 && data.pendentes === 0 && !data.sintese_pronta) {
+        pollCount.current += 1;
+        if (pollCount.current >= MAX_POLLS_IDLE) {
+          if (intervalRef.current) clearInterval(intervalRef.current);
+        }
+      } else {
+        pollCount.current = 0;
       }
     } catch {
       // silencioso
+    }
+  };
+
+  const handleGerarSintese = async () => {
+    setGerandoSintese(true);
+    try {
+      await api.post(`/inqueritos/${inqId}/gerar-sintese`);
+      pollCount.current = 0;
+      if (!intervalRef.current) {
+        intervalRef.current = setInterval(poll, 3000);
+      }
+    } catch {
+      alert("Erro ao acionar síntese.");
+    } finally {
+      setGerandoSintese(false);
     }
   };
 
@@ -60,25 +88,39 @@ function ProgressoPipeline({ inqId, onConcluido }: { inqId: string; onConcluido:
   }, [inqId]);
 
   if (!progresso || progresso.total === 0) return null;
-  // Não mostrar se tudo já estava concluído antes de qualquer poll processando
   if (progresso.processando === 0 && progresso.pendentes === 0 && progresso.sintese_pronta && progresso.erros === 0) return null;
 
   const pct = progresso.percentual;
   const barColor = progresso.erros > 0 ? "bg-red-500" : concluido ? "bg-green-500" : "bg-blue-500";
+  const docsOk = progresso.processando === 0 && progresso.pendentes === 0 && progresso.erros === 0;
+  const sinteseTrancada = docsOk && !progresso.sintese_pronta && pollCount.current >= MAX_POLLS_IDLE;
+
+  let titulo = "Processando autos...";
+  if (concluido) titulo = "Pipeline concluído";
+  else if (docsOk && !progresso.sintese_pronta) titulo = "Aguardando Síntese Investigativa...";
 
   return (
-    <div className="border border-zinc-800 rounded-xl bg-zinc-900/60 p-5 space-y-4">
+    <div className={`border rounded-xl bg-zinc-900/60 p-5 space-y-4 ${sinteseTrancada ? "border-yellow-500/30" : "border-zinc-800"}`}>
       {/* Cabeçalho */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           {concluido ? (
             <CheckCircle2 size={16} className="text-green-400" />
+          ) : docsOk && !progresso.sintese_pronta ? (
+            <Sparkles size={16} className="text-yellow-400 animate-pulse" />
           ) : (
             <Loader2 size={16} className="text-blue-400 animate-spin" />
           )}
-          <span className="text-sm font-medium text-zinc-200">
-            {concluido ? "Pipeline concluído" : "Processando autos..."}
-          </span>
+          <span className="text-sm font-medium text-zinc-200">{titulo}</span>
+          {sinteseTrancada && (
+            <button
+              onClick={handleGerarSintese}
+              disabled={gerandoSintese}
+              className="ml-2 text-xs text-yellow-400 hover:text-yellow-300 underline underline-offset-2 disabled:opacity-50"
+            >
+              {gerandoSintese ? "Acionando..." : "Acionar agora"}
+            </button>
+          )}
         </div>
         <span className="text-xs text-zinc-500">
           {progresso.concluidos}/{progresso.total} docs · {pct}%
