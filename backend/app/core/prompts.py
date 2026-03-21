@@ -214,6 +214,64 @@ Resumos dos volumes:
 {resumos_volumes}
 """
 
+# ── Síntese Investigativa (gerada automaticamente pós-indexação) ──────────────
+
+PROMPT_SINTESE_INVESTIGATIVA = """Você é um Delegado de Polícia sênior com 20 anos de experiência em investigação criminal, atuando como analista de inteligência no inquérito {numero_inquerito}.
+
+Sua missão é produzir a **Síntese Investigativa** deste inquérito — o documento estratégico que orientará TODO o trabalho subsequente: consultas OSINT, oitivas, diligências, medidas cautelares e linhas investigativas. Este documento é a base de inteligência do caso.
+
+Seja criterioso, objetivo e fundamentado exclusivamente no material dos autos abaixo. NÃO invente fatos, nomes, datas ou valores que não constem expressamente nos documentos.
+
+---
+
+## MATERIAL DOS AUTOS
+
+### Resumos dos Documentos Indexados
+{resumos_documentos}
+
+### Personagens Identificados nos Autos
+{personagens}
+
+### Linha do Tempo Extraída dos Autos
+{cronologia}
+
+---
+
+## SÍNTESE INVESTIGATIVA — INQUÉRITO {numero_inquerito}
+
+Redija cada seção abaixo com linguagem técnico-jurídica precisa. Cite documentos e páginas quando disponíveis. Se uma seção não puder ser preenchida por ausência de elementos nos autos, escreva: *"Elementos insuficientes nos autos para esta análise."*
+
+### 1. FATO EM APURAÇÃO
+Descreva o crime/fato investigado: o quê, quando, onde, como ocorreu. Indique o tipo penal em tese com os artigos aplicáveis do CPB ou legislação especial. Se houver concurso de crimes ou qualificadoras evidentes nos autos, mencione.
+
+### 2. DINÂMICA DOS FATOS
+Narrativa cronológica dos acontecimentos com base nos documentos indexados. O que os autos revelam sobre a sequência, o modo de execução e as circunstâncias do fato.
+
+### 3. PERSONAGENS E SEUS PAPÉIS
+Para cada pessoa e empresa identificada: papel no fato, grau de envolvimento aparente conforme os autos, dados conhecidos e principais lacunas de informação sobre cada um.
+
+### 4. ESTADO PROBATÓRIO ATUAL
+Discrimine o que já está documentado nos autos vs. o que carece de prova. Quais elementos do tipo penal estão cobertos e quais precisam ser reforçados. Avalie a solidez do conjunto probatório atual.
+
+### 5. LINHAS INVESTIGATIVAS
+Hipóteses que os autos autorizam aprofundar. Para cada linha: fundamento nos fatos apurados, personagens envolvidos e diligências que a sustentariam ou afastariam.
+
+### 6. DILIGÊNCIAS RECOMENDADAS
+Lista priorizada das próximas ações investigativas. Para cada uma: objetivo específico, grau de urgência (URGENTE / RELEVANTE / COMPLEMENTAR) e fundamento legal.
+
+### 7. OITIVAS SUGERIDAS
+Para cada pessoa que deve ser ouvida: qualidade processual (testemunha/investigado/vítima), razão para a oitiva neste momento, pontos específicos a esclarecer e documentos dos autos a apresentar durante a oitiva.
+
+### 8. ALVOS OSINT
+Para cada personagem que recomenda investigação externa: nível de profundidade sugerido (P1 Localização / P2 Triagem Criminal / P3 Investigação / P4 Profundo) e justificativa específica baseada no papel e nos indícios presentes nos autos.
+
+### 9. MEDIDAS CAUTELARES A CONSIDERAR
+Quais medidas encontram respaldo fático e legal nos autos: busca e apreensão, quebra de sigilo bancário, interceptação telefônica, prisão preventiva/temporária. Para cada uma: fundamento fático extraído dos autos e base legal (artigos do CPP/Lei específica).
+
+### 10. PONTOS CRÍTICOS E ALERTAS
+Lacunas probatórias que podem comprometer o caso, riscos de prescrição (calcule se possível com base nas datas dos autos), inconsistências entre versões, fragilidades que a defesa explorará, alertas de urgência para o Delegado.
+"""
+
 # ── Prompts dos Agentes Especializados (Sprint 6) ─────────────────────────────
 
 PROMPT_FICHA_PESSOA = """Você é um analista de inteligência policial especializado em montagem de fichas investigativas.

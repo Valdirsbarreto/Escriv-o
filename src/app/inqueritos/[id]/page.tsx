@@ -235,8 +235,8 @@ export default function InqueritoDetalhePage() {
               ) : (
                 [...documentos]
                   .sort((a, b) => {
-                    if (a.tipo_peca === "analise_analitica") return -1;
-                    if (b.tipo_peca === "analise_analitica") return 1;
+                    if (a.tipo_peca === "sintese_investigativa") return -1;
+                    if (b.tipo_peca === "sintese_investigativa") return 1;
                     return 0;
                   })
                   .map((doc) => {
