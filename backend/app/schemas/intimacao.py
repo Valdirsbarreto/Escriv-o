@@ -45,3 +45,12 @@ class IntimacaoUploadResponse(BaseModel):
     status: str
     mensagem: str
     task_id: Optional[str] = None
+
+
+class IntimacaoManualCreate(BaseModel):
+    intimado_nome: str
+    intimado_qualificacao: Optional[str] = None
+    numero_inquerito_extraido: Optional[str] = None
+    data_oitiva: datetime
+    local_oitiva: Optional[str] = None
+    inquerito_id: Optional[UUID] = None

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Upload, X, CalendarPlus, FileText, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
-import { apiMultipart } from "@/lib/api";
+import { Upload, X, CalendarPlus, FileText, Loader2, CheckCircle2, AlertCircle, Keyboard } from "lucide-react";
+import { api, apiMultipart } from "@/lib/api";
 
 interface IntimacaoUploadModalProps {
   inquerito_id?: string;
@@ -10,13 +10,38 @@ interface IntimacaoUploadModalProps {
   onSuccess?: () => void;
 }
 
+type Aba = "upload" | "manual";
+
+const QUALIFICACOES = [
+  { value: "testemunha", label: "Testemunha" },
+  { value: "investigado", label: "Investigado" },
+  { value: "vitima", label: "Vítima" },
+  { value: "perito", label: "Perito" },
+  { value: "outro", label: "Outro" },
+];
+
 export function IntimacaoUploadModal({ inquerito_id, onClose, onSuccess }: IntimacaoUploadModalProps) {
+  const [aba, setAba] = useState<Aba>("upload");
+
+  // ── Upload ──────────────────────────────────────────────
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [status, setStatus] = useState<"idle" | "uploading" | "success" | "error">("idle");
-  const [mensagem, setMensagem] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // ── Manual ──────────────────────────────────────────────
+  const [form, setForm] = useState({
+    intimado_nome: "",
+    intimado_qualificacao: "testemunha",
+    numero_inquerito: inquerito_id ? "" : "",
+    data_oitiva: "",
+    local_oitiva: "",
+  });
+
+  // ── Shared ──────────────────────────────────────────────
+  const [status, setStatus] = useState<"idle" | "uploading" | "success" | "error">("idle");
+  const [mensagem, setMensagem] = useState("");
+
+  // ── Upload handlers ─────────────────────────────────────
   const handleFile = (f: File) => {
     const ext = f.name.toLowerCase().split(".").pop();
     if (!["pdf", "png", "jpg", "jpeg", "tiff"].includes(ext ?? "")) {
@@ -36,18 +61,13 @@ export function IntimacaoUploadModal({ inquerito_id, onClose, onSuccess }: Intim
     if (f) handleFile(f);
   };
 
-  const handleSubmit = async () => {
+  const handleSubmitUpload = async () => {
     if (!file) return;
     setStatus("uploading");
     setMensagem("Enviando e processando...");
-
     const formData = new FormData();
     formData.append("file", file);
-
-    const url = inquerito_id
-      ? `/intimacoes/upload?inquerito_id=${inquerito_id}`
-      : "/intimacoes/upload";
-
+    const url = inquerito_id ? `/intimacoes/upload?inquerito_id=${inquerito_id}` : "/intimacoes/upload";
     try {
       await apiMultipart.post(url, formData);
       setStatus("success");
@@ -58,6 +78,44 @@ export function IntimacaoUploadModal({ inquerito_id, onClose, onSuccess }: Intim
       setMensagem(err.response?.data?.detail ?? "Erro ao enviar. Tente novamente.");
     }
   };
+
+  // ── Manual handler ───────────────────────────────────────
+  const handleSubmitManual = async () => {
+    if (!form.intimado_nome.trim()) {
+      setMensagem("Nome do intimado é obrigatório.");
+      setStatus("error");
+      return;
+    }
+    if (!form.data_oitiva) {
+      setMensagem("Data e hora da oitiva são obrigatórias.");
+      setStatus("error");
+      return;
+    }
+    setStatus("uploading");
+    setMensagem("Criando evento no Google Agenda...");
+    try {
+      await api.post("/intimacoes/manual", {
+        intimado_nome: form.intimado_nome.trim(),
+        intimado_qualificacao: form.intimado_qualificacao,
+        numero_inquerito_extraido: form.numero_inquerito.trim() || null,
+        data_oitiva: new Date(form.data_oitiva).toISOString(),
+        local_oitiva: form.local_oitiva.trim() || null,
+        inquerito_id: inquerito_id ?? null,
+      });
+      setStatus("success");
+      setMensagem("Intimação lançada! Evento criado no Google Agenda.");
+      onSuccess?.();
+    } catch (err: any) {
+      setStatus("error");
+      setMensagem(err.response?.data?.detail ?? "Erro ao criar. Tente novamente.");
+    }
+  };
+
+  const handleSubmit = aba === "upload" ? handleSubmitUpload : handleSubmitManual;
+  const submitDisabled =
+    status === "uploading" ||
+    (aba === "upload" && !file) ||
+    (aba === "manual" && (!form.intimado_nome.trim() || !form.data_oitiva));
 
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
@@ -73,45 +131,138 @@ export function IntimacaoUploadModal({ inquerito_id, onClose, onSuccess }: Intim
           </button>
         </div>
 
+        {/* Tabs */}
+        <div className="flex border-b border-zinc-800">
+          <button
+            onClick={() => { setAba("upload"); setStatus("idle"); setMensagem(""); }}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
+              aba === "upload"
+                ? "text-blue-400 border-b-2 border-blue-400 -mb-px"
+                : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <Upload size={14} /> Enviar PDF / Foto
+          </button>
+          <button
+            onClick={() => { setAba("manual"); setStatus("idle"); setMensagem(""); }}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
+              aba === "manual"
+                ? "text-blue-400 border-b-2 border-blue-400 -mb-px"
+                : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            <Keyboard size={14} /> Lançar Manualmente
+          </button>
+        </div>
+
         {/* Body */}
         <div className="p-5 space-y-4">
-          <p className="text-sm text-zinc-400">
-            Envie o PDF ou foto da intimação. O sistema irá extrair os dados automaticamente e criar o evento no Google Agenda.
-          </p>
+          {aba === "upload" && (
+            <>
+              <p className="text-sm text-zinc-400">
+                Envie o PDF ou foto da intimação. Os dados serão extraídos automaticamente.
+              </p>
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={handleDrop}
+                onClick={() => inputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
+                  dragging ? "border-blue-500 bg-blue-500/5" :
+                  file ? "border-green-500/50 bg-green-500/5" :
+                  "border-zinc-700 hover:border-zinc-500 hover:bg-zinc-800/40"
+                }`}
+              >
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg,.tiff"
+                  className="hidden"
+                  onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }}
+                />
+                {file ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <FileText size={32} className="text-green-400" />
+                    <span className="text-sm text-zinc-200 font-medium">{file.name}</span>
+                    <span className="text-xs text-zinc-500">{(file.size / 1024).toFixed(0)} KB</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <Upload size={32} className="text-zinc-600" />
+                    <span className="text-sm text-zinc-400">Arraste ou clique para selecionar</span>
+                    <span className="text-xs text-zinc-600">PDF, PNG, JPG ou TIFF</span>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
-          {/* Drop zone */}
-          <div
-            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={handleDrop}
-            onClick={() => inputRef.current?.click()}
-            className={`
-              border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all
-              ${dragging ? "border-blue-500 bg-blue-500/5" : "border-zinc-700 hover:border-zinc-500 hover:bg-zinc-800/40"}
-              ${file ? "border-green-500/50 bg-green-500/5" : ""}
-            `}
-          >
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".pdf,.png,.jpg,.jpeg,.tiff"
-              className="hidden"
-              onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }}
-            />
-            {file ? (
-              <div className="flex flex-col items-center gap-2">
-                <FileText size={32} className="text-green-400" />
-                <span className="text-sm text-zinc-200 font-medium">{file.name}</span>
-                <span className="text-xs text-zinc-500">{(file.size / 1024).toFixed(0)} KB</span>
+          {aba === "manual" && (
+            <div className="space-y-3">
+              {/* Nome */}
+              <div>
+                <label className="text-xs text-zinc-400 mb-1 block">Nome do Intimado *</label>
+                <input
+                  type="text"
+                  value={form.intimado_nome}
+                  onChange={(e) => setForm((f) => ({ ...f, intimado_nome: e.target.value }))}
+                  placeholder="Nome completo"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500"
+                />
               </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2">
-                <Upload size={32} className="text-zinc-600" />
-                <span className="text-sm text-zinc-400">Arraste ou clique para selecionar</span>
-                <span className="text-xs text-zinc-600">PDF, PNG, JPG ou TIFF</span>
+
+              {/* Qualificação */}
+              <div>
+                <label className="text-xs text-zinc-400 mb-1 block">Qualificação</label>
+                <select
+                  value={form.intimado_qualificacao}
+                  onChange={(e) => setForm((f) => ({ ...f, intimado_qualificacao: e.target.value }))}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-blue-500"
+                >
+                  {QUALIFICACOES.map((q) => (
+                    <option key={q.value} value={q.value}>{q.label}</option>
+                  ))}
+                </select>
               </div>
-            )}
-          </div>
+
+              {/* Data e hora */}
+              <div>
+                <label className="text-xs text-zinc-400 mb-1 block">Data e Hora da Oitiva *</label>
+                <input
+                  type="datetime-local"
+                  value={form.data_oitiva}
+                  onChange={(e) => setForm((f) => ({ ...f, data_oitiva: e.target.value }))}
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Local */}
+              <div>
+                <label className="text-xs text-zinc-400 mb-1 block">Local</label>
+                <input
+                  type="text"
+                  value={form.local_oitiva}
+                  onChange={(e) => setForm((f) => ({ ...f, local_oitiva: e.target.value }))}
+                  placeholder="Ex: 1ª DP — Sala de Oitivas"
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              {/* Nº Inquérito */}
+              {!inquerito_id && (
+                <div>
+                  <label className="text-xs text-zinc-400 mb-1 block">Nº do Inquérito</label>
+                  <input
+                    type="text"
+                    value={form.numero_inquerito}
+                    onChange={(e) => setForm((f) => ({ ...f, numero_inquerito: e.target.value }))}
+                    placeholder="Ex: 033-07699/2024"
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Feedback */}
           {mensagem && (
@@ -139,7 +290,7 @@ export function IntimacaoUploadModal({ inquerito_id, onClose, onSuccess }: Intim
           {status !== "success" && (
             <button
               onClick={handleSubmit}
-              disabled={!file || status === "uploading"}
+              disabled={submitDisabled}
               className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-500 hover:bg-blue-400 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {status === "uploading" && <Loader2 size={14} className="animate-spin" />}

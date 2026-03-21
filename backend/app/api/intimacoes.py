@@ -16,7 +16,7 @@ from app.core.database import get_db
 from app.models.intimacao import Intimacao
 from app.models.documento import Documento
 from app.models.inquerito import Inquerito
-from app.schemas.intimacao import IntimacaoResponse, IntimacaoUpdate, IntimacaoUploadResponse
+from app.schemas.intimacao import IntimacaoResponse, IntimacaoUpdate, IntimacaoUploadResponse, IntimacaoManualCreate
 from app.services.storage import StorageService
 
 logger = logging.getLogger(__name__)
@@ -100,6 +100,69 @@ async def upload_intimacao(
         mensagem="Intimação recebida. Extração de dados em andamento.",
         task_id=task_id,
     )
+
+
+# ── Lançamento Manual ────────────────────────────────────────────
+
+
+@router.post("/manual", response_model=IntimacaoResponse, status_code=201)
+async def criar_intimacao_manual(
+    dados: IntimacaoManualCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Cria uma intimação manualmente (sem upload de arquivo) e já
+    agenda o evento no Google Agenda na hora.
+    """
+    # Verifica inquérito se informado
+    if dados.inquerito_id:
+        inq = await db.get(Inquerito, dados.inquerito_id)
+        if not inq:
+            raise HTTPException(status_code=404, detail="Inquérito não encontrado")
+
+    # Se não veio inquerito_id mas veio numero, tenta encontrar
+    inquerito_id = dados.inquerito_id
+    if not inquerito_id and dados.numero_inquerito_extraido:
+        result = await db.execute(
+            select(Inquerito).where(Inquerito.numero == dados.numero_inquerito_extraido)
+        )
+        inq = result.scalar_one_or_none()
+        if inq:
+            inquerito_id = inq.id
+
+    intimacao = Intimacao(
+        inquerito_id=inquerito_id,
+        intimado_nome=dados.intimado_nome,
+        intimado_qualificacao=dados.intimado_qualificacao,
+        numero_inquerito_extraido=dados.numero_inquerito_extraido,
+        data_oitiva=dados.data_oitiva,
+        local_oitiva=dados.local_oitiva,
+        status="agendada",
+    )
+    db.add(intimacao)
+    await db.flush()
+
+    # Cria evento no Google Agenda imediatamente (sem worker)
+    try:
+        from app.services.google_calendar_service import GoogleCalendarService
+        gcal = GoogleCalendarService()
+        evento = gcal.criar_evento_oitiva(
+            intimado_nome=dados.intimado_nome,
+            data_oitiva=dados.data_oitiva,
+            numero_inquerito=dados.numero_inquerito_extraido,
+            local_oitiva=dados.local_oitiva,
+            qualificacao=dados.intimado_qualificacao,
+        )
+        intimacao.google_event_id = evento.get("event_id")
+        intimacao.google_event_url = evento.get("event_url")
+    except RuntimeError as e:
+        logger.warning(f"[INTIMACAO-MANUAL] Google Calendar não configurado: {e}")
+    except Exception as e:
+        logger.error(f"[INTIMACAO-MANUAL] Erro ao criar evento Google: {e}")
+
+    await db.commit()
+    await db.refresh(intimacao)
+    return intimacao
 
 
 # ── Listagem ─────────────────────────────────────────────────────
