@@ -20,6 +20,7 @@ from app.models.endereco import Endereco
 from app.models.contato import Contato
 from app.models.evento_cronologico import EventoCronologico
 from app.models.resultado_agente import ResultadoAgente
+from app.services.copiloto_osint_service import buscar_historico_pessoa, buscar_historico_empresa
 
 logger = logging.getLogger(__name__)
 
@@ -91,9 +92,25 @@ Eventos/Cronologia:
             else "Não solicitado."
         )
 
+        # Histórico cruzado
+        historico_str = "Nenhum registro encontrado em outros inquéritos."
+        if pessoa.cpf:
+            try:
+                historico = await buscar_historico_pessoa(db, pessoa.cpf, inquerito_id)
+                if historico:
+                    linhas = [
+                        f"- Inquérito {h['numero']} ({h['ano'] or 'ano desconhecido'}): "
+                        f"{h['tipo_pessoa']} — {h['descricao'] or 'sem descrição'}"
+                        for h in historico
+                    ]
+                    historico_str = "\n".join(linhas)
+            except Exception as e:
+                logger.warning(f"[AGENTE-FICHA] Histórico cruzado falhou: {e}")
+
         prompt = PROMPT_FICHA_PESSOA.format(
             nome=pessoa.nome,
             dados_consolidados=dados,
+            historico_inqueritos=historico_str,
             dados_externos=dados_externos_str,
         )
 
@@ -168,9 +185,25 @@ Endereços:
             else "Não solicitado."
         )
 
+        # Histórico cruzado
+        historico_str = "Nenhum registro encontrado em outros inquéritos."
+        if empresa.cnpj:
+            try:
+                historico = await buscar_historico_empresa(db, empresa.cnpj, inquerito_id)
+                if historico:
+                    linhas = [
+                        f"- Inquérito {h['numero']} ({h['ano'] or 'ano desconhecido'}): "
+                        f"{h['tipo_empresa']} — {h['descricao'] or 'sem descrição'}"
+                        for h in historico
+                    ]
+                    historico_str = "\n".join(linhas)
+            except Exception as e:
+                logger.warning(f"[AGENTE-FICHA] Histórico cruzado empresa falhou: {e}")
+
         prompt = PROMPT_FICHA_EMPRESA.format(
             nome=empresa.nome,
             dados_consolidados=dados,
+            historico_inqueritos=historico_str,
             dados_externos=dados_externos_str,
         )
 

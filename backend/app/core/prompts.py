@@ -222,6 +222,9 @@ Com base nos dados abaixo sobre a pessoa "{nome}", elabore uma ficha investigati
 === DADOS INTERNOS (extraídos dos documentos do inquérito) ===
 {dados_consolidados}
 
+=== HISTÓRICO EM OUTROS INQUÉRITOS ===
+{historico_inqueritos}
+
 === DADOS EXTERNOS (direct.data — consulta em tempo real) ===
 {dados_externos}
 
@@ -248,6 +251,7 @@ Retorne EXCLUSIVAMENTE um JSON com a seguinte estrutura:
     "cnep": false,
     "detalhes": "se houver"
   }},
+  "historico_inqueritos": ["lista de outros inquéritos onde aparece, com papel e número"],
   "eventos_cronologicos": ["datas e fatos relevantes"],
   "nivel_risco": "baixo|medio|alto|critico",
   "justificativa_risco": "por que esse nível",
@@ -258,6 +262,7 @@ Retorne EXCLUSIVAMENTE um JSON com a seguinte estrutura:
 
 NÃO INVENTE dados. Se um campo não for disponível, use null ou lista vazia.
 Se não houver dados externos, baseie-se apenas nos dados internos.
+Se a pessoa aparece em outros inquéritos, mencione isso em pontos_de_atencao.
 """
 
 PROMPT_FICHA_EMPRESA = """Você é um analista de inteligência policial especializado em investigação empresarial.
@@ -265,6 +270,9 @@ Com base nos dados abaixo sobre a empresa "{nome}", elabore uma ficha investigat
 
 === DADOS INTERNOS (extraídos dos documentos do inquérito) ===
 {dados_consolidados}
+
+=== HISTÓRICO EM OUTROS INQUÉRITOS ===
+{historico_inqueritos}
 
 === DADOS EXTERNOS (direct.data — consulta em tempo real) ===
 {dados_externos}
@@ -285,6 +293,7 @@ Retorne EXCLUSIVAMENTE um JSON com a seguinte estrutura:
     "cnep": false,
     "detalhes": "se houver"
   }},
+  "historico_inqueritos": ["lista de outros inquéritos onde aparece, com papel e número"],
   "processos_judiciais": ["resumo se disponível"],
   "transacoes_suspeitas": ["movimentos financeiros identificados nos autos"],
   "nivel_risco": "baixo|medio|alto|critico",

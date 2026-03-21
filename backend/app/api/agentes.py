@@ -249,6 +249,48 @@ async def osint_lote(
 
 
 @router.get(
+    "/osint/historico-pessoa",
+    summary="Inquéritos anteriores onde o mesmo CPF aparece",
+)
+async def osint_historico_pessoa(
+    cpf: str,
+    inquerito_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Busca em todos os inquéritos registros de Pessoa com o mesmo CPF,
+    excluindo o inquérito atual. Retorna lista com número, ano e papel.
+    """
+    from app.services.copiloto_osint_service import buscar_historico_pessoa
+    try:
+        historico = await buscar_historico_pessoa(db, cpf, inquerito_id)
+        return {"status": "ok", "total": len(historico), "historico": historico}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar histórico: {str(e)[:200]}")
+
+
+@router.get(
+    "/osint/historico-empresa",
+    summary="Inquéritos anteriores onde o mesmo CNPJ aparece",
+)
+async def osint_historico_empresa(
+    cnpj: str,
+    inquerito_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Busca em todos os inquéritos registros de Empresa com o mesmo CNPJ,
+    excluindo o inquérito atual.
+    """
+    from app.services.copiloto_osint_service import buscar_historico_empresa
+    try:
+        historico = await buscar_historico_empresa(db, cnpj, inquerito_id)
+        return {"status": "ok", "total": len(historico), "historico": historico}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao buscar histórico: {str(e)[:200]}")
+
+
+@router.get(
     "/osint/sugestao/{inquerito_id}",
     summary="Análise de personagens e sugestão de perfil OSINT (Copiloto)",
 )

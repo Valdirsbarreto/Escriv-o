@@ -33,12 +33,22 @@ interface DadoCampo {
   texto?: string | null;
 }
 
+interface HistoricoInquerito {
+  inquerito_id: string;
+  numero: string;
+  ano?: number | null;
+  descricao?: string;
+  tipo_pessoa: string;
+  created_at: string;
+}
+
 interface PersonagemAnalise {
   pessoa_id: string;
   nome: string;
   tipo_pessoa: string;
   cpf?: string | null;
   dados_nos_autos: { cpf: DadoCampo; telefone: DadoCampo; endereco: DadoCampo };
+  historico_inqueritos: HistoricoInquerito[];
   perfil_sugerido: number;
   perfil_sugerido_label: string;
   custo_estimado: number;
@@ -431,6 +441,7 @@ function PainelPersonagens({ inqueritoId }: { inqueritoId: string }) {
               <TableHead className="text-zinc-400 text-xs w-52">Personagem</TableHead>
               <TableHead className="text-zinc-400 text-xs w-28">Papel</TableHead>
               <TableHead className="text-zinc-400 text-xs">Dados nos autos</TableHead>
+              <TableHead className="text-zinc-400 text-xs w-36">Histórico</TableHead>
               <TableHead className="text-zinc-400 text-xs w-52">Perfil OSINT</TableHead>
               <TableHead className="text-zinc-400 text-xs text-right w-24">Custo</TableHead>
               <TableHead className="text-zinc-400 text-xs w-20 text-center">Status</TableHead>
@@ -479,6 +490,20 @@ function PainelPersonagens({ inqueritoId }: { inqueritoId: string }) {
                       </div>
                     </TableCell>
 
+                    {/* Histórico cruzado */}
+                    <TableCell>
+                      {p.historico_inqueritos?.length > 0 ? (
+                        <span
+                          title={p.historico_inqueritos.map((h: any) => `${h.numero} (${h.tipo_pessoa})`).join("\n")}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] border border-orange-700/40 text-orange-400 bg-orange-500/5 cursor-default"
+                        >
+                          ⚠ {p.historico_inqueritos.length} inq.
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-zinc-700">—</span>
+                      )}
+                    </TableCell>
+
                     {/* Dropdown perfil */}
                     <TableCell>
                       <select
@@ -518,11 +543,21 @@ function PainelPersonagens({ inqueritoId }: { inqueritoId: string }) {
                   {/* Justificativa expandida */}
                   {expandido && (
                     <TableRow key={`${p.pessoa_id}-expand`} className="border-zinc-800 bg-zinc-900/20 hover:bg-zinc-900/20">
-                      <TableCell colSpan={6} className="py-3 px-4">
+                      <TableCell colSpan={7} className="py-3 px-4">
                         <div className="ml-5 space-y-2">
                           <p className="text-xs text-zinc-400 italic leading-relaxed">
                             "{p.justificativa}"
                           </p>
+                          {p.historico_inqueritos?.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 text-[10px]">
+                              <span className="text-orange-400 font-medium">Histórico:</span>
+                              {p.historico_inqueritos.map((h: any, i: number) => (
+                                <span key={i} className="px-1.5 py-0.5 rounded border border-orange-700/30 text-orange-300 bg-orange-500/5">
+                                  {h.numero} · {h.tipo_pessoa}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                           {resultado?.status === "concluido" && resultado?.dados && (
                             <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
                               <span className="text-zinc-500">APIs executadas:</span>

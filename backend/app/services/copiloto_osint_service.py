@@ -14,10 +14,11 @@ import uuid
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.documento import Documento
+from app.models.empresa import Empresa
 from app.models.inquerito import Inquerito
 from app.models.pessoa import Pessoa
 from app.services.embedding_service import EmbeddingService
@@ -106,6 +107,7 @@ def _gerar_justificativa(
     crime_complexo: bool,
     perfil: int,
     dados: Dict[str, Any],
+    historico: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     partes: List[str] = []
 
@@ -143,8 +145,94 @@ def _gerar_justificativa(
             else "Telefone nos autos pode estar desatualizado."
         )
 
+    # Histórico cruzado
+    if historico:
+        n = len(historico)
+        papeis = list({h["tipo_pessoa"] for h in historico})
+        papeis_str = "/".join(papeis[:2])
+        nums = ", ".join(h["numero"] for h in historico[:2])
+        sufixo = f" ({nums}{'...' if n > 2 else ''})"
+        partes.append(
+            f"⚠ Aparece em {n} outro(s) inquérito(s) como {papeis_str}{sufixo} — atenção ao histórico."
+        )
+
     partes.append(f"Recomendo {LABEL_PERFIL[perfil]}.")
     return " ".join(partes)
+
+
+# ── Lookup cruzado entre inquéritos ─────────────────────────────────────────
+
+async def buscar_historico_pessoa(
+    db: AsyncSession,
+    cpf: str,
+    inquerito_id_atual: uuid.UUID,
+) -> List[Dict[str, Any]]:
+    """
+    Busca em TODOS os inquéritos registros de Pessoa com o mesmo CPF,
+    excluindo o inquérito atual.
+    Normaliza CPF via regexp_replace (remove não-dígitos) antes de comparar.
+    """
+    cpf_digits = re.sub(r'\D', '', cpf)
+    if not cpf_digits:
+        return []
+
+    result = await db.execute(
+        select(Pessoa, Inquerito)
+        .join(Inquerito, Pessoa.inquerito_id == Inquerito.id)
+        .where(Pessoa.cpf.isnot(None))
+        .where(func.regexp_replace(Pessoa.cpf, r'\D', '', 'g') == cpf_digits)
+        .where(Pessoa.inquerito_id != inquerito_id_atual)
+        .order_by(Inquerito.created_at.desc())
+    )
+    rows = result.all()
+
+    return [
+        {
+            "inquerito_id": str(inq.id),
+            "numero": inq.numero,
+            "ano": inq.ano,
+            "descricao": (inq.descricao or "")[:120],
+            "tipo_pessoa": p.tipo_pessoa or "outro",
+            "created_at": inq.created_at.isoformat(),
+        }
+        for p, inq in rows
+    ]
+
+
+async def buscar_historico_empresa(
+    db: AsyncSession,
+    cnpj: str,
+    inquerito_id_atual: uuid.UUID,
+) -> List[Dict[str, Any]]:
+    """
+    Busca em TODOS os inquéritos registros de Empresa com o mesmo CNPJ,
+    excluindo o inquérito atual.
+    """
+    cnpj_digits = re.sub(r'\D', '', cnpj)
+    if not cnpj_digits:
+        return []
+
+    result = await db.execute(
+        select(Empresa, Inquerito)
+        .join(Inquerito, Empresa.inquerito_id == Inquerito.id)
+        .where(Empresa.cnpj.isnot(None))
+        .where(func.regexp_replace(Empresa.cnpj, r'\D', '', 'g') == cnpj_digits)
+        .where(Empresa.inquerito_id != inquerito_id_atual)
+        .order_by(Inquerito.created_at.desc())
+    )
+    rows = result.all()
+
+    return [
+        {
+            "inquerito_id": str(inq.id),
+            "numero": inq.numero,
+            "ano": inq.ano,
+            "descricao": (inq.descricao or "")[:120],
+            "tipo_empresa": e.tipo_empresa or "outro",
+            "created_at": inq.created_at.isoformat(),
+        }
+        for e, inq in rows
+    ]
 
 
 # ── Serviço ─────────────────────────────────────────────────────────────────
@@ -216,13 +304,23 @@ class CopilotoOsintService:
         inquerito_id: str,
         crime_complexo: bool,
     ) -> Dict[str, Any]:
+        """Analisa uma pessoa individualmente, incluindo histórico entre inquéritos."""
+        inquerito_uuid = uuid.UUID(inquerito_id)
         chunks = self._buscar_chunks(pessoa, inquerito_id)
         doc_dates = await self._datas_documentos(db, chunks)
         dados = self._detectar_dados(pessoa, chunks, doc_dates)
 
+        # Histórico cruzado — outros inquéritos onde o mesmo CPF aparece
+        historico: List[Dict[str, Any]] = []
+        if pessoa.cpf:
+            try:
+                historico = await buscar_historico_pessoa(db, pessoa.cpf, inquerito_uuid)
+            except Exception as e:
+                logger.warning(f"[COPILOTO_OSINT] Histórico falhou para {pessoa.nome}: {e}")
+
         perfil = _sugerir_perfil(pessoa.tipo_pessoa, crime_complexo)
         justificativa = _gerar_justificativa(
-            pessoa.tipo_pessoa or "outro", crime_complexo, perfil, dados
+            pessoa.tipo_pessoa or "outro", crime_complexo, perfil, dados, historico
         )
 
         return {
@@ -231,6 +329,7 @@ class CopilotoOsintService:
             "tipo_pessoa": pessoa.tipo_pessoa or "outro",
             "cpf": pessoa.cpf,
             "dados_nos_autos": dados,
+            "historico_inqueritos": historico,
             "perfil_sugerido": perfil,
             "perfil_sugerido_label": LABEL_PERFIL[perfil],
             "custo_estimado": CUSTO_PERFIL[perfil],
