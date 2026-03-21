@@ -58,7 +58,7 @@ class AgenteExtrato:
         try:
             result = await self.llm.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
-                tier="economico",
+                tier="standard",
                 temperature=0.1,
                 max_tokens=4000,
                 json_mode=True,

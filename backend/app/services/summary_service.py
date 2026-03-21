@@ -222,7 +222,7 @@ class SummaryService:
         try:
             result = await self.llm.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
-                tier="economico",
+                tier="standard",
                 temperature=0.3,
                 max_tokens=1000,
             )

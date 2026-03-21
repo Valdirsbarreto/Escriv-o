@@ -41,7 +41,7 @@ class OrchestratorService:
         try:
             result = await self.llm_service.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
-                tier="premium",
+                tier="standard",
                 temperature=0.1,
                 max_tokens=2000,
                 json_mode=True
@@ -69,7 +69,7 @@ class OrchestratorService:
         try:
             result = await self.llm_service.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
-                tier="premium",
+                tier="standard",
                 temperature=0.7,
                 max_tokens=1500
             )
