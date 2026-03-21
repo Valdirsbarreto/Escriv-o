@@ -2,16 +2,83 @@
 
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/store/app";
-import { api, getPessoas, getEmpresas, gerarFichaPessoa, gerarFichaEmpresa, osintConsultaAvulsa } from "@/lib/api";
+import {
+  api, getPessoas, getEmpresas, gerarFichaPessoa, gerarFichaEmpresa,
+  osintConsultaAvulsa, osintSugestao, osintLote,
+} from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { UserSearch, Bot, Target, AlertTriangle, Building, User, Search, FileSearch, CheckCircle, XCircle, Phone, Mail, MapPin, Car, Shield, Briefcase } from "lucide-react";
+import {
+  UserSearch, Bot, Target, AlertTriangle, Building, User, Search,
+  FileSearch, CheckCircle, XCircle, Phone, Mail, MapPin, Car,
+  Shield, Briefcase, ChevronDown, ChevronRight, Loader2, Play,
+  TriangleAlert, MinusCircle,
+} from "lucide-react";
 
-// ── Componente: resultado de uma seção OSINT ──────────────────────────────────
+// ── Tipos ─────────────────────────────────────────────────────────────────────
+
+type Staleness = "fresco" | "desatualizado" | "ausente";
+type PerfilOpt = null | 1 | 2 | 3 | 4;
+
+interface DadoCampo {
+  presente: boolean;
+  staleness: Staleness;
+  data_doc?: string | null;
+  data_doc_fmt?: string | null;
+  texto?: string | null;
+}
+
+interface PersonagemAnalise {
+  pessoa_id: string;
+  nome: string;
+  tipo_pessoa: string;
+  cpf?: string | null;
+  dados_nos_autos: { cpf: DadoCampo; telefone: DadoCampo; endereco: DadoCampo };
+  perfil_sugerido: number;
+  perfil_sugerido_label: string;
+  custo_estimado: number;
+  justificativa: string;
+  chunks_encontrados: number;
+}
+
+// ── Constantes ────────────────────────────────────────────────────────────────
+
+const PERFIL_META: Record<number | "null", { label: string; cor: string; emoji: string; custo: number }> = {
+  "null": { label: "Ignorar",        cor: "text-zinc-500",   emoji: "🚫", custo: 0     },
+  1:      { label: "P1 Localização", cor: "text-green-400",  emoji: "🟢", custo: 3.40  },
+  2:      { label: "P2 Triagem",     cor: "text-blue-400",   emoji: "🔵", custo: 5.68  },
+  3:      { label: "P3 Investigação",cor: "text-yellow-400", emoji: "🟡", custo: 7.76  },
+  4:      { label: "P4 Profundo",    cor: "text-red-400",    emoji: "🔴", custo: 11.76 },
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function stalenessIcon(s: Staleness, fmt?: string | null) {
+  if (s === "fresco")       return <span className="text-green-400 text-[10px]" title={fmt || ""}>✓</span>;
+  if (s === "desatualizado") return <span className="text-yellow-400 text-[10px]" title={fmt || ""}>⚠</span>;
+  return <span className="text-zinc-600 text-[10px]">—</span>;
+}
+
+function DadosBadge({ campo, label }: { campo: DadoCampo; label: string }) {
+  const cor = campo.staleness === "fresco" ? "border-green-700/40 text-green-400 bg-green-500/5"
+    : campo.staleness === "desatualizado" ? "border-yellow-700/40 text-yellow-400 bg-yellow-500/5"
+    : "border-zinc-700 text-zinc-600";
+  const title = campo.data_doc_fmt ? `${label}: ${campo.data_doc_fmt}` : label;
+  return (
+    <span title={campo.texto ? `${title} — "${campo.texto}"` : title}
+      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] border cursor-default ${cor}`}>
+      {label} {stalenessIcon(campo.staleness, campo.data_doc_fmt)}
+    </span>
+  );
+}
+
+// ── Componentes de resultado avulso (mantidos) ────────────────────────────────
+
 function SecaoResultado({ titulo, icone: Icone, children }: { titulo: string; icone: any; children: React.ReactNode }) {
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
@@ -32,7 +99,6 @@ function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
-// ── Componente: painel de resultado da consulta avulsa ────────────────────────
 function ResultadoAvulso({ dados }: { dados: any }) {
   const cadastro = dados.cadastro;
   const aml = dados.aml;
@@ -44,7 +110,6 @@ function ResultadoAvulso({ dados }: { dados: any }) {
 
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-      {/* Fontes consultadas */}
       <div className="flex flex-wrap gap-1.5">
         {dados.fontes_consultadas?.map((f: string) => (
           <Badge key={f} variant="outline" className="text-xs border-green-700/40 text-green-400 bg-green-500/5">{f}</Badge>
@@ -53,8 +118,6 @@ function ResultadoAvulso({ dados }: { dados: any }) {
           <Badge key={f.fonte} variant="outline" className="text-xs border-red-700/40 text-red-400 bg-red-500/5">{f.fonte}</Badge>
         ))}
       </div>
-
-      {/* Qualificação */}
       {cadastro && (
         <SecaoResultado titulo="Qualificação" icone={User}>
           <div className="space-y-1 text-sm text-zinc-200">
@@ -70,8 +133,6 @@ function ResultadoAvulso({ dados }: { dados: any }) {
           </div>
         </SecaoResultado>
       )}
-
-      {/* Alertas rápidos */}
       {(mandados || aml) && (
         <SecaoResultado titulo="Alertas" icone={Shield}>
           <div className="grid grid-cols-2 gap-2">
@@ -83,8 +144,6 @@ function ResultadoAvulso({ dados }: { dados: any }) {
           </div>
         </SecaoResultado>
       )}
-
-      {/* Contatos */}
       {cadastro?.telefones?.length > 0 && (
         <SecaoResultado titulo="Contatos" icone={Phone}>
           <div className="space-y-1">
@@ -105,8 +164,6 @@ function ResultadoAvulso({ dados }: { dados: any }) {
           </div>
         </SecaoResultado>
       )}
-
-      {/* Endereços */}
       {cadastro?.enderecos?.length > 0 && (
         <SecaoResultado titulo="Endereços" icone={MapPin}>
           <div className="space-y-1">
@@ -118,8 +175,6 @@ function ResultadoAvulso({ dados }: { dados: any }) {
           </div>
         </SecaoResultado>
       )}
-
-      {/* Vínculos Empresariais (AML) */}
       {aml?.sociedades?.length > 0 && (
         <SecaoResultado titulo="Vínculos Empresariais" icone={Briefcase}>
           <div className="space-y-2">
@@ -128,11 +183,6 @@ function ResultadoAvulso({ dados }: { dados: any }) {
                 <p className="text-xs font-medium text-zinc-200">{s.razaoSocial}</p>
                 <div className="flex gap-2 mt-1 flex-wrap">
                   <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-400">{s.cnpj}</Badge>
-                  {s.socios?.find((so: any) => so.qualificacaoSocio) && (
-                    <Badge variant="outline" className="text-[10px] border-blue-700/40 text-blue-400">
-                      {s.socios.find((so: any) => so.cpf === aml.cpf)?.qualificacaoSocio || "Sócio"}
-                    </Badge>
-                  )}
                   {!s.baixada && <Badge variant="outline" className="text-[10px] border-green-700/40 text-green-400">Ativa</Badge>}
                 </div>
               </div>
@@ -140,8 +190,6 @@ function ResultadoAvulso({ dados }: { dados: any }) {
           </div>
         </SecaoResultado>
       )}
-
-      {/* Veículos (histórico por CPF) */}
       {veiculos && (
         <SecaoResultado titulo="Veículos" icone={Car}>
           {veiculos.veiculos?.length > 0 ? (
@@ -150,13 +198,9 @@ function ResultadoAvulso({ dados }: { dados: any }) {
                 <div key={i} className="text-xs text-zinc-300">{v.placa} — {v.marca} {v.modelo} ({v.anoFabricacao})</div>
               ))}
             </div>
-          ) : (
-            <p className="text-xs text-zinc-500">Nenhum veículo registrado</p>
-          )}
+          ) : <p className="text-xs text-zinc-500">Nenhum veículo registrado</p>}
         </SecaoResultado>
       )}
-
-      {/* Veículo avulso por placa */}
       {veiculo && (
         <SecaoResultado titulo="Veículo Consultado" icone={Car}>
           <div className="text-xs space-y-1 text-zinc-300">
@@ -166,26 +210,19 @@ function ResultadoAvulso({ dados }: { dados: any }) {
           </div>
         </SecaoResultado>
       )}
-
-      {/* Receita Federal (CNPJ) */}
       {receita && (
         <SecaoResultado titulo="Receita Federal" icone={Building}>
           <div className="text-xs space-y-1 text-zinc-300">
             <p className="font-medium text-zinc-100">{receita.razaoSocial || receita.nomeFantasia}</p>
             {receita.situacaoCadastral && <p><span className="text-zinc-500">Situação:</span> {receita.situacaoCadastral}</p>}
-            {receita.atividadePrincipal && <p><span className="text-zinc-500">Atividade:</span> {receita.atividadePrincipal}</p>}
           </div>
         </SecaoResultado>
       )}
-
-      {/* Mandados por nome */}
       {mandadosNome && (
         <SecaoResultado titulo="Mandados por Nome" icone={Shield}>
           <StatusBadge ok={!mandadosNome.possuiMandado} label={mandadosNome.possuiMandado ? `${mandadosNome.mandadosPrisao?.length} mandado(s) ativo(s)` : "Sem mandados por este nome"} />
         </SecaoResultado>
       )}
-
-      {/* Sem resultados */}
       {dados.fontes_consultadas?.length === 0 && (
         <p className="text-sm text-zinc-500 text-center py-4">Nenhuma fonte retornou dados.</p>
       )}
@@ -193,7 +230,8 @@ function ResultadoAvulso({ dados }: { dados: any }) {
   );
 }
 
-// ── Componente: Dialog de Consulta Avulsa ─────────────────────────────────────
+// ── Consulta Avulsa Dialog ────────────────────────────────────────────────────
+
 function ConsultaAvulsaDialog() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ cpf: "", cnpj: "", placa: "", nome: "", data_nascimento: "", rg: "", uf: "RJ" });
@@ -204,27 +242,17 @@ function ConsultaAvulsaDialog() {
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   const handleConsultar = async () => {
-    const temDado = Object.entries(form).some(([k, v]) => k !== "uf" && v.trim() !== "");
-    if (!temDado) return;
-
-    setConsultando(true);
-    setErro(null);
-    setResultado(null);
+    if (!Object.entries(form).some(([k, v]) => k !== "uf" && v.trim())) return;
+    setConsultando(true); setErro(null); setResultado(null);
     try {
       const res = await osintConsultaAvulsa(form);
       setResultado(res.dados);
     } catch (e: any) {
       setErro(e?.response?.data?.detail || "Erro na consulta.");
-    } finally {
-      setConsultando(false);
-    }
+    } finally { setConsultando(false); }
   };
 
-  const limpar = () => {
-    setForm({ cpf: "", cnpj: "", placa: "", nome: "", data_nascimento: "", rg: "", uf: "RJ" });
-    setResultado(null);
-    setErro(null);
-  };
+  const limpar = () => { setForm({ cpf: "", cnpj: "", placa: "", nome: "", data_nascimento: "", rg: "", uf: "RJ" }); setResultado(null); setErro(null); };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -232,101 +260,63 @@ function ConsultaAvulsaDialog() {
         <Button variant="outline" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 gap-2">
           <FileSearch size={15} /> Consulta Avulsa
         </Button>
-      }>
-        <FileSearch size={15} /> Consulta Avulsa
-      </DialogTrigger>
-
-      <DialogContent className="bg-zinc-950 border-zinc-800 max-w-4xl w-full max-h-[90vh] flex flex-col" showCloseButton={true}>
+      } />
+      <DialogContent className="bg-zinc-950 border-zinc-800 max-w-4xl w-full max-h-[90vh] flex flex-col" showCloseButton>
         <DialogHeader>
           <DialogTitle className="text-zinc-100 flex items-center gap-2">
-            <FileSearch size={18} className="text-blue-400" />
-            Consulta OSINT Avulsa
+            <FileSearch size={18} className="text-blue-400" /> Consulta OSINT Avulsa
           </DialogTitle>
-          <p className="text-xs text-zinc-500">Preencha ao menos um campo. Cada dado disponível desbloqueia APIs diferentes.</p>
+          <p className="text-xs text-zinc-500">Preencha ao menos um campo.</p>
         </DialogHeader>
-
         <div className="flex gap-6 flex-1 min-h-0 overflow-hidden mt-2">
-          {/* Formulário */}
-          <div className="w-72 shrink-0 space-y-4">
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-zinc-400 mb-1 block">CPF <span className="text-zinc-600">(desbloqueia cadastro, mandados, AML...)</span></label>
-                <Input value={form.cpf} onChange={e => set("cpf", e.target.value)}
-                  placeholder="000.000.000-00" className="bg-zinc-900 border-zinc-700 text-zinc-200 text-sm h-8" />
+          <div className="w-72 shrink-0 space-y-3">
+            {[
+              { k: "cpf", label: "CPF", ph: "000.000.000-00" },
+              { k: "cnpj", label: "CNPJ", ph: "00.000.000/0001-00" },
+              { k: "placa", label: "Placa", ph: "ABC1D23" },
+            ].map(({ k, label, ph }) => (
+              <div key={k}>
+                <label className="text-xs text-zinc-400 mb-1 block">{label}</label>
+                <Input value={(form as any)[k]} onChange={e => set(k, k === "placa" ? e.target.value.toUpperCase() : e.target.value)}
+                  placeholder={ph} className="bg-zinc-900 border-zinc-700 text-zinc-200 text-sm h-8" />
               </div>
+            ))}
+            <div className="border-t border-zinc-800 pt-3 space-y-2">
+              <p className="text-xs text-zinc-600">Sem CPF — busca por identificação parcial:</p>
+              {[
+                { k: "nome", label: "Nome", ph: "Nome completo" },
+                { k: "rg", label: "RG", ph: "0000000" },
+                { k: "data_nascimento", label: "Data Nascimento", ph: "DD/MM/AAAA" },
+              ].map(({ k, label, ph }) => (
+                <div key={k}>
+                  <label className="text-xs text-zinc-400 mb-1 block">{label}</label>
+                  <Input value={(form as any)[k]} onChange={e => set(k, e.target.value)}
+                    placeholder={ph} className="bg-zinc-900 border-zinc-700 text-zinc-200 text-sm h-8" />
+                </div>
+              ))}
               <div>
-                <label className="text-xs text-zinc-400 mb-1 block">CNPJ <span className="text-zinc-600">(Receita Federal, sanções PJ)</span></label>
-                <Input value={form.cnpj} onChange={e => set("cnpj", e.target.value)}
-                  placeholder="00.000.000/0001-00" className="bg-zinc-900 border-zinc-700 text-zinc-200 text-sm h-8" />
-              </div>
-              <div>
-                <label className="text-xs text-zinc-400 mb-1 block">Placa <span className="text-zinc-600">(dados do veículo)</span></label>
-                <Input value={form.placa} onChange={e => set("placa", e.target.value.toUpperCase())}
-                  placeholder="ABC1D23" className="bg-zinc-900 border-zinc-700 text-zinc-200 text-sm h-8" />
-              </div>
-
-              <div className="border-t border-zinc-800 pt-3">
-                <p className="text-xs text-zinc-600 mb-2">Sem CPF — busca por identificação parcial:</p>
-                <div>
-                  <label className="text-xs text-zinc-400 mb-1 block">Nome</label>
-                  <Input value={form.nome} onChange={e => set("nome", e.target.value)}
-                    placeholder="Nome completo" className="bg-zinc-900 border-zinc-700 text-zinc-200 text-sm h-8" />
-                </div>
-                <div className="mt-2">
-                  <label className="text-xs text-zinc-400 mb-1 block">RG</label>
-                  <Input value={form.rg} onChange={e => set("rg", e.target.value)}
-                    placeholder="0000000" className="bg-zinc-900 border-zinc-700 text-zinc-200 text-sm h-8" />
-                </div>
-                <div className="mt-2">
-                  <label className="text-xs text-zinc-400 mb-1 block">Data de Nascimento</label>
-                  <Input value={form.data_nascimento} onChange={e => set("data_nascimento", e.target.value)}
-                    placeholder="DD/MM/AAAA" className="bg-zinc-900 border-zinc-700 text-zinc-200 text-sm h-8" />
-                </div>
-                <div className="mt-2">
-                  <label className="text-xs text-zinc-400 mb-1 block">UF <span className="text-zinc-600">(para antecedentes)</span></label>
-                  <Input value={form.uf} onChange={e => set("uf", e.target.value.toUpperCase())}
-                    placeholder="RJ" maxLength={2} className="bg-zinc-900 border-zinc-700 text-zinc-200 text-sm h-8 w-20" />
-                </div>
+                <label className="text-xs text-zinc-400 mb-1 block">UF</label>
+                <Input value={form.uf} onChange={e => set("uf", e.target.value.toUpperCase())}
+                  placeholder="RJ" maxLength={2} className="bg-zinc-900 border-zinc-700 text-zinc-200 text-sm h-8 w-20" />
               </div>
             </div>
-
             <div className="flex gap-2">
-              <Button onClick={handleConsultar} disabled={consultando}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 h-9 text-sm gap-2">
-                {consultando
-                  ? <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Consultando...</>
-                  : <><Search size={14} /> Consultar</>}
+              <Button onClick={handleConsultar} disabled={consultando} className="flex-1 bg-blue-600 hover:bg-blue-700 h-9 text-sm gap-2">
+                {consultando ? <><Loader2 size={14} className="animate-spin" /> Consultando...</> : <><Search size={14} /> Consultar</>}
               </Button>
-              {resultado && (
-                <Button onClick={limpar} variant="outline"
-                  className="border-zinc-700 text-zinc-400 hover:bg-zinc-800 h-9 text-sm px-3">
-                  Limpar
-                </Button>
-              )}
+              {resultado && <Button onClick={limpar} variant="outline" className="border-zinc-700 text-zinc-400 hover:bg-zinc-800 h-9 text-sm px-3">Limpar</Button>}
             </div>
           </div>
-
-          {/* Resultados */}
           <div className="flex-1 min-w-0 border-l border-zinc-800 pl-6 overflow-hidden">
             <ScrollArea className="h-full max-h-[65vh]">
               {!resultado && !erro && !consultando && (
                 <div className="flex flex-col items-center justify-center h-48 text-zinc-600 text-center text-sm">
                   <Search className="w-10 h-10 mb-3 text-zinc-800" />
-                  <p>Preencha os campos ao lado e clique em Consultar.</p>
-                  <p className="text-xs mt-1">Qualquer combinação de dados é aceita.</p>
+                  <p>Preencha os campos e clique em Consultar.</p>
                 </div>
               )}
-              {consultando && (
-                <div className="flex items-center gap-3 text-zinc-400 text-sm py-8 justify-center">
-                  <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                  Acessando bases de dados...
-                </div>
-              )}
-              {erro && (
-                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex gap-3 text-red-400 text-sm">
-                  <AlertTriangle size={16} className="shrink-0 mt-0.5" /> {erro}
-                </div>
-              )}
+              {consultando && <div className="flex items-center gap-3 text-zinc-400 text-sm py-8 justify-center"><Loader2 size={18} className="animate-spin text-blue-500" /> Acessando bases de dados...</div>}
+              {erro && <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex gap-3 text-red-400 text-sm"><AlertTriangle size={16} className="shrink-0 mt-0.5" /> {erro}</div>}
               {resultado && <ResultadoAvulso dados={resultado} />}
             </ScrollArea>
           </div>
@@ -336,9 +326,296 @@ function ConsultaAvulsaDialog() {
   );
 }
 
-// ── Página principal ──────────────────────────────────────────────────────────
-export default function AgenteOsintPage() {
-  const { inqueritoAtivoId } = useAppStore();
+// ── Painel de Personagens ─────────────────────────────────────────────────────
+
+function PainelPersonagens({ inqueritoId }: { inqueritoId: string }) {
+  const [analise, setAnalise] = useState<any | null>(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erroAnalise, setErroAnalise] = useState<string | null>(null);
+
+  // Perfil selecionado por pessoa: pessoa_id → PerfilOpt
+  const [perfis, setPerfis] = useState<Record<string, PerfilOpt>>({});
+  // Justificativa expandida por pessoa
+  const [expandidos, setExpandidos] = useState<Record<string, boolean>>({});
+
+  // Estado de execução do lote
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [executando, setExecutando] = useState(false);
+  const [resultados, setResultados] = useState<Record<string, any>>({});
+  const [erroExec, setErroExec] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAnalise(null); setErroAnalise(null); setResultados({}); setPerfis({});
+    setCarregando(true);
+    osintSugestao(inqueritoId)
+      .then(res => {
+        const a = res.analise;
+        setAnalise(a);
+        // Inicializar perfis com sugestão do Copiloto
+        const init: Record<string, PerfilOpt> = {};
+        (a.personagens || []).forEach((p: PersonagemAnalise) => { init[p.pessoa_id] = p.perfil_sugerido as PerfilOpt; });
+        setPerfis(init);
+      })
+      .catch(e => setErroAnalise(e?.response?.data?.detail || "Erro ao analisar personagens."))
+      .finally(() => setCarregando(false));
+  }, [inqueritoId]);
+
+  const personagens: PersonagemAnalise[] = analise?.personagens || [];
+  const custoTotal = personagens.reduce((acc, p) => {
+    const perf = perfis[p.pessoa_id];
+    return acc + (perf !== null && perf !== undefined ? (PERFIL_META[perf]?.custo || 0) : 0);
+  }, 0);
+
+  const toggleExpand = (id: string) => setExpandidos(e => ({ ...e, [id]: !e[id] }));
+
+  const setPerfil = (pessoaId: string, val: string) => {
+    const perf: PerfilOpt = val === "null" ? null : (parseInt(val) as PerfilOpt);
+    setPerfis(p => ({ ...p, [pessoaId]: perf }));
+  };
+
+  const itensAtivos = personagens.filter(p => perfis[p.pessoa_id] !== null && perfis[p.pessoa_id] !== undefined);
+
+  const handleExecutar = async () => {
+    setConfirmOpen(false);
+    setExecutando(true); setErroExec(null);
+    try {
+      const itens = personagens.map(p => ({ pessoa_id: p.pessoa_id, perfil: perfis[p.pessoa_id] ?? null }));
+      const res = await osintLote(inqueritoId, itens);
+      const mapa: Record<string, any> = {};
+      (res.resultados || []).forEach((r: any) => { mapa[r.pessoa_id] = r; });
+      setResultados(mapa);
+    } catch (e: any) {
+      setErroExec(e?.response?.data?.detail || "Erro ao executar lote.");
+    } finally { setExecutando(false); }
+  };
+
+  if (carregando) return (
+    <div className="flex items-center justify-center h-64 gap-3 text-zinc-400">
+      <Loader2 size={22} className="animate-spin text-blue-500" />
+      Analisando personagens nos autos...
+    </div>
+  );
+
+  if (erroAnalise) return (
+    <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex gap-3 text-red-400 text-sm">
+      <AlertTriangle size={16} className="shrink-0 mt-1" /> {erroAnalise}
+    </div>
+  );
+
+  if (!personagens.length) return (
+    <div className="flex flex-col items-center justify-center h-64 text-zinc-500 text-center">
+      <User className="w-12 h-12 mb-3 text-zinc-800" />
+      <p className="text-sm">Nenhum personagem indexado neste inquérito.</p>
+      <p className="text-xs mt-1 text-zinc-600">Inicie a ingestão de documentos para detectar pessoas automaticamente.</p>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Crime complexo badge */}
+      {analise && (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-zinc-500">Classificação do crime:</span>
+          {analise.crime_complexo
+            ? <Badge variant="outline" className="border-red-700/40 text-red-400 bg-red-500/5">Complexo — lavagem / tráfico / corrupção</Badge>
+            : <Badge variant="outline" className="border-zinc-700 text-zinc-400">Crime simples</Badge>}
+          <span className="text-zinc-600">· {personagens.length} personagens</span>
+        </div>
+      )}
+
+      {/* Tabela */}
+      <div className="border border-zinc-800 rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-zinc-800 bg-zinc-900/60 hover:bg-zinc-900/60">
+              <TableHead className="text-zinc-400 text-xs w-52">Personagem</TableHead>
+              <TableHead className="text-zinc-400 text-xs w-28">Papel</TableHead>
+              <TableHead className="text-zinc-400 text-xs">Dados nos autos</TableHead>
+              <TableHead className="text-zinc-400 text-xs w-52">Perfil OSINT</TableHead>
+              <TableHead className="text-zinc-400 text-xs text-right w-24">Custo</TableHead>
+              <TableHead className="text-zinc-400 text-xs w-20 text-center">Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {personagens.map((p) => {
+              const perf = perfis[p.pessoa_id];
+              const meta = PERFIL_META[perf ?? "null"];
+              const custo = perf !== null && perf !== undefined ? meta.custo : 0;
+              const resultado = resultados[p.pessoa_id];
+              const expandido = expandidos[p.pessoa_id];
+
+              return (
+                <>
+                  <TableRow key={p.pessoa_id} className="border-zinc-800 hover:bg-zinc-900/40">
+                    {/* Nome */}
+                    <TableCell>
+                      <button
+                        onClick={() => toggleExpand(p.pessoa_id)}
+                        className="flex items-start gap-1.5 text-left group"
+                      >
+                        {expandido
+                          ? <ChevronDown size={13} className="text-zinc-500 mt-0.5 shrink-0" />
+                          : <ChevronRight size={13} className="text-zinc-500 mt-0.5 shrink-0" />}
+                        <div>
+                          <p className="text-sm text-zinc-200 group-hover:text-zinc-100 font-medium leading-tight">{p.nome}</p>
+                          {p.cpf && <p className="text-[10px] text-zinc-600 mt-0.5">CPF {p.cpf}</p>}
+                        </div>
+                      </button>
+                    </TableCell>
+
+                    {/* Papel */}
+                    <TableCell>
+                      <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-400 capitalize">
+                        {p.tipo_pessoa}
+                      </Badge>
+                    </TableCell>
+
+                    {/* Dados nos autos */}
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        <DadosBadge campo={p.dados_nos_autos.cpf}      label="CPF" />
+                        <DadosBadge campo={p.dados_nos_autos.telefone}  label="Tel" />
+                        <DadosBadge campo={p.dados_nos_autos.endereco}  label="End" />
+                      </div>
+                    </TableCell>
+
+                    {/* Dropdown perfil */}
+                    <TableCell>
+                      <select
+                        value={perf === null || perf === undefined ? "null" : String(perf)}
+                        onChange={e => setPerfil(p.pessoa_id, e.target.value)}
+                        className={`bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs cursor-pointer focus:outline-none focus:border-zinc-500 ${meta.cor}`}
+                      >
+                        <option value="null">🚫 Ignorar</option>
+                        <option value="1" className="text-green-400">🟢 P1 Localização</option>
+                        <option value="2" className="text-blue-400">🔵 P2 Triagem</option>
+                        <option value="3" className="text-yellow-400">🟡 P3 Investigação</option>
+                        <option value="4" className="text-red-400">🔴 P4 Profundo</option>
+                      </select>
+                      {perf === p.perfil_sugerido && (
+                        <p className="text-[10px] text-zinc-600 mt-0.5">✦ sugestão Copiloto</p>
+                      )}
+                    </TableCell>
+
+                    {/* Custo */}
+                    <TableCell className="text-right">
+                      {custo > 0
+                        ? <span className="text-xs text-zinc-300 font-mono">R$ {custo.toFixed(2)}</span>
+                        : <span className="text-xs text-zinc-600">—</span>}
+                    </TableCell>
+
+                    {/* Status resultado */}
+                    <TableCell className="text-center">
+                      {resultado ? (
+                        resultado.status === "concluido" ? <CheckCircle size={14} className="text-green-400 mx-auto" />
+                        : resultado.status === "ignorado" ? <MinusCircle size={14} className="text-zinc-600 mx-auto" />
+                        : <span title={resultado.mensagem}><XCircle size={14} className="text-red-400 mx-auto" /></span>
+                      ) : executando ? <Loader2 size={14} className="animate-spin text-blue-400 mx-auto" />
+                        : null}
+                    </TableCell>
+                  </TableRow>
+
+                  {/* Justificativa expandida */}
+                  {expandido && (
+                    <TableRow key={`${p.pessoa_id}-expand`} className="border-zinc-800 bg-zinc-900/20 hover:bg-zinc-900/20">
+                      <TableCell colSpan={6} className="py-3 px-4">
+                        <div className="ml-5 space-y-2">
+                          <p className="text-xs text-zinc-400 italic leading-relaxed">
+                            "{p.justificativa}"
+                          </p>
+                          {resultado?.status === "concluido" && resultado?.dados && (
+                            <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
+                              <span className="text-zinc-500">APIs executadas:</span>
+                              {resultado.dados.apis_executadas?.map((a: string) => (
+                                <Badge key={a} variant="outline" className="text-[10px] border-green-700/30 text-green-400">{a}</Badge>
+                              ))}
+                              {resultado.dados.cadastro?.telefones?.map((t: any, i: number) => (
+                                <span key={i} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] ${t.whatsApp ? "border-green-700/40 text-green-300 bg-green-500/5" : "border-zinc-700 text-zinc-500"}`}>
+                                  {t.telefoneComDDD} {t.whatsApp ? "· WhatsApp ✓" : ""}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {resultado?.status === "erro" && (
+                            <p className="text-xs text-red-400">Erro: {resultado.mensagem}</p>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Rodapé */}
+      <div className="flex items-center justify-between border-t border-zinc-800 pt-3">
+        <div className="text-sm text-zinc-400">
+          {itensAtivos.length > 0
+            ? <>{itensAtivos.length} personagem(ns) · custo estimado: <span className="text-zinc-100 font-mono font-medium">R$ {custoTotal.toFixed(2)}</span></>
+            : <span className="text-zinc-600">Todos marcados como Ignorar</span>}
+        </div>
+        <div className="flex items-center gap-3">
+          {erroExec && <p className="text-xs text-red-400">{erroExec}</p>}
+          {Object.keys(resultados).length > 0 && (
+            <Button variant="outline" onClick={() => setResultados({})}
+              className="border-zinc-700 text-zinc-400 hover:bg-zinc-800 text-xs h-8 px-3">
+              Limpar resultados
+            </Button>
+          )}
+          <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <DialogTrigger render={
+              <Button disabled={itensAtivos.length === 0 || executando}
+                className="bg-blue-600 hover:bg-blue-700 gap-2 h-9">
+                {executando ? <><Loader2 size={14} className="animate-spin" /> Executando...</>
+                  : <><Play size={14} /> Executar seleção</>}
+              </Button>
+            } />
+            <DialogContent className="bg-zinc-950 border-zinc-800 max-w-md" showCloseButton>
+              <DialogHeader>
+                <DialogTitle className="text-zinc-100">Confirmar execução OSINT</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-2">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 space-y-2">
+                  {itensAtivos.map(p => {
+                    const perf = perfis[p.pessoa_id];
+                    const meta = PERFIL_META[perf ?? "null"];
+                    return (
+                      <div key={p.pessoa_id} className="flex items-center justify-between text-sm">
+                        <span className="text-zinc-300">{p.nome}</span>
+                        <span className={`text-xs ${meta.cor}`}>{meta.emoji} {meta.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center justify-between text-sm border-t border-zinc-800 pt-3">
+                  <span className="text-zinc-400">Custo estimado total</span>
+                  <span className="text-zinc-100 font-mono font-semibold">R$ {custoTotal.toFixed(2)}</span>
+                </div>
+                <p className="text-xs text-zinc-500">Esta operação consumirá créditos da conta direct.data. Os dados ficam em cache por 24h.</p>
+                <div className="flex gap-3">
+                  <Button onClick={() => setConfirmOpen(false)} variant="outline"
+                    className="flex-1 border-zinc-700 text-zinc-400 hover:bg-zinc-800">
+                    Cancelar
+                  </Button>
+                  <Button onClick={handleExecutar} className="flex-1 bg-blue-600 hover:bg-blue-700">
+                    Confirmar e executar
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Ficha Individual ──────────────────────────────────────────────────────────
+
+function FichaIndividual({ inqueritoId }: { inqueritoId: string }) {
   const [pessoas, setPessoas] = useState<any[]>([]);
   const [empresas, setEmpresas] = useState<any[]>([]);
   const [loadingEntidades, setLoadingEntidades] = useState(false);
@@ -348,209 +625,188 @@ export default function AgenteOsintPage() {
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
-    if (inqueritoAtivoId) {
-      setLoadingEntidades(true);
-      Promise.all([
-        getPessoas(inqueritoAtivoId).catch(() => []),
-        getEmpresas(inqueritoAtivoId).catch(() => [])
-      ]).then(([p, e]) => {
-        setPessoas(p);
-        setEmpresas(e);
-      }).finally(() => setLoadingEntidades(false));
-    } else {
-      setPessoas([]);
-      setEmpresas([]);
-    }
-  }, [inqueritoAtivoId]);
+    setLoadingEntidades(true);
+    Promise.all([
+      getPessoas(inqueritoId).catch(() => []),
+      getEmpresas(inqueritoId).catch(() => [])
+    ]).then(([p, e]) => { setPessoas(p); setEmpresas(e); }).finally(() => setLoadingEntidades(false));
+  }, [inqueritoId]);
 
   const handleGerarFicha = async () => {
-    if (!alvoSelecionado || !inqueritoAtivoId) return;
-    setGerando(true);
-    setErro(null);
-    setFichaRenderizada(null);
+    if (!alvoSelecionado) return;
+    setGerando(true); setErro(null); setFichaRenderizada(null);
     try {
-      let res;
-      if (alvoSelecionado.tipo === "pessoa") {
-        res = await gerarFichaPessoa(inqueritoAtivoId, alvoSelecionado.id);
-      } else {
-        res = await gerarFichaEmpresa(inqueritoAtivoId, alvoSelecionado.id);
-      }
+      const res = alvoSelecionado.tipo === "pessoa"
+        ? await gerarFichaPessoa(inqueritoId, alvoSelecionado.id)
+        : await gerarFichaEmpresa(inqueritoId, alvoSelecionado.id);
       setFichaRenderizada(res.ficha);
     } catch (e: any) {
-      setErro(e?.response?.data?.detail || "Ocorreu um erro ao gerar a ficha OSINT.");
-    } finally {
-      setGerando(false);
-    }
+      setErro(e?.response?.data?.detail || "Erro ao gerar ficha.");
+    } finally { setGerando(false); }
   };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-20rem)]">
+      <div className="flex flex-col gap-4">
+        <Card className="bg-zinc-900 border-zinc-800 flex-1 flex flex-col">
+          <CardHeader className="pb-3 border-b border-zinc-800">
+            <CardTitle className="text-base flex items-center gap-2"><Target size={16} className="text-zinc-400" /> Alvos Mapeados</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 flex-1 overflow-hidden">
+            <ScrollArea className="h-full">
+              {loadingEntidades ? <div className="p-4 text-sm text-zinc-500">Buscando...</div> : (
+                <div className="p-2 space-y-1">
+                  {pessoas.length === 0 && empresas.length === 0 && <div className="p-4 text-sm text-zinc-500 text-center">Nenhuma entidade indexada.</div>}
+                  {pessoas.length > 0 && <div className="px-3 py-1 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Pessoas</div>}
+                  {pessoas.map((p) => (
+                    <button key={p.id} onClick={() => setAlvoSelecionado({id: p.id, tipo: "pessoa"})}
+                      className={`w-full text-left px-3 py-2 rounded-md text-sm flex flex-col transition-colors ${alvoSelecionado?.id === p.id ? "bg-blue-500/10 text-blue-400 border border-blue-500/20" : "text-zinc-300 hover:bg-zinc-800"}`}>
+                      <div className="font-medium flex items-center gap-2"><User size={13}/> {p.nome}</div>
+                      {p.cpf && <div className="text-xs text-zinc-500 mt-0.5">CPF: {p.cpf}</div>}
+                    </button>
+                  ))}
+                  {empresas.length > 0 && <div className="px-3 py-1 text-xs font-semibold text-zinc-500 uppercase tracking-wider mt-2">Empresas</div>}
+                  {empresas.map((e) => (
+                    <button key={e.id} onClick={() => setAlvoSelecionado({id: e.id, tipo: "empresa"})}
+                      className={`w-full text-left px-3 py-2 rounded-md text-sm flex flex-col transition-colors ${alvoSelecionado?.id === e.id ? "bg-blue-500/10 text-blue-400 border border-blue-500/20" : "text-zinc-300 hover:bg-zinc-800"}`}>
+                      <div className="font-medium flex items-center gap-2"><Building size={13}/> {e.nome}</div>
+                      {e.cnpj && <div className="text-xs text-zinc-500 mt-0.5">CNPJ: {e.cnpj}</div>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </CardContent>
+        </Card>
+        <Button className="w-full bg-blue-600 hover:bg-blue-700 h-11" disabled={!alvoSelecionado || gerando} onClick={handleGerarFicha}>
+          {gerando ? <span className="flex items-center gap-2"><Bot className="animate-pulse" size={16}/> Processando...</span>
+            : <span className="flex items-center gap-2"><UserSearch size={16}/> Emitir Ficha OSINT</span>}
+        </Button>
+      </div>
+
+      <div className="lg:col-span-2">
+        <Card className="bg-zinc-950 border-zinc-800 h-full flex flex-col shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
+          <CardHeader className="bg-zinc-900/50 border-b border-zinc-800 z-10">
+            <CardTitle className="text-lg">Ficha de Inteligência Tática</CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 overflow-hidden p-0 z-10">
+            <ScrollArea className="h-full">
+              <div className="p-6">
+                {erro ? (
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-md p-4 flex gap-3 text-red-400 items-start">
+                    <AlertTriangle className="shrink-0 mt-0.5" size={16} />
+                    <div className="text-sm">{erro}</div>
+                  </div>
+                ) : !fichaRenderizada && !gerando ? (
+                  <div className="flex flex-col items-center justify-center h-64 text-zinc-500 text-center">
+                    <Bot className="w-12 h-12 mb-4 text-zinc-800" />
+                    <p className="text-sm">Selecione um alvo e mande o Agente processar.</p>
+                  </div>
+                ) : gerando ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 text-zinc-400 text-sm">
+                      <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                      Acessando bases e modelando grafo investigativo...
+                    </div>
+                    <div className="space-y-2 opacity-40">
+                      {[3, 2, 4].map((w, i) => <div key={i} style={{width: `${w * 20}%`}} className="h-3 bg-zinc-800 rounded animate-pulse" />)}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div>
+                      <h2 className="text-xl font-bold text-zinc-100">{fichaRenderizada.nome || alvoSelecionado?.id}</h2>
+                      <div className="flex gap-2 mt-2">
+                        <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-blue-500/5">{fichaRenderizada.nivel_risco || fichaRenderizada.risco || "Desconhecido"}</Badge>
+                        <Badge variant="outline" className="border-zinc-700 text-zinc-400 bg-zinc-800">LLM</Badge>
+                      </div>
+                    </div>
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+                      <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Resumo Executivo</h3>
+                      <p className="text-zinc-300 text-sm leading-relaxed">{fichaRenderizada.perfil_resumido || fichaRenderizada.resumo || "Não disponível."}</p>
+                    </div>
+                    {fichaRenderizada.pontos_de_atencao?.length > 0 && (
+                      <div>
+                        <h3 className="text-xs font-semibold text-red-400 uppercase tracking-wide flex items-center gap-2 mb-2">
+                          <AlertTriangle size={13} /> Pontos de Atenção
+                        </h3>
+                        <ul className="space-y-1.5">
+                          {fichaRenderizada.pontos_de_atencao.map((b: string, i: number) => (
+                            <li key={i} className="flex gap-2 text-sm text-zinc-300 bg-red-500/5 border border-red-500/10 p-2.5 rounded">
+                              <span className="text-red-500 shrink-0">•</span> {b}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {fichaRenderizada.sugestoes_diligencias?.length > 0 && (
+                      <div>
+                        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">Sugestões de Diligências</h3>
+                        <ul className="space-y-1">
+                          {fichaRenderizada.sugestoes_diligencias.map((d: string, i: number) => (
+                            <li key={i} className="text-sm text-zinc-400 flex gap-2"><span className="text-blue-500 shrink-0">→</span> {d}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ── Página principal ──────────────────────────────────────────────────────────
+
+export default function AgenteOsintPage() {
+  const { inqueritoAtivoId } = useAppStore();
+  const [tab, setTab] = useState<"painel" | "ficha">("painel");
 
   if (!inqueritoAtivoId) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-8 text-center text-zinc-500">
         <UserSearch className="w-16 h-16 mb-4 text-zinc-700" />
         <h2 className="text-xl font-medium text-zinc-300">Nenhum inquérito selecionado</h2>
-        <p className="mt-2 max-w-md">Para utilizar o Agente Investigativo OSINT, selecione um inquérito ativo no Dashboard primeiro.</p>
-        <div className="mt-6">
-          <ConsultaAvulsaDialog />
-        </div>
+        <p className="mt-2 max-w-md text-sm">Selecione um inquérito ativo no Dashboard para utilizar o Agente OSINT.</p>
+        <div className="mt-6"><ConsultaAvulsaDialog /></div>
       </div>
     );
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8 h-[calc(100vh-2rem)] flex flex-col">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-            <UserSearch className="text-blue-500" />
-            Agente OSINT
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <UserSearch className="text-blue-500" size={26} /> Agente OSINT
           </h1>
-          <p className="text-zinc-400 mt-2">
-            Gere perfis investigativos profundos de pessoas ou empresas cruzando fontes abertas e contexto dos autos.
-          </p>
+          <p className="text-zinc-400 mt-1 text-sm">Enriquecimento investigativo por personagem com dados externos (direct.data).</p>
         </div>
         <ConsultaAvulsaDialog />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1 min-h-0">
-        {/* Coluna Esquerda: Alvos */}
-        <div className="flex flex-col gap-4">
-          <Card className="bg-zinc-900 border-zinc-800 flex-1 flex flex-col">
-            <CardHeader className="pb-3 border-b border-zinc-800">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Target size={18} className="text-zinc-400" />
-                Alvos Mapeados
-              </CardTitle>
-              <CardDescription>Entidades identificadas no Inquérito</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0 flex-1 overflow-hidden">
-              <ScrollArea className="h-full">
-                {loadingEntidades ? (
-                  <div className="p-4 text-sm text-zinc-500">Buscando entidades...</div>
-                ) : (
-                  <div className="p-2 space-y-1">
-                    {pessoas.length === 0 && empresas.length === 0 && (
-                      <div className="p-4 text-sm text-zinc-500 text-center">Nenhuma entidade indexada.</div>
-                    )}
-                    {pessoas.length > 0 && <div className="px-3 py-2 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Pessoas</div>}
-                    {pessoas.map((p) => (
-                      <button key={p.id} onClick={() => setAlvoSelecionado({id: p.id, tipo: "pessoa"})}
-                        className={`w-full text-left px-3 py-2 rounded-md text-sm flex flex-col transition-colors ${
-                          alvoSelecionado?.id === p.id ? "bg-blue-500/10 text-blue-400 border border-blue-500/20" : "text-zinc-300 hover:bg-zinc-800"
-                        }`}>
-                        <div className="font-medium flex items-center gap-2"><User size={14}/> {p.nome}</div>
-                        {p.cpf && <div className="text-xs text-zinc-500 mt-1">CPF: {p.cpf}</div>}
-                      </button>
-                    ))}
-                    {empresas.length > 0 && <div className="px-3 py-2 text-xs font-semibold text-zinc-500 uppercase tracking-wider mt-2">Empresas</div>}
-                    {empresas.map((e) => (
-                      <button key={e.id} onClick={() => setAlvoSelecionado({id: e.id, tipo: "empresa"})}
-                        className={`w-full text-left px-3 py-2 rounded-md text-sm flex flex-col transition-colors ${
-                          alvoSelecionado?.id === e.id ? "bg-blue-500/10 text-blue-400 border border-blue-500/20" : "text-zinc-300 hover:bg-zinc-800"
-                        }`}>
-                        <div className="font-medium flex items-center gap-2"><Building size={14}/> {e.nome}</div>
-                        {e.cnpj && <div className="text-xs text-zinc-500 mt-1">CNPJ: {e.cnpj}</div>}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </ScrollArea>
-            </CardContent>
-          </Card>
-
-          <Button className="w-full bg-blue-600 hover:bg-blue-700 h-12"
-            disabled={!alvoSelecionado || gerando} onClick={handleGerarFicha}>
-            {gerando ? (
-              <span className="flex items-center gap-2"><Bot className="animate-pulse" size={18}/> Processando Inteligência...</span>
-            ) : (
-              <span className="flex items-center gap-2"><UserSearch size={18}/> Emitir Ficha OSINT</span>
-            )}
-          </Button>
-        </div>
-
-        {/* Coluna Direita: Dossiê */}
-        <div className="lg:col-span-2 flex flex-col">
-          <Card className="bg-zinc-950 border-zinc-800 h-full flex flex-col shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
-            <CardHeader className="bg-zinc-900/50 border-b border-zinc-800 z-10">
-              <CardTitle className="text-xl">Ficha de Inteligência Tática</CardTitle>
-              <CardDescription>O resultado do levantamento aparecerá abaixo</CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-hidden p-0 z-10">
-              <ScrollArea className="h-full">
-                <div className="p-6">
-                  {erro ? (
-                    <div className="bg-red-500/10 border border-red-500/20 rounded-md p-4 flex gap-3 text-red-400 items-start">
-                      <AlertTriangle className="shrink-0 mt-0.5" size={18} />
-                      <div className="text-sm">{erro}</div>
-                    </div>
-                  ) : !fichaRenderizada && !gerando ? (
-                    <div className="flex flex-col items-center justify-center h-64 text-zinc-500 text-center">
-                      <Bot className="w-12 h-12 mb-4 text-zinc-800" />
-                      <p>Selecione um alvo na lista ao lado e mande o Agente processar.</p>
-                    </div>
-                  ) : gerando ? (
-                    <div className="space-y-6">
-                      <div className="flex items-center gap-4 text-zinc-400">
-                        <div className="w-6 h-6 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
-                        Acessando bases de dados e modelando grafo investigativo...
-                      </div>
-                      <div className="space-y-2 opacity-50">
-                        <div className="h-4 w-3/4 bg-zinc-800 rounded animate-pulse" />
-                        <div className="h-4 w-1/2 bg-zinc-800 rounded animate-pulse" />
-                        <div className="h-4 w-5/6 bg-zinc-800 rounded animate-pulse" />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h2 className="text-2xl font-bold text-zinc-100">{fichaRenderizada.nome || alvoSelecionado?.id}</h2>
-                          <div className="flex gap-2 mt-2">
-                            <Badge variant="outline" className="border-blue-500/30 text-blue-400 bg-blue-500/5">
-                              {fichaRenderizada.nivel_risco || fichaRenderizada.risco || "Desconhecido"}
-                            </Badge>
-                            <Badge variant="outline" className="border-zinc-700 text-zinc-400 bg-zinc-800">Gerado por LLM</Badge>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
-                        <h3 className="text-sm font-semibold text-zinc-100 uppercase tracking-wide mb-3">Resumo Executivo</h3>
-                        <p className="text-zinc-300 text-sm leading-relaxed">{fichaRenderizada.perfil_resumido || fichaRenderizada.resumo || "Não disponível."}</p>
-                      </div>
-                      {fichaRenderizada.pontos_de_atencao?.length > 0 && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-red-400 uppercase tracking-wide flex items-center gap-2 mb-3">
-                            <AlertTriangle size={16} /> Pontos de Atenção
-                          </h3>
-                          <ul className="space-y-2">
-                            {fichaRenderizada.pontos_de_atencao.map((b: string, i: number) => (
-                              <li key={i} className="flex gap-2 text-sm text-zinc-300 bg-red-500/5 border border-red-500/10 p-3 rounded">
-                                <span className="text-red-500 shrink-0">•</span> {b}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      {fichaRenderizada.sugestoes_diligencias?.length > 0 && (
-                        <div>
-                          <h3 className="text-sm font-semibold text-zinc-500 uppercase tracking-wide mb-3">Sugestões de Diligências</h3>
-                          <ul className="space-y-1">
-                            {fichaRenderizada.sugestoes_diligencias.map((d: string, i: number) => (
-                              <li key={i} className="text-sm text-zinc-400 flex gap-2">
-                                <span className="text-blue-500 shrink-0">→</span> {d}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        </div>
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-zinc-800">
+        {([["painel", "Painel de Personagens"], ["ficha", "Ficha Individual"]] as const).map(([t, label]) => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              tab === t ? "border-blue-500 text-zinc-100" : "border-transparent text-zinc-500 hover:text-zinc-300"
+            }`}>
+            {label}
+          </button>
+        ))}
       </div>
+
+      {/* Conteúdo */}
+      {tab === "painel"
+        ? <PainelPersonagens key={inqueritoAtivoId} inqueritoId={inqueritoAtivoId} />
+        : <FichaIndividual key={inqueritoAtivoId} inqueritoId={inqueritoAtivoId} />}
     </div>
   );
 }
