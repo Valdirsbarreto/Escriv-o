@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     # ── OpenRouter ─────────────────────────────────────────
     OPENROUTER_API_KEY: Optional[str] = None
 
+    # ── direct.data (BigDataCorp) — OSINT Sprint 6 ─────────
+    DIRECTDATA_API_TOKEN: str = ""
+    DIRECTDATA_BASE_URL: str = "https://apiv3.directd.com.br"
+
     model_config = {
         "env_file": (".env", "../.env"),
         "env_file_encoding": "utf-8",

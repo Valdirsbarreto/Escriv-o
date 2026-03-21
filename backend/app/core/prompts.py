@@ -217,7 +217,13 @@ Resumos dos volumes:
 # ── Prompts dos Agentes Especializados (Sprint 6) ─────────────────────────────
 
 PROMPT_FICHA_PESSOA = """Você é um analista de inteligência policial especializado em montagem de fichas investigativas.
-Com base nos dados estruturados abaixo sobre a pessoa "{nome}", elabore uma ficha investigativa completa.
+Com base nos dados abaixo sobre a pessoa "{nome}", elabore uma ficha investigativa completa.
+
+=== DADOS INTERNOS (extraídos dos documentos do inquérito) ===
+{dados_consolidados}
+
+=== DADOS EXTERNOS (direct.data — consulta em tempo real) ===
+{dados_externos}
 
 Retorne EXCLUSIVAMENTE um JSON com a seguinte estrutura:
 {{
@@ -225,22 +231,43 @@ Retorne EXCLUSIVAMENTE um JSON com a seguinte estrutura:
   "cpf": "CPF se disponível",
   "tipo_envolvimento": "investigado|vitima|testemunha|outro",
   "perfil_resumido": "2-3 linhas descrevendo o papel da pessoa no inquérito",
+  "qualificacao": {{
+    "data_nascimento": "se disponível",
+    "naturalidade": "se disponível",
+    "filiacao": ["pai", "mãe"]
+  }},
   "contatos": [{{"tipo": "telefone|email", "valor": "..."}}],
   "enderecos": ["endereços conhecidos"],
   "vinculos_empresariais": ["empresas associadas"],
+  "antecedentes_criminais": "resumo ou null",
+  "mandado_prisao_ativo": true,
+  "pep": false,
+  "obito": false,
+  "sancoes": {{
+    "ceis": false,
+    "cnep": false,
+    "detalhes": "se houver"
+  }},
   "eventos_cronologicos": ["datas e fatos relevantes"],
+  "nivel_risco": "baixo|medio|alto|critico",
+  "justificativa_risco": "por que esse nível",
   "pontos_de_atencao": ["flags investigativas, inconsistências, ou alertas"],
+  "sugestoes_diligencias": ["próximas diligências recomendadas"],
   "documentos_mencionados": ["docs onde aparece"]
 }}
 
 NÃO INVENTE dados. Se um campo não for disponível, use null ou lista vazia.
-
-Dados disponíveis:
-{dados_consolidados}
+Se não houver dados externos, baseie-se apenas nos dados internos.
 """
 
 PROMPT_FICHA_EMPRESA = """Você é um analista de inteligência policial especializado em investigação empresarial.
 Com base nos dados abaixo sobre a empresa "{nome}", elabore uma ficha investigativa.
+
+=== DADOS INTERNOS (extraídos dos documentos do inquérito) ===
+{dados_consolidados}
+
+=== DADOS EXTERNOS (direct.data — consulta em tempo real) ===
+{dados_externos}
 
 Retorne EXCLUSIVAMENTE um JSON com a seguinte estrutura:
 {{
@@ -248,17 +275,27 @@ Retorne EXCLUSIVAMENTE um JSON com a seguinte estrutura:
   "cnpj": "CNPJ se disponível",
   "tipo_participacao": "alvo|fachada|fornecedor|outro",
   "perfil_resumido": "Papel da empresa no inquérito",
+  "situacao_receita_federal": "ativa|suspensa|inapta|baixada|null",
+  "data_abertura": "se disponível",
+  "atividade_principal": "CNAE se disponível",
   "enderecos": ["endereços registrados"],
-  "possiveis_socios": ["nomes de pessoas associadas"],
-  "transacoes_suspeitas": ["movimentos financeiros identificados"],
+  "quadro_societario": ["sócios e administradores"],
+  "sancoes": {{
+    "ceis": false,
+    "cnep": false,
+    "detalhes": "se houver"
+  }},
+  "processos_judiciais": ["resumo se disponível"],
+  "transacoes_suspeitas": ["movimentos financeiros identificados nos autos"],
+  "nivel_risco": "baixo|medio|alto|critico",
+  "justificativa_risco": "por que esse nível",
   "pontos_de_atencao": ["alertas investigativos"],
+  "sugestoes_diligencias": ["próximas diligências recomendadas"],
   "documentos_mencionados": ["docs onde aparece"]
 }}
 
 NÃO INVENTE dados. Se um campo não for disponível, use null ou lista vazia.
-
-Dados disponíveis:
-{dados_consolidados}
+Se não houver dados externos, baseie-se apenas nos dados internos.
 """
 
 PROMPT_CAUTELAR = """Você é um assistente jurídico-policial especializado em minutas de atos processuais brasileiros.

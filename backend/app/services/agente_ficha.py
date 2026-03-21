@@ -7,7 +7,7 @@ Conforme blueprint §9.1 (Agente de Fichas).
 import json
 import logging
 import uuid
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,6 +35,7 @@ class AgenteFicha:
         db: AsyncSession,
         inquerito_id: uuid.UUID,
         pessoa_id: uuid.UUID,
+        dados_externos: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Consolida todos os dados internos de uma pessoa e gera ficha investigativa.
@@ -84,9 +85,16 @@ Eventos/Cronologia:
 {chr(10).join(f"- {ev.data_fato_str or str(ev.data_fato or '')}: {ev.descricao}" for ev in eventos[:20]) or "Nenhum"}
         """.strip()
 
+        dados_externos_str = (
+            json.dumps(dados_externos, ensure_ascii=False, indent=2)
+            if dados_externos
+            else "Não solicitado."
+        )
+
         prompt = PROMPT_FICHA_PESSOA.format(
             nome=pessoa.nome,
             dados_consolidados=dados,
+            dados_externos=dados_externos_str,
         )
 
         try:
@@ -127,6 +135,7 @@ Eventos/Cronologia:
         db: AsyncSession,
         inquerito_id: uuid.UUID,
         empresa_id: uuid.UUID,
+        dados_externos: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Consolida todos os dados internos de uma empresa e gera ficha investigativa.
@@ -153,9 +162,16 @@ Endereços:
 {chr(10).join(f"- {e.endereco_completo} ({e.cidade}/{e.estado})" for e in enderecos) or "Nenhum"}
         """.strip()
 
+        dados_externos_str = (
+            json.dumps(dados_externos, ensure_ascii=False, indent=2)
+            if dados_externos
+            else "Não solicitado."
+        )
+
         prompt = PROMPT_FICHA_EMPRESA.format(
             nome=empresa.nome,
             dados_consolidados=dados,
+            dados_externos=dados_externos_str,
         )
 
         try:

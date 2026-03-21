@@ -15,6 +15,7 @@ from app.core.database import get_db
 from app.services.agente_ficha import AgenteFicha
 from app.services.agente_cautelar import AgenteCautelar
 from app.services.agente_extrato import AgenteExtrato
+from app.services.osint_service import OsintService
 
 router = APIRouter(prefix="/api/v1/agentes", tags=["Agentes Especializados"])
 
@@ -28,16 +29,31 @@ router = APIRouter(prefix="/api/v1/agentes", tags=["Agentes Especializados"])
 async def gerar_ficha_pessoa(
     pessoa_id: uuid.UUID,
     inquerito_id: uuid.UUID,
+    usar_dados_externos: bool = False,
+    incluir_processos: bool = False,
+    incluir_sancoes_internacionais: bool = False,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Consolida todos os dados internos de uma Pessoa (contatos, endereços,
-    cronologia) e gera uma ficha investigativa completa via LLM Premium.
+    Consolida dados internos de uma Pessoa e gera ficha investigativa via LLM Premium.
+
+    - `usar_dados_externos=true` — enriquece com APIs da direct.data (gera custo)
+    - `incluir_processos=true` — inclui consulta TJ (adicional)
+    - `incluir_sancoes_internacionais=true` — inclui OFAC/ONU (adicional)
     """
+    dados_externos = None
+    if usar_dados_externos:
+        osint = OsintService()
+        dados_externos = await osint.enriquecer_pessoa(
+            db, inquerito_id, pessoa_id,
+            incluir_processos=incluir_processos,
+            incluir_sancoes_internacionais=incluir_sancoes_internacionais,
+        )
+
     agente = AgenteFicha()
     try:
-        ficha = await agente.gerar_ficha_pessoa(db, inquerito_id, pessoa_id)
-        return {"status": "concluido", "ficha": ficha}
+        ficha = await agente.gerar_ficha_pessoa(db, inquerito_id, pessoa_id, dados_externos=dados_externos)
+        return {"status": "concluido", "ficha": ficha, "osint_usado": usar_dados_externos}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -51,19 +67,150 @@ async def gerar_ficha_pessoa(
 async def gerar_ficha_empresa(
     empresa_id: uuid.UUID,
     inquerito_id: uuid.UUID,
+    usar_dados_externos: bool = False,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Consolida dados internos de uma Empresa e gera ficha investigativa.
+    Consolida dados internos de uma Empresa e gera ficha investigativa via LLM Premium.
+
+    - `usar_dados_externos=true` — enriquece com Receita Federal + sanções via direct.data (gera custo)
     """
+    dados_externos = None
+    if usar_dados_externos:
+        osint = OsintService()
+        dados_externos = await osint.enriquecer_empresa(db, inquerito_id, empresa_id)
+
     agente = AgenteFicha()
     try:
-        ficha = await agente.gerar_ficha_empresa(db, inquerito_id, empresa_id)
-        return {"status": "concluido", "ficha": ficha}
+        ficha = await agente.gerar_ficha_empresa(db, inquerito_id, empresa_id, dados_externos=dados_externos)
+        return {"status": "concluido", "ficha": ficha, "osint_usado": usar_dados_externos}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao gerar ficha: {str(e)[:200]}")
+
+
+# ── OSINT — Consultas brutas (sem LLM) ───────────────────────────────────────
+
+@router.post(
+    "/osint/enriquecer/pessoa/{pessoa_id}",
+    summary="Consulta APIs externas para uma Pessoa (sem LLM)",
+)
+async def osint_enriquecer_pessoa(
+    pessoa_id: uuid.UUID,
+    inquerito_id: uuid.UUID,
+    incluir_processos: bool = False,
+    incluir_sancoes_internacionais: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Consulta a direct.data e retorna os dados brutos sem processar via LLM.
+    Útil para preview antes de gerar a ficha completa.
+    """
+    osint = OsintService()
+    try:
+        dados = await osint.enriquecer_pessoa(
+            db, inquerito_id, pessoa_id,
+            incluir_processos=incluir_processos,
+            incluir_sancoes_internacionais=incluir_sancoes_internacionais,
+        )
+        return {"status": "concluido", "dados_osint": dados}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro na consulta OSINT: {str(e)[:200]}")
+
+
+@router.post(
+    "/osint/enriquecer/empresa/{empresa_id}",
+    summary="Consulta APIs externas para uma Empresa (sem LLM)",
+)
+async def osint_enriquecer_empresa(
+    empresa_id: uuid.UUID,
+    inquerito_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Consulta Receita Federal + sanções via direct.data e retorna dados brutos."""
+    osint = OsintService()
+    try:
+        dados = await osint.enriquecer_empresa(db, inquerito_id, empresa_id)
+        return {"status": "concluido", "dados_osint": dados}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro na consulta OSINT: {str(e)[:200]}")
+
+
+@router.post(
+    "/osint/veicular",
+    summary="Consulta dados de um veículo pela placa",
+)
+async def osint_consulta_veicular(
+    inquerito_id: uuid.UUID,
+    placa: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Retorna dados do veículo (marca, modelo, proprietário, restrições) via direct.data."""
+    osint = OsintService()
+    try:
+        dados = await osint.consultar_placa(db, inquerito_id, placa)
+        return {"status": "concluido", "dados_osint": dados}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro na consulta veicular: {str(e)[:200]}")
+
+
+@router.post(
+    "/osint/consulta-avulsa",
+    summary="Consulta OSINT avulsa por CPF, CNPJ, placa, nome ou RG",
+)
+async def osint_consulta_avulsa(
+    cpf: str | None = None,
+    cnpj: str | None = None,
+    placa: str | None = None,
+    nome: str | None = None,
+    data_nascimento: str | None = None,
+    rg: str | None = None,
+    uf: str = "RJ",
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Consulta avulsa às APIs da direct.data, sem vínculo com inquérito.
+    Passe qualquer combinação de parâmetros disponíveis:
+
+    - **CPF** → cadastro, mandados, óbito, PEP, AML, veículos, sanções
+    - **CNPJ** → Receita Federal, participação societária, sanções PJ
+    - **Placa** → dados do veículo
+    - **Nome** → mandados de prisão por nome (sem CPF)
+    - **Nome / RG + UF** → antecedentes criminais (UF obrigatório, default RJ)
+    """
+    if not any([cpf, cnpj, placa, nome, rg]):
+        raise HTTPException(
+            status_code=422,
+            detail="Informe ao menos um campo: cpf, cnpj, placa, nome ou rg."
+        )
+    osint = OsintService()
+    try:
+        dados = await osint.consulta_avulsa(
+            cpf=cpf, cnpj=cnpj, placa=placa,
+            nome=nome, data_nascimento=data_nascimento,
+            rg=rg, uf=uf,
+        )
+        return {"status": "concluido", "dados": dados}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro na consulta avulsa: {str(e)[:200]}")
+
+
+@router.get(
+    "/osint/custo/{inquerito_id}",
+    summary="Resumo de custo OSINT do inquérito",
+)
+async def osint_custo_inquerito(
+    inquerito_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Retorna total de consultas pagas e custo estimado acumulado do inquérito."""
+    osint = OsintService()
+    try:
+        resumo = await osint.custo_total_inquerito(db, inquerito_id)
+        return {"status": "ok", "resumo": resumo}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao calcular custo: {str(e)[:200]}")
 
 
 # ── Cautelar ──────────────────────────────────────────────────────────────────

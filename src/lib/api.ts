@@ -89,3 +89,21 @@ export const iniciarIngestao = async (formData: FormData) => {
   const response = await apiMultipart.post("/ingestao/iniciar", formData);
   return response.data;
 };
+
+// APIs OSINT
+export const osintConsultaAvulsa = async (params: {
+  cpf?: string;
+  cnpj?: string;
+  placa?: string;
+  nome?: string;
+  data_nascimento?: string;
+  rg?: string;
+  uf?: string;
+}) => {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => { if (v) query.append(k, v); });
+  const response = await api.post(`/agentes/osint/consulta-avulsa?${query.toString()}`, null, {
+    timeout: 60000,
+  });
+  return response.data;
+};

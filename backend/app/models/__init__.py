@@ -21,6 +21,7 @@ from app.models.evento_cronologico import EventoCronologico
 from app.models.resumo_cache import ResumoCache
 from app.models.resultado_agente import ResultadoAgente
 from app.models.delegacia import Delegacia
+from app.models.consulta_externa import ConsultaExterna
 
 __all__ = [
     "Inquerito",
@@ -41,4 +42,5 @@ __all__ = [
     "ResumoCache",
     "ResultadoAgente",
     "Delegacia",
+    "ConsultaExterna",
 ]
