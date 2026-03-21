@@ -14,6 +14,7 @@ celery_app = Celery(
         "app.workers.ingestion",
         "app.workers.orchestrator",
         "app.workers.summary_task",
+        "app.workers.intimacao_task",
     ],
 )
 

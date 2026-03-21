@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FolderOpen, LayoutDashboard, Settings, UserSearch, FileText, Bot, UploadCloud } from "lucide-react";
+import { FolderOpen, LayoutDashboard, Settings, UserSearch, FileText, Bot, UploadCloud, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { usePathname } from "next/navigation";
@@ -39,6 +39,7 @@ export function Sidebar() {
         <NavItem href="/" icon={<LayoutDashboard size={18} />} label="Dashboard" active={pathname === "/"} />
         <NavItem href="/inqueritos" icon={<FolderOpen size={18} />} label="Inquéritos" active={pathname.startsWith("/inquerito")} />
         <NavItem href="/agentes/osint" icon={<UserSearch size={18} />} label="Agente OSINT" active={pathname === "/agentes/osint"} />
+        <NavItem href="/intimacoes" icon={<CalendarDays size={18} />} label="Intimações" active={pathname === "/intimacoes"} />
         <NavItem href="#" icon={<FileText size={18} />} label="Cautelares" />
       </nav>
 

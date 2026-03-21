@@ -466,3 +466,29 @@ Use um tom profissional, direto e encorajador. Máximo de 20 linhas.
 Contexto:
 {contexto}
 """
+
+PROMPT_EXTRACAO_INTIMACAO = """Você é um extrator de dados estruturados especializado em documentos jurídicos brasileiros.
+
+Analise o texto abaixo, extraído de uma intimação policial, e retorne APENAS um objeto JSON com os campos solicitados.
+
+## Campos a extrair
+
+- **intimado_nome**: Nome completo da pessoa intimada (string ou null)
+- **intimado_cpf**: CPF da pessoa intimada, apenas dígitos ou formato XXX.XXX.XXX-XX (string ou null)
+- **intimado_qualificacao**: Papel da pessoa — escolha um: "testemunha", "investigado", "vitima", "perito", "outro" (string ou null)
+- **numero_inquerito**: Número do inquérito policial mencionado no documento, preferencialmente no formato DDD-NNNNNN/AAAA (string ou null)
+- **data_oitiva**: Data e hora da oitiva/audiência em formato ISO 8601 (YYYY-MM-DDTHH:MM:00) — se só tiver data sem hora, use T09:00:00 como padrão (string ou null)
+- **local_oitiva**: Endereço ou local onde ocorrerá a oitiva (string ou null)
+
+## Regras
+
+1. Não invente dados. Se um campo não estiver no texto, retorne null.
+2. Para datas em português (ex: "15 de março de 2026 às 14h30"), converta para ISO 8601.
+3. Retorne SOMENTE o JSON, sem explicações ou markdown.
+
+## Texto da intimação
+
+{texto}
+
+## Resposta (somente JSON):
+"""

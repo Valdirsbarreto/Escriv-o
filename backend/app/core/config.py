@@ -70,6 +70,12 @@ class Settings(BaseSettings):
     DIRECTDATA_API_TOKEN: str = ""
     DIRECTDATA_BASE_URL: str = "https://apiv3.directd.com.br"
 
+    # ── Google Calendar ─────────────────────────────────────
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
+    GOOGLE_CALENDAR_REFRESH_TOKEN: Optional[str] = None
+    GOOGLE_CALENDAR_ID: str = "primary"  # ID do calendário (primary = calendário principal)
+
     model_config = {
         "env_file": (".env", "../.env"),
         "env_file_encoding": "utf-8",

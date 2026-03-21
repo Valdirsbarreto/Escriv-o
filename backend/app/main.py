@@ -16,6 +16,7 @@ from app.api.copiloto import router as copiloto_router
 from app.api.indices import router as indices_router
 from app.api.agentes import router as agentes_router
 from app.api.ingestao import router as ingestao_router
+from app.api.intimacoes import router as intimacoes_router
 
 
 @asynccontextmanager
@@ -65,6 +66,7 @@ app.include_router(copiloto_router, prefix="/api/v1")
 app.include_router(indices_router, prefix="/api/v1")
 app.include_router(agentes_router)
 app.include_router(ingestao_router, prefix="/api/v1")
+app.include_router(intimacoes_router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["Sistema"])

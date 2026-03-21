@@ -1,0 +1,178 @@
+"""
+Escrivão AI — Task Celery: Processamento de Intimações
+OCR + extração LLM + criação de evento no Google Agenda + vínculo ao inquérito.
+"""
+
+import asyncio
+import logging
+import uuid
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
+
+from app.core.config import settings
+from app.core.database import _encode_password_in_url
+from app.workers.celery_app import celery_app
+
+logger = logging.getLogger(__name__)
+
+
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=30)
+def processar_intimacao(self, intimacao_id: str):
+    """
+    Task Celery que processa uma intimação recém-uploadada.
+
+    Fluxo:
+    1. Carrega o documento (bytes) do storage
+    2. OCR + extração LLM de dados estruturados
+    3. Busca o inquérito correspondente pelo número extraído
+    4. Cria evento no Google Agenda
+    5. Atualiza a Intimacao no banco com todos os dados
+    """
+    logger.info(f"[INTIMACAO-TASK] Iniciando — intimacao_id={intimacao_id}")
+
+    async def _run():
+        from app.models.intimacao import Intimacao
+        from app.models.inquerito import Inquerito
+        from app.models.documento import Documento
+        from app.services.intimacao_extractor import IntimacaoExtractor
+        from app.services.google_calendar_service import GoogleCalendarService
+        from app.services.storage import StorageService
+
+        async_url = _encode_password_in_url(settings.DATABASE_URL)
+
+        import ssl
+        connect_args = {}
+        if "supabase" in async_url or "localhost" not in async_url:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            connect_args["ssl"] = ctx
+
+        engine = create_async_engine(
+            async_url, connect_args=connect_args if connect_args else {}, poolclass=NullPool
+        )
+        AsyncSession_ = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+        intim_uuid = uuid.UUID(intimacao_id)
+
+        async with AsyncSession_() as db:
+            intim = await db.get(Intimacao, intim_uuid)
+            if not intim:
+                logger.error(f"[INTIMACAO-TASK] Intimação não encontrada: {intimacao_id}")
+                return
+
+            # ── 1. Carregar documento do storage ─────────────────────
+            doc = None
+            content = b""
+            content_type = "application/pdf"
+
+            if intim.documento_id:
+                doc = await db.get(Documento, intim.documento_id)
+
+            if doc and doc.storage_path:
+                try:
+                    storage = StorageService()
+                    content = await storage.download_file(doc.storage_path)
+                    ext = doc.nome_arquivo.lower().rsplit(".", 1)[-1] if doc.nome_arquivo else ""
+                    if ext in ("png", "jpg", "jpeg"):
+                        content_type = f"image/{ext}"
+                    elif ext == "tiff":
+                        content_type = "image/tiff"
+                except Exception as e:
+                    logger.error(f"[INTIMACAO-TASK] Erro ao baixar documento: {e}")
+
+            # ── 2. OCR + extração LLM ─────────────────────────────────
+            extractor = IntimacaoExtractor()
+            texto = ""
+            if content:
+                try:
+                    texto = extractor.extrair_texto(content, content_type)
+                    logger.info(f"[INTIMACAO-TASK] Texto extraído: {len(texto)} chars")
+                except Exception as e:
+                    logger.error(f"[INTIMACAO-TASK] Erro na extração de texto: {e}")
+
+            dados = {}
+            if texto:
+                try:
+                    dados = await extractor.extrair_dados(texto)
+                except Exception as e:
+                    logger.error(f"[INTIMACAO-TASK] Erro na extração LLM: {e}")
+
+            # Salvar texto e dados extraídos na intimação
+            intim.texto_extraido = texto[:10000] if texto else None
+            if dados.get("intimado_nome"):
+                intim.intimado_nome = dados["intimado_nome"]
+            if dados.get("intimado_cpf"):
+                intim.intimado_cpf = dados["intimado_cpf"]
+            if dados.get("intimado_qualificacao"):
+                intim.intimado_qualificacao = dados["intimado_qualificacao"]
+            if dados.get("numero_inquerito"):
+                intim.numero_inquerito_extraido = dados["numero_inquerito"]
+            if dados.get("data_oitiva"):
+                intim.data_oitiva = dados["data_oitiva"]
+            if dados.get("local_oitiva"):
+                intim.local_oitiva = dados["local_oitiva"]
+
+            # ── 3. Match com inquérito no banco ───────────────────────
+            if not intim.inquerito_id and dados.get("numero_inquerito"):
+                result = await db.execute(
+                    select(Inquerito).where(
+                        Inquerito.numero == dados["numero_inquerito"]
+                    )
+                )
+                inquerito = result.scalar_one_or_none()
+                if inquerito:
+                    intim.inquerito_id = inquerito.id
+                    logger.info(
+                        f"[INTIMACAO-TASK] Vinculado ao inquérito {inquerito.numero}"
+                    )
+                else:
+                    logger.warning(
+                        f"[INTIMACAO-TASK] Inquérito '{dados['numero_inquerito']}' não encontrado no banco"
+                    )
+
+            # ── 4. Criar evento no Google Agenda ──────────────────────
+            if intim.data_oitiva and intim.intimado_nome:
+                try:
+                    gcal = GoogleCalendarService()
+                    evento = gcal.criar_evento_oitiva(
+                        intimado_nome=intim.intimado_nome,
+                        data_oitiva=intim.data_oitiva,
+                        numero_inquerito=intim.numero_inquerito_extraido,
+                        local_oitiva=intim.local_oitiva,
+                        qualificacao=intim.intimado_qualificacao,
+                    )
+                    intim.google_event_id = evento.get("event_id")
+                    intim.google_event_url = evento.get("event_url")
+                    intim.status = "agendada"
+                    logger.info(
+                        f"[INTIMACAO-TASK] Evento Google criado: {intim.google_event_id}"
+                    )
+                except RuntimeError as e:
+                    # Google Calendar não configurado — registra mas não falha
+                    logger.warning(f"[INTIMACAO-TASK] Google Calendar não configurado: {e}")
+                    intim.status = "agendada"
+                except Exception as e:
+                    logger.error(f"[INTIMACAO-TASK] Erro ao criar evento Google: {e}")
+                    intim.status = "erro_agenda"
+            else:
+                missing = []
+                if not intim.data_oitiva:
+                    missing.append("data_oitiva")
+                if not intim.intimado_nome:
+                    missing.append("intimado_nome")
+                logger.warning(
+                    f"[INTIMACAO-TASK] Evento não criado — campos ausentes: {missing}"
+                )
+                intim.status = "agendada"
+
+            await db.commit()
+            logger.info(f"[INTIMACAO-TASK] Concluído — intimacao_id={intimacao_id}")
+
+    try:
+        asyncio.run(_run())
+    except Exception as exc:
+        logger.error(f"[INTIMACAO-TASK] Falha fatal: {exc}", exc_info=True)
+        raise self.retry(exc=exc)

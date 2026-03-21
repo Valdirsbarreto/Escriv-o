@@ -18,7 +18,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check } from "lucide-react";
+import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check, CalendarPlus, Clock, MapPin, ExternalLink } from "lucide-react";
+import { IntimacaoUploadModal } from "@/components/IntimacaoUploadModal";
 
 // ── Etapas do pipeline ────────────────────────────────────────────────────────
 
@@ -222,16 +223,20 @@ export default function InqueritoDetalhePage() {
   const [editandoNumero, setEditandoNumero] = useState(false);
   const [novoNumero, setNovoNumero] = useState("");
   const [salvandoNumero, setSalvandoNumero] = useState(false);
+  const [intimacoes, setIntimacoes] = useState<any[]>([]);
+  const [showIntimacaoModal, setShowIntimacaoModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDados = async () => {
     try {
-      const [inqRes, docsRes] = await Promise.all([
+      const [inqRes, docsRes, intRes] = await Promise.all([
         api.get(`/inqueritos/${inqId}`),
-        api.get(`/inqueritos/${inqId}/documentos`)
+        api.get(`/inqueritos/${inqId}/documentos`),
+        api.get(`/intimacoes/inquerito/${inqId}`).catch(() => ({ data: [] })),
       ]);
       setInq(inqRes.data);
       setDocumentos(docsRes.data);
+      setIntimacoes(intRes.data);
       setInqueritoAtivoId(inqId);
     } catch (e) {
       console.error(e);
@@ -422,6 +427,10 @@ export default function InqueritoDetalhePage() {
             </DialogContent>
           </Dialog>
 
+          <Button onClick={() => setShowIntimacaoModal(true)} variant="outline" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800">
+            <CalendarPlus size={16} className="mr-2 text-blue-400" />
+            Lançar Intimação
+          </Button>
           <Button onClick={() => fileInputRef.current?.click()} disabled={uploading} className="bg-blue-600 hover:bg-blue-700 text-white">
             {uploading ? (
               <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin mr-2" />
@@ -546,6 +555,77 @@ export default function InqueritoDetalhePage() {
           </ScrollArea>
         </div>
       </div>
+
+      {/* Intimações */}
+      {intimacoes.length > 0 && (
+        <div className="mt-8">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-4">
+            <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
+              <CalendarPlus size={18} className="text-blue-400" /> Intimações
+            </h2>
+            <button
+              onClick={() => setShowIntimacaoModal(true)}
+              className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              + Lançar outra
+            </button>
+          </div>
+          <div className="space-y-3">
+            {intimacoes.map((intim: any) => (
+              <div key={intim.id} className="flex items-center justify-between border border-zinc-800 rounded-xl px-4 py-3 bg-zinc-900/40">
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium text-zinc-200">
+                    {intim.intimado_nome ?? <span className="text-zinc-500 italic">Nome não extraído</span>}
+                    {intim.intimado_qualificacao && (
+                      <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400">
+                        {intim.intimado_qualificacao}
+                      </span>
+                    )}
+                  </p>
+                  <div className="flex gap-3 text-xs text-zinc-500 flex-wrap">
+                    {intim.data_oitiva && (
+                      <span className="flex items-center gap-1">
+                        <Clock size={11} />
+                        {new Date(intim.data_oitiva).toLocaleDateString("pt-BR", {
+                          day: "2-digit", month: "2-digit", year: "numeric",
+                          hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo",
+                        })}
+                      </span>
+                    )}
+                    {intim.local_oitiva && (
+                      <span className="flex items-center gap-1">
+                        <MapPin size={11} />
+                        {intim.local_oitiva}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {intim.google_event_url && (
+                  <a
+                    href={intim.google_event_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors shrink-0"
+                  >
+                    <ExternalLink size={13} /> Google Agenda
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showIntimacaoModal && (
+        <IntimacaoUploadModal
+          inquerito_id={inqId}
+          onClose={() => setShowIntimacaoModal(false)}
+          onSuccess={() => {
+            setShowIntimacaoModal(false);
+            setTimeout(fetchDados, 2000);
+          }}
+        />
+      )}
     </div>
   );
 }
