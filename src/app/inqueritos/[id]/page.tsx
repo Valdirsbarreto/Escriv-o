@@ -437,7 +437,7 @@ export default function InqueritoDetalhePage() {
             ) : (
               <Upload size={18} className="mr-2"/>
             )}
-            {uploading ? "Enviando..." : "Anexar Petição/PDF"}
+            {uploading ? "Enviando..." : "Anexar Documento"}
           </Button>
           <input
             type="file"
