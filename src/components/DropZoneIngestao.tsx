@@ -1,15 +1,15 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import {
   CloudUpload, FileText, FileImage, Loader2,
-  CheckCircle2, AlertTriangle, X, WifiOff, Info
+  CheckCircle2, AlertTriangle, X, WifiOff, Brain, ArrowRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { apiMultipart } from "@/lib/api";
+import { api, apiMultipart } from "@/lib/api";
 
-type Stage = "idle" | "uploading" | "analisando_ia" | "extraindo_dados" | "criando_inquerito" | "concluido" | "erro";
+type Stage = "idle" | "uploading" | "analisando_ia" | "extraindo_dados" | "criando_inquerito" | "orquestrando" | "concluido" | "erro";
 
 interface ArquivoItem { name: string; size: number; type: string; }
 
@@ -30,9 +30,18 @@ const STAGES_LABELS: Record<Stage, string> = {
   analisando_ia: "🧠 IA Orquestradora lendo os documentos...",
   extraindo_dados: "🔍 Extraindo nomes, datas e dados do inquérito...",
   criando_inquerito: "📁 Criando o Inquérito e registrando personagens...",
+  orquestrando: "IA Orquestradora analisando os documentos...",
   concluido: "✅ Inquérito criado com sucesso!",
   erro: "❌ Falha no envio",
 };
+
+const ORQUESTRANDO_STEPS = [
+  { label: "Lendo e extraindo texto dos documentos", done: false },
+  { label: "Identificando número do IP e delegacia", done: false },
+  { label: "Reconhecendo personagens e partes envolvidas", done: false },
+  { label: "Criando inquérito e registrando no sistema", done: false },
+  { label: "Gerando relatório investigativo inicial", done: false },
+];
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -63,6 +72,18 @@ export function DropZoneIngestao() {
   const [progresso, setProgresso] = useState(0); // 0-100
   const [resultado, setResultado] = useState<ResultadoIngestao | null>(null);
   const [erro, setErro] = useState<string>("");
+  const [inqueritoCriado, setInqueritoCriado] = useState<{ id: string; numero: string } | null>(null);
+  const [stepAtivo, setStepAtivo] = useState(0);
+  const uploadTimestampRef = useRef<number>(0);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (stepIntervalRef.current) clearInterval(stepIntervalRef.current);
+    };
+  }, []);
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
@@ -73,6 +94,10 @@ export function DropZoneIngestao() {
     setErro("");
     setResultado(null);
     setProgresso(0);
+    setInqueritoCriado(null);
+    uploadTimestampRef.current = Date.now();
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    if (stepIntervalRef.current) clearInterval(stepIntervalRef.current);
 
     // Divide em lotes
     const batches: File[][] = [];
@@ -136,7 +161,41 @@ export function DropZoneIngestao() {
 
     if (ultimoResultado && !algumErro) {
       setResultado(ultimoResultado);
-      setStage("concluido");
+      setStage("orquestrando");
+      setStepAtivo(0);
+
+      // Animar steps a cada 6s
+      let stepIdx = 0;
+      stepIntervalRef.current = setInterval(() => {
+        stepIdx = Math.min(stepIdx + 1, ORQUESTRANDO_STEPS.length - 1);
+        setStepAtivo(stepIdx);
+      }, 6000);
+
+      // Polling: detectar quando o inquérito aparecer
+      const uploadTs = uploadTimestampRef.current;
+      let pollCount = 0;
+      pollIntervalRef.current = setInterval(async () => {
+        pollCount++;
+        if (pollCount > 40) {
+          clearInterval(pollIntervalRef.current!);
+          clearInterval(stepIntervalRef.current!);
+          setStage("concluido");
+          return;
+        }
+        try {
+          const res = await api.get("/inqueritos");
+          const items: any[] = res.data?.items ?? res.data ?? [];
+          const novo = items.find((inq: any) =>
+            new Date(inq.created_at).getTime() > uploadTs - 5000
+          );
+          if (novo) {
+            clearInterval(pollIntervalRef.current!);
+            clearInterval(stepIntervalRef.current!);
+            setInqueritoCriado({ id: novo.id, numero: novo.numero });
+            setStage("concluido");
+          }
+        } catch { /* ignora erro de rede no poll */ }
+      }, 3000);
     } else if (algumErro) {
       setStage("erro");
       const errosMsg = statusLotes.filter((l) => l.erro).map((l) => `Lote ${l.lote}: ${l.erro}`).join("\n");
@@ -157,9 +216,15 @@ export function DropZoneIngestao() {
     maxFiles: MAX_FILES,
   });
 
-  const resetar = () => { setStage("idle"); setArquivos([]); setLotes([]); setResultado(null); setErro(""); setProgresso(0); };
+  const resetar = () => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    if (stepIntervalRef.current) clearInterval(stepIntervalRef.current);
+    setStage("idle"); setArquivos([]); setLotes([]); setResultado(null);
+    setErro(""); setProgresso(0); setInqueritoCriado(null); setStepAtivo(0);
+  };
 
   const isProcessing = ["uploading", "analisando_ia", "extraindo_dados", "criando_inquerito"].includes(stage);
+  const isOrquestrando = stage === "orquestrando";
   const isNetworkError = erro.includes("conectar ao backend") || erro.includes("FastAPI");
 
   return (
@@ -172,6 +237,7 @@ export function DropZoneIngestao() {
           "relative border-2 border-dashed rounded-2xl p-10 text-center transition-all duration-300 cursor-pointer group",
           isDragActive ? "border-blue-500 bg-blue-500/10 scale-[1.01]"
             : stage === "concluido" ? "border-green-500/60 bg-green-500/5"
+            : isOrquestrando ? "border-blue-500/40 bg-blue-500/5 cursor-not-allowed"
             : isNetworkError ? "border-orange-500/60 bg-orange-500/5"
             : stage === "erro" ? "border-red-500/60 bg-red-500/5"
             : isProcessing ? "border-amber-500/40 bg-amber-500/5 cursor-not-allowed"
@@ -182,6 +248,8 @@ export function DropZoneIngestao() {
         <div className="flex flex-col items-center gap-4">
           {isProcessing ? (
             <Loader2 className="w-14 h-14 text-amber-400 animate-spin" />
+          ) : isOrquestrando ? (
+            <Brain className="w-14 h-14 text-blue-400 animate-pulse" />
           ) : stage === "concluido" ? (
             <CheckCircle2 className="w-14 h-14 text-green-400 animate-bounce" />
           ) : isNetworkError ? (
@@ -224,10 +292,40 @@ export function DropZoneIngestao() {
             </div>
           )}
 
-          {stage === "concluido" && resultado && (
+          {isOrquestrando && (
+            <div className="text-center w-full max-w-sm">
+              <p className="text-lg font-semibold text-blue-300 animate-pulse">IA Orquestradora trabalhando...</p>
+              <p className="text-zinc-500 text-xs mt-1 mb-4">Analisando documentos em segundo plano</p>
+              <div className="space-y-2 text-left">
+                {ORQUESTRANDO_STEPS.map((step, i) => (
+                  <div key={i} className={cn(
+                    "flex items-center gap-2 text-xs transition-all duration-500",
+                    i < stepAtivo ? "text-green-400" : i === stepAtivo ? "text-blue-300" : "text-zinc-600"
+                  )}>
+                    {i < stepAtivo ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                    ) : i === stepAtivo ? (
+                      <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
+                    ) : (
+                      <div className="w-3.5 h-3.5 rounded-full border border-zinc-700 shrink-0" />
+                    )}
+                    {step.label}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {stage === "concluido" && (
             <div className="text-center">
-              <p className="text-lg font-semibold text-green-400">Ingestão Concluída!</p>
-              <p className="text-zinc-300 text-sm mt-1">{resultado.mensagem}</p>
+              <p className="text-lg font-semibold text-green-400">
+                {inqueritoCriado ? "Inquérito Criado!" : "Ingestão Concluída!"}
+              </p>
+              <p className="text-zinc-400 text-sm mt-1">
+                {inqueritoCriado
+                  ? `Nº ${inqueritoCriado.numero} — processamento em andamento`
+                  : resultado?.mensagem}
+              </p>
             </div>
           )}
 
@@ -292,20 +390,28 @@ export function DropZoneIngestao() {
       )}
 
       {/* Ações pós-conclusão */}
-      {["concluido", "erro"].includes(stage) && (
-        <div className="flex gap-3">
+      {["concluido", "erro", "orquestrando"].includes(stage) && (
+        <div className="flex gap-3 flex-wrap">
           <button
             onClick={resetar}
             className="flex items-center gap-2 px-4 py-2 text-sm text-zinc-400 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
           >
             <X className="w-3.5 h-3.5" /> Enviar Outros Arquivos
           </button>
-          {stage === "concluido" && (
+          {stage === "concluido" && inqueritoCriado && (
+            <a
+              href={`/inqueritos/${inqueritoCriado.id}`}
+              className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-green-700 hover:bg-green-600 rounded-lg transition-colors"
+            >
+              <ArrowRight className="w-3.5 h-3.5" /> Abrir Inquérito
+            </a>
+          )}
+          {(stage === "concluido" || stage === "orquestrando") && (
             <a
               href="/"
-              className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-sm text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
             >
-              Ver Inquéritos
+              Ver Todos os Inquéritos
             </a>
           )}
         </div>
