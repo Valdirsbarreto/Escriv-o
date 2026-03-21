@@ -56,26 +56,31 @@ async def upload_intimacao(
 
     # Salva arquivo no storage
     storage = StorageService()
-    pasta = f"inqueritos/{inquerito_id}" if inquerito_id else "intimacoes"
-    storage_path = f"{pasta}/intimacoes/{file.filename}"
+    pasta = f"inqueritos/{inquerito_id}" if inquerito_id else "intimacoes/avulsas"
+    storage_path = f"{pasta}/{file.filename}"
     await storage.upload_file(content, storage_path, file.content_type)
 
-    # Cria registro do documento
-    documento = Documento(
-        inquerito_id=inquerito_id,
-        nome_arquivo=file.filename,
-        hash_arquivo=file_hash,
-        storage_path=storage_path,
-        status_processamento="pendente",
-    )
-    db.add(documento)
-    await db.flush()
-    await db.refresh(documento)
+    # Só cria Documento se houver inquérito (documentos.inquerito_id não pode ser null
+    # em registros de autos — para intimações avulsas, guardamos o path direto na intimação)
+    documento_id = None
+    if inquerito_id:
+        documento = Documento(
+            inquerito_id=inquerito_id,
+            nome_arquivo=file.filename,
+            hash_arquivo=file_hash,
+            storage_path=storage_path,
+            status_processamento="pendente",
+        )
+        db.add(documento)
+        await db.flush()
+        await db.refresh(documento)
+        documento_id = documento.id
 
     # Cria registro da intimação (será preenchido pela task)
     intimacao = Intimacao(
         inquerito_id=inquerito_id,
-        documento_id=documento.id,
+        documento_id=documento_id,
+        storage_path=storage_path,
         status="agendada",
     )
     db.add(intimacao)

@@ -49,6 +49,9 @@ class Intimacao(Base):
         String(30), default="agendada", nullable=False
     )  # agendada, realizada, cancelada, erro_agenda
 
+    # ── Arquivo original ───────────────────────────────────
+    storage_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
     # ── Texto bruto extraído (para auditoria) ──────────────
     texto_extraido: Mapped[str | None] = mapped_column(Text, nullable=True)
 

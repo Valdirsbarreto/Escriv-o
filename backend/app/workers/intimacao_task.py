@@ -71,11 +71,17 @@ def processar_intimacao(self, intimacao_id: str):
             if intim.documento_id:
                 doc = await db.get(Documento, intim.documento_id)
 
-            if doc and doc.storage_path:
+            # Determina o path: via Documento ou direto da Intimacao (upload avulso)
+            file_path = (doc.storage_path if doc else None) or intim.storage_path
+            file_name = (doc.nome_arquivo if doc else None) or (
+                intim.storage_path.rsplit("/", 1)[-1] if intim.storage_path else ""
+            )
+
+            if file_path:
                 try:
                     storage = StorageService()
-                    content = await storage.download_file(doc.storage_path)
-                    ext = doc.nome_arquivo.lower().rsplit(".", 1)[-1] if doc.nome_arquivo else ""
+                    content = await storage.download_file(file_path)
+                    ext = file_name.lower().rsplit(".", 1)[-1] if file_name else ""
                     if ext in ("png", "jpg", "jpeg"):
                         content_type = f"image/{ext}"
                     elif ext == "tiff":

@@ -19,8 +19,8 @@ class Documento(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    inquerito_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("inqueritos.id"), nullable=False, index=True
+    inquerito_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("inqueritos.id"), nullable=True, index=True
     )
     nome_arquivo: Mapped[str] = mapped_column(String(500), nullable=False)
     tipo_documento: Mapped[str | None] = mapped_column(String(100), nullable=True) # Ex: "application/pdf"
