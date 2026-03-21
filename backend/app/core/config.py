@@ -76,6 +76,13 @@ class Settings(BaseSettings):
     GOOGLE_CALENDAR_REFRESH_TOKEN: Optional[str] = None
     GOOGLE_CALENDAR_ID: str = "primary"  # ID do calendário (primary = calendário principal)
 
+    # ── Telegram Bot ─────────────────────────────────────────
+    TELEGRAM_BOT_TOKEN: str = ""
+    # IDs Telegram autorizados (separados por vírgula). Vazio = bloqueia todos.
+    TELEGRAM_ALLOWED_USER_IDS: str = ""
+    # Token de verificação do webhook (gerado livremente, min 32 chars recomendado)
+    TELEGRAM_WEBHOOK_SECRET: str = ""
+
     model_config = {
         "env_file": (".env", "../.env"),
         "env_file_encoding": "utf-8",
