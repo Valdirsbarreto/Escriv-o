@@ -9,7 +9,7 @@ import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -406,19 +406,17 @@ async def excluir_inquerito(
     if not inquerito:
         raise HTTPException(status_code=404, detail="Inquérito não encontrado")
 
-    # Buscar documentos para limpar storage
+    # Remover arquivos do storage
     docs_result = await db.execute(
         select(Documento).where(Documento.inquerito_id == inquerito_id)
     )
     documentos = docs_result.scalars().all()
-
-    # Remover arquivos do storage
     storage = StorageService()
     for doc in documentos:
         try:
             await storage.delete_file(doc.storage_path)
         except Exception:
-            pass  # Não bloqueia se arquivo já não existe
+            pass
 
     # Remover vetores do Qdrant
     try:
@@ -426,10 +424,27 @@ async def excluir_inquerito(
         qdrant = QdrantService()
         qdrant.delete_by_inquerito(str(inquerito_id))
     except Exception:
-        pass  # Não bloqueia se coleção não existe
+        pass
 
-    # Excluir o inquérito (cascata cuida dos documentos e transições no banco)
-    await db.delete(inquerito)
+    # Deletar na ordem correta (respeitar FKs sem CASCADE no banco)
+    iid = str(inquerito_id)
+    await db.execute(text("DELETE FROM mensagens_chat WHERE sessao_id IN (SELECT id FROM sessoes_chat WHERE inquerito_id = :id)"), {"id": iid})
+    await db.execute(text("DELETE FROM chunks WHERE inquerito_id = :id"), {"id": iid})
+    await db.execute(text("DELETE FROM sessoes_chat WHERE inquerito_id = :id"), {"id": iid})
+    await db.execute(text("DELETE FROM documentos WHERE inquerito_id = :id"), {"id": iid})
+    await db.execute(text("DELETE FROM transicoes_estado WHERE inquerito_id = :id"), {"id": iid})
+    await db.execute(text("DELETE FROM pessoas WHERE inquerito_id = :id"), {"id": iid})
+    await db.execute(text("DELETE FROM empresas WHERE inquerito_id = :id"), {"id": iid})
+    await db.execute(text("DELETE FROM contatos WHERE inquerito_id = :id"), {"id": iid})
+    await db.execute(text("DELETE FROM enderecos WHERE inquerito_id = :id"), {"id": iid})
+    await db.execute(text("DELETE FROM eventos_cronologicos WHERE inquerito_id = :id"), {"id": iid})
+    await db.execute(text("DELETE FROM logs_ingestao WHERE inquerito_id = :id"), {"id": iid})
+    await db.execute(text("DELETE FROM resultados_agentes WHERE inquerito_id = :id"), {"id": iid})
+    await db.execute(text("DELETE FROM resumos_cache WHERE inquerito_id = :id"), {"id": iid})
+    await db.execute(text("DELETE FROM tarefas_agentes WHERE inquerito_id = :id"), {"id": iid})
+    await db.execute(text("DELETE FROM volumes WHERE inquerito_id = :id"), {"id": iid})
+    await db.execute(text("DELETE FROM consultas_externas WHERE inquerito_id = :id"), {"id": iid})
+    await db.execute(text("DELETE FROM inqueritos WHERE id = :id"), {"id": iid})
     await db.commit()
 
 
