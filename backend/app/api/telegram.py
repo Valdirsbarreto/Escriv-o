@@ -10,27 +10,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.services.telegram_bot import TelegramBotService
-from app.services.telegram_copiloto import TelegramCopilotoService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/telegram", tags=["Telegram Bot"])
 
-_bot: TelegramBotService | None = None
-_copiloto: TelegramCopilotoService | None = None
+_bot = None
+_copiloto = None
 
 
-def _get_bot() -> TelegramBotService:
+def _get_bot():
     global _bot
     if _bot is None:
+        from app.services.telegram_bot import TelegramBotService
         _bot = TelegramBotService()
     return _bot
 
 
-def _get_copiloto() -> TelegramCopilotoService:
+def _get_copiloto():
     global _copiloto
     if _copiloto is None:
+        from app.services.telegram_copiloto import TelegramCopilotoService
         _copiloto = TelegramCopilotoService()
     return _copiloto
 
