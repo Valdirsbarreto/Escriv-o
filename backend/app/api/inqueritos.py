@@ -494,6 +494,41 @@ async def listar_documentos(
     return result.scalars().all()
 
 
+@router.get("/{inquerito_id}/documentos/{documento_id}/conteudo")
+async def conteudo_documento(
+    inquerito_id: uuid.UUID,
+    documento_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Retorna o texto extraído e URL presignada para download do PDF original."""
+    doc = await db.get(Documento, documento_id)
+    if not doc or doc.inquerito_id != inquerito_id:
+        raise HTTPException(status_code=404, detail="Documento não encontrado")
+
+    download_url = None
+    if doc.storage_path:
+        try:
+            from app.services.storage import StorageService
+            storage = StorageService()
+            download_url = storage.client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": storage.bucket, "Key": doc.storage_path},
+                ExpiresIn=3600,
+            )
+        except Exception:
+            pass
+
+    return {
+        "id": str(doc.id),
+        "nome_arquivo": doc.nome_arquivo,
+        "tipo_peca": doc.tipo_peca,
+        "status_processamento": doc.status_processamento,
+        "texto_extraido": doc.texto_extraido or "",
+        "total_paginas": doc.total_paginas,
+        "download_url": download_url,
+    }
+
+
 @router.patch("/{inquerito_id}/numero")
 async def corrigir_numero(
     inquerito_id: uuid.UUID,

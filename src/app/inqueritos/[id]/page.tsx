@@ -225,6 +225,7 @@ export default function InqueritoDetalhePage() {
   const [salvandoNumero, setSalvandoNumero] = useState(false);
   const [intimacoes, setIntimacoes] = useState<any[]>([]);
   const [showIntimacaoModal, setShowIntimacaoModal] = useState(false);
+  const [docViewer, setDocViewer] = useState<{ open: boolean; doc: any; conteudo: any | null; loading: boolean }>({ open: false, doc: null, conteudo: null, loading: false });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sintesePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -323,6 +324,16 @@ export default function InqueritoDetalhePage() {
       alert("Erro ao atualizar número do inquérito.");
     } finally {
       setSalvandoNumero(false);
+    }
+  };
+
+  const handleAbrirDoc = async (doc: any) => {
+    setDocViewer({ open: true, doc, conteudo: null, loading: true });
+    try {
+      const res = await api.get(`/inqueritos/${inqId}/documentos/${doc.id}/conteudo`);
+      setDocViewer(prev => ({ ...prev, conteudo: res.data, loading: false }));
+    } catch {
+      setDocViewer(prev => ({ ...prev, loading: false }));
     }
   };
 
@@ -539,7 +550,7 @@ export default function InqueritoDetalhePage() {
                   .map((doc) => {
                     const isSintetico = doc.status_processamento === "sintetico";
                     return (
-                      <div key={doc.id} className={`flex justify-between items-center p-4 rounded-lg border transition-colors ${isSintetico ? "bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40" : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"}`}>
+                      <div key={doc.id} onClick={() => handleAbrirDoc(doc)} className={`flex justify-between items-center p-4 rounded-lg border transition-colors cursor-pointer ${isSintetico ? "bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40 hover:bg-blue-500/10" : "bg-zinc-900 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/60"}`}>
                         <div className="flex items-center gap-4">
                           <div className={`p-2 rounded border ${isSintetico ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-zinc-950 text-blue-400 border-zinc-800"}`}>
                             {isSintetico ? <Sparkles size={20}/> : <FileText size={20}/>}
@@ -648,6 +659,66 @@ export default function InqueritoDetalhePage() {
             setTimeout(fetchDados, 2000);
           }}
         />
+      )}
+
+      {/* Modal de visualização de documento */}
+      {docViewer.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setDocViewer(v => ({ ...v, open: false }))}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                {docViewer.doc?.status_processamento === "sintetico"
+                  ? <Sparkles size={18} className="text-blue-400 shrink-0"/>
+                  : <FileText size={18} className="text-blue-400 shrink-0"/>
+                }
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-zinc-100 truncate">{docViewer.doc?.nome_arquivo}</p>
+                  <p className="text-xs text-zinc-500">{docViewer.doc?.tipo_peca || docViewer.doc?.status_processamento}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 ml-4">
+                {docViewer.conteudo?.download_url && (
+                  <a
+                    href={docViewer.conteudo.download_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 border border-blue-500/30 rounded-lg px-3 py-1.5 transition-colors"
+                  >
+                    <ExternalLink size={12}/> Abrir PDF
+                  </a>
+                )}
+                <button onClick={() => setDocViewer(v => ({ ...v, open: false }))} className="text-zinc-500 hover:text-zinc-300 p-1 transition-colors">
+                  <X size={18}/>
+                </button>
+              </div>
+            </div>
+            {/* Conteúdo */}
+            <div className="overflow-y-auto flex-1 px-6 py-4">
+              {docViewer.loading ? (
+                <div className="flex items-center justify-center py-16 text-zinc-500">
+                  <Loader2 size={24} className="animate-spin mr-2"/> Carregando...
+                </div>
+              ) : docViewer.conteudo?.texto_extraido ? (
+                <pre className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed font-sans">
+                  {docViewer.conteudo.texto_extraido}
+                </pre>
+              ) : (
+                <div className="text-center py-16 text-zinc-500">
+                  <FileText size={32} className="mx-auto mb-3 opacity-30"/>
+                  <p>Texto não disponível para este documento.</p>
+                </div>
+              )}
+            </div>
+            {/* Footer */}
+            {docViewer.conteudo && (
+              <div className="px-6 py-3 border-t border-zinc-800 text-xs text-zinc-600 shrink-0">
+                {docViewer.conteudo.total_paginas > 0 && `${docViewer.conteudo.total_paginas} página(s) · `}
+                {docViewer.conteudo.texto_extraido?.length?.toLocaleString()} caracteres
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
