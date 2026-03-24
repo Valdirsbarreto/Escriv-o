@@ -79,7 +79,10 @@ def orchestrate_new_inquerito(self, storage_paths: List[str], filenames: List[st
             # Prioridade: filename > LLM > TEMP
             numero_fname, ano_fname = _extrair_numero_ip_dos_filenames(filenames)
             numero_ip = numero_fname or meta.get("numero") or f"TEMP-{uuid.uuid4().hex[:6].upper()}"
-            ano = ano_fname or meta.get("ano") or time.localtime().tm_year
+            # ano: prefere o extraído do filename/LLM; NÃO usa o ano atual como fallback
+            # (IPs antigos teriam o ano atual erroneamente atribuído)
+            ano_llm = meta.get("ano")
+            ano = ano_fname or (int(ano_llm) if ano_llm and str(ano_llm).isdigit() else None)
             delegacia_cod = meta.get("delegacia_codigo")
             delegacia_nome = meta.get("delegacia_nome")
 

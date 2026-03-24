@@ -390,7 +390,7 @@ export default function InqueritoDetalhePage() {
             ) : (
               <div className="flex items-center gap-2">
                 <h1 className="text-3xl font-bold tracking-tight text-zinc-100">
-                  {inquerito.numero.startsWith("TEMP-") ? inquerito.numero : `${inquerito.numero}/${inquerito.ano}`}
+                  {inquerito.numero}
                 </h1>
                 {inquerito.numero.startsWith("TEMP-") && (
                   <Badge variant="outline" className="text-yellow-400 border-yellow-400/30 bg-yellow-400/10 text-xs">

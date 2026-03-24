@@ -207,7 +207,7 @@ export default function InqueritosPage() {
               <CardHeader>
                 <CardTitle className="text-lg flex items-center justify-between">
                   <span className="font-semibold text-zinc-100 group-hover:text-blue-400 transition-colors flex items-center gap-2">
-                    {inq.numero}/{inq.ano} 
+                    {inq.numero}
                     {inq.redistribuido && <Badge variant="outline" className="text-blue-400 border-blue-400/30 bg-blue-400/10 text-[10px]">REDIST</Badge>}
                   </span>
                   <Badge variant="outline" className="bg-zinc-800 text-zinc-300 border-zinc-700">
