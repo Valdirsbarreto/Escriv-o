@@ -38,7 +38,8 @@ ESTADO_LABEL = {
 # ── System prompt do dispatcher ───────────────────────────────────────────────
 
 DISPATCHER_PROMPT = """Você é o despachante do Escrivão AI via Telegram.
-Analise a mensagem do usuário e retorne um JSON com a ação a executar.
+O usuário autorizado chama-se Valdir. Trate-o pelo nome nas saudações.
+Analise a mensagem e retorne um JSON com a ação a executar.
 
 Contexto atual:
 - Inquérito em foco: {inquerito_atual}
@@ -50,6 +51,7 @@ Ações disponíveis:
 - busca_autos: Busca semântica nos documentos de um inquérito. Parâmetros: {{"numero_ip": "número (use inquerito_atual se já mencionado)", "query": "o que pesquisar"}}
 - agenda: Próximas oitivas, audiências e intimações. Parâmetros: {{}}
 - ficha_pessoa: Consulta pessoa nos índices do inquérito. Parâmetros: {{"nome": "nome da pessoa", "numero_ip": "inquérito (use inquerito_atual se já mencionado)", "cpf": "CPF se informado (opcional)"}}
+- osint_avulso: Consulta OSINT avulsa (sem vínculo com inquérito) por CPF, CNPJ, placa, nome ou RG. Use quando o usuário pedir para pesquisar/consultar/verificar dados de uma pessoa, veículo ou empresa de forma avulsa. Parâmetros: {{"cpf": "somente dígitos, se informado", "cnpj": "somente dígitos, se informado", "placa": "placa do veículo, se informado", "nome": "nome completo, se informado", "rg": "RG, se informado"}}
 - ajuda: Lista de comandos disponíveis. Parâmetros: {{}}
 - conversa: Saudações, agradecimentos ou perguntas gerais sem ação específica. Parâmetros: {{"resposta": "sua resposta amigável e concisa (máximo 3 linhas)"}}
 
@@ -153,11 +155,14 @@ class TelegramCopilotoService:
                     ctx["inquerito_atual"] = numero
                 resposta = await self._ficha_pessoa(nome, cpf, numero, db)
 
+            elif acao == "osint_avulso":
+                resposta = await self._osint_avulso(params)
+
             elif acao == "ajuda":
                 resposta = _mensagem_ajuda()
 
             else:  # conversa
-                resposta = params.get("resposta", "Como posso ajudar?")
+                resposta = params.get("resposta", "Como posso ajudar, Valdir?")
 
         except Exception as e:
             logger.error(f"[TG-COPILOTO] Erro na ação {acao}: {e}", exc_info=True)
@@ -423,6 +428,93 @@ class TelegramCopilotoService:
         return "\n".join(linhas)
 
 
+    # ── Ação: OSINT avulso ────────────────────────────────────────────────────
+
+    async def _osint_avulso(self, params: dict) -> str:
+        cpf = params.get("cpf", "").strip() or None
+        cnpj = params.get("cnpj", "").strip() or None
+        placa = params.get("placa", "").strip() or None
+        nome = params.get("nome", "").strip() or None
+        rg = params.get("rg", "").strip() or None
+
+        if not any([cpf, cnpj, placa, nome, rg]):
+            return (
+                "ℹ️ Informe ao menos um dado para a consulta OSINT.\n"
+                "Ex: <i>pesquisar CPF 000.000.000-00</i> ou <i>verificar placa ABC1234</i>"
+            )
+
+        from app.services.osint_service import OSINTService
+        osint = OSINTService()
+
+        try:
+            dados = await osint.consulta_avulsa(
+                cpf=cpf, cnpj=cnpj, placa=placa, nome=nome, rg=rg
+            )
+        except Exception as e:
+            logger.error(f"[TG-COPILOTO] OSINT avulso falhou: {e}", exc_info=True)
+            return f"⚠️ Erro na consulta OSINT: {_esc(str(e)[:200])}"
+
+        fontes_ok = dados.get("fontes_consultadas", [])
+        if not fontes_ok:
+            alvo = cpf or cnpj or placa or nome or rg
+            return f"❌ Nenhum dado encontrado para <code>{_esc(alvo)}</code> nas fontes consultadas."
+
+        partes = [f"🔍 <b>Consulta OSINT Avulsa</b>"]
+        if cpf:
+            partes.append(f"CPF: <code>{_esc(cpf)}</code>")
+        if placa:
+            partes.append(f"Placa: <code>{_esc(placa)}</code>")
+        if cnpj:
+            partes.append(f"CNPJ: <code>{_esc(cnpj)}</code>")
+        if nome:
+            partes.append(f"Nome: <i>{_esc(nome)}</i>")
+        partes.append("")
+
+        # Cadastro PF
+        cad = dados.get("cadastro")
+        if cad and isinstance(cad, dict):
+            nome_ret = cad.get("nome") or cad.get("nome_completo") or ""
+            nasc = cad.get("data_nascimento") or cad.get("nascimento") or ""
+            mae = cad.get("nome_mae") or ""
+            sit = cad.get("situacao_cpf") or cad.get("situacao") or ""
+            if nome_ret:
+                partes.append(f"👤 <b>{_esc(nome_ret)}</b>")
+            if nasc:
+                partes.append(f"🎂 Nascimento: {_esc(str(nasc))}")
+            if mae:
+                partes.append(f"👩 Mãe: {_esc(mae)}")
+            if sit:
+                partes.append(f"📋 CPF: {_esc(sit)}")
+
+        # Veículo
+        veiculo = dados.get("veiculo") or (dados.get("historico_veiculos") or [None])[0] if isinstance(dados.get("historico_veiculos"), list) else None
+        if isinstance(veiculo, dict) and veiculo:
+            marca = veiculo.get("marca_modelo") or veiculo.get("marca") or ""
+            cor = veiculo.get("cor") or ""
+            ano = veiculo.get("ano_fabricacao") or ""
+            prop = veiculo.get("proprietario") or veiculo.get("nome_proprietario") or ""
+            if marca:
+                partes.append(f"\n🚗 Veículo: {_esc(marca)} {_esc(cor)} {_esc(str(ano))}")
+            if prop:
+                partes.append(f"   Proprietário: {_esc(prop)}")
+
+        # Alertas
+        alertas = []
+        if dados.get("mandados_prisao") and isinstance(dados["mandados_prisao"], list) and dados["mandados_prisao"]:
+            alertas.append("⚠️ MANDADO DE PRISÃO")
+        if dados.get("pep") and dados["pep"]:
+            alertas.append("🏛️ PEP (pessoa politicamente exposta)")
+        if dados.get("aml") and dados["aml"]:
+            alertas.append("💰 Restrição AML/lavagem")
+        if dados.get("obito") and isinstance(dados["obito"], dict) and dados["obito"].get("data_obito"):
+            alertas.append("💀 ÓBITO registrado")
+        if alertas:
+            partes.append("\n" + " | ".join(alertas))
+
+        partes.append(f"\n📡 Fontes: {', '.join(_esc(f) for f in fontes_ok)}")
+        return "\n".join(partes)
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _esc(text: str) -> str:
@@ -440,8 +532,11 @@ def _mensagem_ajuda() -> str:
         "• <i>status do IP 915-001/2024</i> — detalhes de um inquérito\n"
         "• <i>no IP 915-001/2024, o que sabemos sobre X?</i> — busca nos autos\n"
         "• <i>agenda</i> ou <i>próximas audiências</i> — oitivas agendadas\n"
-        "• <i>ficha do João Silva no IP 915-001/2024</i> — perfil de pessoa\n\n"
-        "💡 <b>Dica:</b> Após mencionar um IP, posso manter o contexto "
+        "• <i>ficha do João Silva no IP 915-001/2024</i> — perfil de pessoa\n"
+        "• <i>pesquisar CPF 000.000.000-00</i> — consulta OSINT avulsa\n"
+        "• <i>verificar placa ABC1234</i> — consulta veicular avulsa\n"
+        "• <i>pesquisar CNPJ 00.000.000/0001-00</i> — consulta empresarial\n\n"
+        "💡 <b>Dica:</b> Após mencionar um IP, mantenho o contexto "
         "para as próximas perguntas sem precisar repetir o número.\n\n"
         "/ajuda — exibe esta mensagem"
     )
