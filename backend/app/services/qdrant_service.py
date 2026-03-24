@@ -30,6 +30,7 @@ class QdrantService:
         self.client = QdrantClient(
             host=settings.QDRANT_HOST,
             port=settings.QDRANT_PORT,
+            check_version=False,
         )
         self.collection_name = settings.QDRANT_COLLECTION
 
