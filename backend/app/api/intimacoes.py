@@ -309,3 +309,18 @@ async def cancelar_intimacao(
 
     await db.delete(intimacao)
     await db.commit()
+
+
+@router.post("/{intimacao_id}/reprocessar")
+async def reprocessar_intimacao(
+    intimacao_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Reenfileira a tarefa de extração para uma intimação com dados faltando."""
+    intimacao = await db.get(Intimacao, intimacao_id)
+    if not intimacao:
+        raise HTTPException(status_code=404, detail="Intimação não encontrada")
+
+    from app.workers.intimacao_task import processar_intimacao
+    processar_intimacao.delay(str(intimacao_id))
+    return {"status": "agendado", "mensagem": "Reprocessamento iniciado. Aguarde alguns segundos."}

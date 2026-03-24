@@ -1,58 +1,89 @@
 """
 Escrivão AI — Serviço: Extrator de Intimações
-Combina OCR (pdf_extractor) + LLM para extrair dados estruturados de intimações.
+OCR via Gemini Vision + extração LLM de dados estruturados de intimações.
 """
 
+import base64
 import json
 import logging
 from datetime import datetime
 from typing import Optional
 
+import google.generativeai as genai
+
+from app.core.config import settings
 from app.core.prompts import PROMPT_EXTRACAO_INTIMACAO
 from app.services.llm_service import LLMService
-from app.services.pdf_extractor import PDFExtractorService
 
 logger = logging.getLogger(__name__)
+
+_GEMINI_OCR_PROMPT = (
+    "Você é um OCR especializado em documentos jurídicos brasileiros. "
+    "Transcreva fielmente o texto completo desta intimação/documento policial, "
+    "preservando nomes, datas, números de inquérito e endereços. "
+    "Retorne apenas o texto transcrito, sem comentários."
+)
 
 
 class IntimacaoExtractor:
     """Extrai dados estruturados de intimações a partir de PDF ou imagem."""
 
     def __init__(self):
-        self.pdf_extractor = PDFExtractorService()
         self.llm = LLMService()
+        if settings.GEMINI_API_KEY:
+            genai.configure(api_key=settings.GEMINI_API_KEY)
 
     def extrair_texto(self, content: bytes, content_type: str) -> str:
         """
-        Extrai texto bruto de PDF ou imagem.
-        Retorna o texto concatenado de todas as páginas.
+        Extrai texto via Gemini Vision (OCR). Funciona para PDF, PNG, JPG e TIFF.
+        Fallback para Tesseract em caso de falha.
         """
-        is_image = content_type in ("image/png", "image/jpeg", "image/jpg", "image/tiff")
+        # Gemini aceita PDF diretamente e imagens via inline_data
+        try:
+            return self._ocr_gemini(content, content_type)
+        except Exception as e:
+            logger.warning(f"[INTIMACAO] Gemini Vision falhou, tentando Tesseract: {e}")
+            return self._ocr_tesseract_fallback(content, content_type)
 
+    def _ocr_gemini(self, content: bytes, content_type: str) -> str:
+        """OCR via Gemini Vision (gemini-2.0-flash-lite)."""
+        model = genai.GenerativeModel("gemini-2.0-flash-lite")
+
+        # Gemini aceita PDFs e imagens como inline_data
+        mime = content_type if content_type else "application/pdf"
+        if mime in ("image/jpg",):
+            mime = "image/jpeg"
+
+        part = {"inline_data": {"mime_type": mime, "data": base64.b64encode(content).decode()}}
+        response = model.generate_content([_GEMINI_OCR_PROMPT, part])
+        texto = response.text.strip()
+        logger.info(f"[INTIMACAO] Gemini Vision extraiu {len(texto)} chars")
+        return texto
+
+    def _ocr_tesseract_fallback(self, content: bytes, content_type: str) -> str:
+        """Fallback: Tesseract para imagens ou extração nativa para PDFs."""
+        is_image = content_type in ("image/png", "image/jpeg", "image/jpg", "image/tiff")
         if is_image:
             try:
                 import pytesseract
                 from PIL import Image
                 import io as _io
                 img = Image.open(_io.BytesIO(content))
-                texto = pytesseract.image_to_string(img, lang="por", config="--psm 6")
-                return texto.strip()
+                return pytesseract.image_to_string(img, lang="por", config="--psm 6").strip()
             except Exception as e:
-                logger.error(f"[INTIMACAO] OCR de imagem falhou: {e}")
+                logger.error(f"[INTIMACAO] Tesseract falhou: {e}")
                 return ""
 
-        # PDF: tenta extração nativa, usa OCR nas páginas que precisam
-        resultado = self.pdf_extractor.extract_text(content)
+        from app.services.pdf_extractor import PDFExtractorService
+        pdf_svc = PDFExtractorService()
+        resultado = pdf_svc.extract_text(content)
         paginas = resultado.get("paginas", [])
-
-        # OCR nas páginas com pouco texto nativo
         paginas_ocr = [p["numero"] for p in paginas if p.get("precisa_ocr")]
         if paginas_ocr:
-            textos_ocr = self.pdf_extractor.apply_ocr(content, paginas_ocr)
+            textos_ocr = pdf_svc.apply_ocr(content, paginas_ocr)
             for p in paginas:
                 if p["numero"] in textos_ocr:
                     p["texto"] = textos_ocr[p["numero"]]
-
         return "\n\n".join(p["texto"] for p in paginas if p.get("texto"))
 
     async def extrair_dados(self, texto: str) -> dict:

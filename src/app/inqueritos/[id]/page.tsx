@@ -634,16 +634,32 @@ export default function InqueritoDetalhePage() {
                     )}
                   </div>
                 </div>
-                {intim.google_event_url && (
-                  <a
-                    href={intim.google_event_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors shrink-0"
-                  >
-                    <ExternalLink size={13} /> Google Agenda
-                  </a>
-                )}
+                <div className="flex items-center gap-2 shrink-0">
+                  {intim.google_event_url && (
+                    <a
+                      href={intim.google_event_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                    >
+                      <ExternalLink size={13} /> Google Agenda
+                    </a>
+                  )}
+                  {!intim.intimado_nome && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          await api.post(`/intimacoes/${intim.id}/reprocessar`);
+                          setTimeout(fetchDados, 8000);
+                        } catch { alert("Erro ao reprocessar."); }
+                      }}
+                      className="flex items-center gap-1 text-xs text-yellow-500 hover:text-yellow-400 transition-colors"
+                      title="Reprocessar extração com Gemini Vision"
+                    >
+                      <RefreshCw size={12}/> Reextrair
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
