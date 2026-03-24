@@ -207,15 +207,34 @@ def generate_analise_task(self, inquerito_id: str):
 
             service = SummaryService()
             resumos_partes = []
+            docs_sem_resumo = []
             for d in todos_docs:
                 r = await service.obter_resumo_documento(db, inq_uuid, d.id)
                 if r:
                     resumos_partes.append(f"**{d.nome_arquivo}** (tipo: {d.tipo_peca or 'não classificado'})\n{r}")
+                elif d.texto_extraido:
+                    # Fallback: usa texto bruto truncado quando não há ResumoCache
+                    trecho = d.texto_extraido[:3000]
+                    resumos_partes.append(
+                        f"**{d.nome_arquivo}** (tipo: {d.tipo_peca or 'não classificado'}) [sem resumo — texto bruto]\n{trecho}"
+                    )
+                    docs_sem_resumo.append(d.nome_arquivo)
+                else:
+                    docs_sem_resumo.append(f"{d.nome_arquivo} [sem texto extraído]")
+
+            if docs_sem_resumo:
+                logger.warning(
+                    f"[SINTESE-TASK] {len(docs_sem_resumo)} doc(s) sem ResumoCache — usando texto bruto como fallback: "
+                    + ", ".join(docs_sem_resumo)
+                )
 
             if not resumos_partes:
-                logger.warning(f"[SINTESE-TASK] Nenhum resumo disponível ainda: {inquerito_id}")
+                logger.error(
+                    f"[SINTESE-TASK] FALHA TOTAL: {len(todos_docs)} doc(s) indexados mas nenhum tem texto extraído. "
+                    f"Verifique o pipeline de OCR/extração para o inquérito {inquerito_id}."
+                )
                 await engine.dispose()
-                raise Exception("sem_resumos_ainda")  # força retry com backoff
+                raise Exception("sem_texto_extraido_em_nenhum_documento")  # força retry com backoff
 
             resumos_str = "\n\n---\n\n".join(resumos_partes)
 

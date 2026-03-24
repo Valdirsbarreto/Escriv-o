@@ -226,6 +226,7 @@ export default function InqueritoDetalhePage() {
   const [intimacoes, setIntimacoes] = useState<any[]>([]);
   const [showIntimacaoModal, setShowIntimacaoModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sintesePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchDados = async () => {
     try {
@@ -252,7 +253,10 @@ export default function InqueritoDetalhePage() {
       fetchDados();
       setCopilotoOpen(true);
     }
-    return () => setCopilotoOpen(false);
+    return () => {
+      setCopilotoOpen(false);
+      if (sintesePollingRef.current) clearInterval(sintesePollingRef.current);
+    };
   }, [inqId]);
 
   const handleDelete = async () => {
@@ -326,11 +330,30 @@ export default function InqueritoDetalhePage() {
     setGerandoSintese(true);
     try {
       await api.post(`/inqueritos/${inqId}/gerar-sintese`);
+      // Polling até a síntese aparecer na lista de documentos (máx ~3 min)
+      let tentativas = 0;
+      sintesePollingRef.current = setInterval(async () => {
+        tentativas++;
+        try {
+          const docsRes = await api.get(`/inqueritos/${inqId}/documentos`);
+          const docs = docsRes.data;
+          if (docs.some((d: any) => d.tipo_peca === "sintese_investigativa")) {
+            setDocumentos(docs);
+            setGerandoSintese(false);
+            if (sintesePollingRef.current) clearInterval(sintesePollingRef.current);
+            return;
+          }
+        } catch {/* silencioso */}
+        if (tentativas >= 36) { // ~3 min
+          setGerandoSintese(false);
+          if (sintesePollingRef.current) clearInterval(sintesePollingRef.current);
+          alert("A geração da síntese está demorando mais que o esperado. Recarregue a página em alguns minutos.");
+        }
+      }, 5000);
     } catch (e) {
       console.error(e);
-      alert("Erro ao acionar geração da Síntese Investigativa.");
-    } finally {
       setGerandoSintese(false);
+      alert("Erro ao acionar geração da Síntese Investigativa.");
     }
   };
 
