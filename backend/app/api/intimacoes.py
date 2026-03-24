@@ -5,6 +5,8 @@ Upload de intimações, listagem, correção de dados e sincronização com Goog
 
 import hashlib
 import logging
+import re
+import unicodedata
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
@@ -22,6 +24,12 @@ from app.services.storage import StorageService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/intimacoes", tags=["Intimações"])
+
+
+def _sanitize_storage_key(filename: str) -> str:
+    """Remove acentos e caracteres especiais para uso como chave S3."""
+    name = unicodedata.normalize("NFKD", filename).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^\w.\-]", "_", name)
 
 
 # ── Upload ───────────────────────────────────────────────────────
@@ -54,10 +62,11 @@ async def upload_intimacao(
         if not inq:
             raise HTTPException(status_code=404, detail="Inquérito não encontrado")
 
-    # Salva arquivo no storage
+    # Salva arquivo no storage (chave S3 sem acentos; nome exibido preserva o original)
     storage = StorageService()
     pasta = f"inqueritos/{inquerito_id}" if inquerito_id else "intimacoes/avulsas"
-    storage_path = f"{pasta}/{file.filename}"
+    safe_filename = _sanitize_storage_key(file.filename)
+    storage_path = f"{pasta}/{safe_filename}"
     await storage.upload_file(content, storage_path, file.content_type)
 
     # Só cria Documento se houver inquérito (documentos.inquerito_id não pode ser null

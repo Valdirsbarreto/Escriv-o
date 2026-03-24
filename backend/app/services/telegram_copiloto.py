@@ -324,7 +324,7 @@ class TelegramCopilotoService:
 
         partes = [
             f"🔎 <b>Busca no IP {_esc(ip.numero)}</b>",
-            f"<i>"{_esc(query[:100])}"</i>\n",
+            f'<i>"{_esc(query[:100])}"</i>\n',
             resposta_texto,
         ]
 
