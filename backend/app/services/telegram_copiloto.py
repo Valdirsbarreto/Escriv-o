@@ -51,11 +51,18 @@ Ações disponíveis:
 - busca_autos: Busca semântica nos documentos de um inquérito. Parâmetros: {{"numero_ip": "número (use inquerito_atual se já mencionado)", "query": "o que pesquisar"}}
 - agenda: Próximas oitivas, audiências e intimações. Parâmetros: {{}}
 - ficha_pessoa: Consulta pessoa nos índices do inquérito. Parâmetros: {{"nome": "nome da pessoa", "numero_ip": "inquérito (use inquerito_atual se já mencionado)", "cpf": "CPF se informado (opcional)"}}
-- osint_avulso: Consulta OSINT avulsa (sem vínculo com inquérito) por CPF, CNPJ, placa, nome ou RG. Use quando o usuário pedir para pesquisar/consultar/verificar dados de uma pessoa, veículo ou empresa de forma avulsa. Parâmetros: {{"cpf": "somente dígitos, se informado", "cnpj": "somente dígitos, se informado", "placa": "placa do veículo, se informado", "nome": "nome completo, se informado", "rg": "RG, se informado"}}
+- osint_avulso: Consulta OSINT avulsa por CPF, CNPJ, placa, nome ou RG. Use para QUALQUER pedido informal de pesquisa de pessoa ou veículo: "ve esse cpf", "pesquisa essa placa", "quem é esse cara", "puxa o cpf", "consulta esse número", "me passa os dados de", "verifica essa placa", etc. Extraia CPF/CNPJ/placa/nome do texto ignorando pontuação. Parâmetros: {{"cpf": "somente dígitos, se informado", "cnpj": "somente dígitos, se informado", "placa": "placa do veículo, se informado", "nome": "nome completo, se informado", "rg": "RG, se informado"}}
 - ajuda: Lista de comandos disponíveis. Parâmetros: {{}}
 - conversa: Saudações, agradecimentos ou perguntas gerais sem ação específica. Parâmetros: {{"resposta": "sua resposta amigável e concisa (máximo 3 linhas)"}}
 
-IMPORTANTE: Retorne APENAS JSON válido. Exemplo: {{"acao": "listar_inqueritos", "parametros": {{}}}}"""
+Exemplos de classificação (português informal):
+- "ve esse cpf pra mim: 86512587715" → {{"acao": "osint_avulso", "parametros": {{"cpf": "86512587715"}}}}
+- "puxa a placa ABC1D23" → {{"acao": "osint_avulso", "parametros": {{"placa": "ABC1D23"}}}}
+- "quem é João Silva?" → {{"acao": "osint_avulso", "parametros": {{"nome": "João Silva"}}}}
+- "lista os IPs" → {{"acao": "listar_inqueritos", "parametros": {{}}}}
+- "o que tem no IP 921-00332 sobre o suspeito?" → {{"acao": "busca_autos", "parametros": {{"numero_ip": "921-00332", "query": "suspeito"}}}}
+
+IMPORTANTE: Retorne APENAS JSON válido. Nunca retorne conversa quando o usuário pedir para pesquisar, ver, consultar, puxar ou verificar um CPF, CNPJ, placa ou nome."""
 
 
 class TelegramCopilotoService:

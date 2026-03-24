@@ -15,6 +15,28 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/telegram", tags=["Telegram Bot"])
 
+
+async def _transcrever_audio(audio_bytes: bytes, file_path: str) -> str:
+    """Transcreve áudio de voz usando Gemini Vision (suporta OGG/MP3/M4A)."""
+    import base64
+    import google.generativeai as genai
+    from app.core.config import settings as _s
+
+    if _s.GEMINI_API_KEY:
+        genai.configure(api_key=_s.GEMINI_API_KEY)
+
+    ext = file_path.rsplit(".", 1)[-1].lower() if "." in file_path else "ogg"
+    mime_map = {"ogg": "audio/ogg", "mp3": "audio/mp3", "m4a": "audio/mp4", "wav": "audio/wav"}
+    mime = mime_map.get(ext, "audio/ogg")
+
+    model = genai.GenerativeModel("gemini-2.0-flash-lite")
+    part = {"inline_data": {"mime_type": mime, "data": base64.b64encode(audio_bytes).decode()}}
+    response = model.generate_content([
+        "Transcreva fielmente o que foi dito neste áudio em português. Retorne apenas a transcrição, sem comentários.",
+        part,
+    ])
+    return response.text.strip()
+
 _bot = None
 _copiloto = None
 
@@ -80,8 +102,27 @@ async def telegram_webhook(
     chat_id: int = message.get("chat", {}).get("id")
     user_id: int = message.get("from", {}).get("id")
     text: str = (message.get("text") or "").strip()
+    voice = message.get("voice") or message.get("audio")
 
-    if not chat_id or not text:
+    if not chat_id:
+        return {"ok": True}
+
+    # Transcrever áudio se não houver texto
+    if not text and voice:
+        file_id = voice.get("file_id")
+        if file_id:
+            try:
+                await _get_bot().send_chat_action(chat_id, "typing")
+                file_meta = await _get_bot().get_file(file_id)
+                file_path = file_meta.get("result", {}).get("file_path", "")
+                if file_path:
+                    audio_bytes = await _get_bot().download_file(file_path)
+                    text = await _transcrever_audio(audio_bytes, file_path)
+                    logger.info(f"[TELEGRAM] Áudio transcrito: {text[:100]}")
+            except Exception as e:
+                logger.error(f"[TELEGRAM] Erro ao transcrever áudio: {e}", exc_info=True)
+
+    if not text:
         return {"ok": True}
 
     # Autenticação por user_id

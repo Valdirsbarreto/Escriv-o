@@ -78,3 +78,17 @@ class TelegramBotService:
         async with httpx.AsyncClient(timeout=10.0) as client:
             r = await client.get(self._url("getMe"))
             return r.json()
+
+    async def get_file(self, file_id: str) -> dict:
+        """Obtém metadados de um arquivo (retorna file_path para download)."""
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.post(self._url("getFile"), json={"file_id": file_id})
+            return r.json()
+
+    async def download_file(self, file_path: str) -> bytes:
+        """Baixa o conteúdo de um arquivo pelo file_path retornado em getFile."""
+        url = f"https://api.telegram.org/file/bot{settings.TELEGRAM_BOT_TOKEN}/{file_path}"
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            r = await client.get(url)
+            r.raise_for_status()
+            return r.content
