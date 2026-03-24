@@ -17,8 +17,22 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/telegram", tags=["Telegram Bot"])
 
-_bot = TelegramBotService()
-_copiloto = TelegramCopilotoService()
+_bot: TelegramBotService | None = None
+_copiloto: TelegramCopilotoService | None = None
+
+
+def _get_bot() -> TelegramBotService:
+    global _bot
+    if _bot is None:
+        _bot = TelegramBotService()
+    return _bot
+
+
+def _get_copiloto() -> TelegramCopilotoService:
+    global _copiloto
+    if _copiloto is None:
+        _copiloto = TelegramCopilotoService()
+    return _copiloto
 
 
 def _allowed_user_ids() -> set[int]:
@@ -74,7 +88,7 @@ async def telegram_webhook(
     allowed = _allowed_user_ids()
     if allowed and user_id not in allowed:
         logger.warning(f"[TELEGRAM] Acesso negado — user_id={user_id}")
-        await _bot.send_message(chat_id, "⛔ Acesso não autorizado.")
+        await _get_bot().send_message(chat_id, "⛔ Acesso não autorizado.")
         return {"ok": True}
 
     if not settings.TELEGRAM_BOT_TOKEN:
@@ -82,11 +96,11 @@ async def telegram_webhook(
         return {"ok": True}
 
     # Indicador "digitando..." enquanto processa
-    await _bot.send_chat_action(chat_id, "typing")
+    await _get_bot().send_chat_action(chat_id, "typing")
 
     # Processar e responder
     try:
-        resposta = await _copiloto.processar_mensagem(
+        resposta = await _get_copiloto().processar_mensagem(
             chat_id=chat_id,
             mensagem=text,
             db=db,
@@ -95,7 +109,7 @@ async def telegram_webhook(
         logger.error(f"[TELEGRAM] Erro ao processar mensagem: {e}", exc_info=True)
         resposta = "⚠️ Erro interno. Tente novamente ou acesse a interface web."
 
-    await _bot.send_message(chat_id, resposta)
+    await _get_bot().send_message(chat_id, resposta)
     return {"ok": True}
 
 
@@ -111,14 +125,14 @@ async def configurar_webhook(base_url: str):
     Exemplo: POST /api/v1/telegram/configurar-webhook?base_url=https://meu-app.railway.app
     """
     webhook_url = f"{base_url.rstrip('/')}/api/v1/telegram/webhook"
-    result = await _bot.set_webhook(webhook_url, settings.TELEGRAM_WEBHOOK_SECRET)
+    result = await _get_bot().set_webhook(webhook_url, settings.TELEGRAM_WEBHOOK_SECRET)
     return {"webhook_url": webhook_url, "telegram_response": result}
 
 
 @router.delete("/webhook", summary="Remove o webhook (voltar ao polling)")
 async def remover_webhook():
     """Remove o webhook configurado. Útil em desenvolvimento."""
-    result = await _bot.delete_webhook()
+    result = await _get_bot().delete_webhook()
     return {"telegram_response": result}
 
 
@@ -131,7 +145,7 @@ async def status_bot():
     bot_info = {}
     if configured:
         try:
-            bot_info = await _bot.get_me()
+            bot_info = await _get_bot().get_me()
         except Exception as e:
             bot_info = {"error": str(e)}
 
