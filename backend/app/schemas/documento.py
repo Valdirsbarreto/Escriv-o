@@ -16,6 +16,7 @@ class DocumentoResponse(BaseModel):
     inquerito_id: UUID
     nome_arquivo: str
     tipo_documento: Optional[str]
+    tipo_peca: Optional[str]
     hash_arquivo: Optional[str]
     total_paginas: int
     status_ocr: str
