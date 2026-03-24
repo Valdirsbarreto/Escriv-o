@@ -70,8 +70,13 @@ class TelegramCopilotoService:
 
     def __init__(self):
         self.llm = LLMService()
-        self.copiloto = CopilotoService()
+        self._copiloto = None
         self._redis = None
+
+    def _get_copiloto(self):
+        if self._copiloto is None:
+            self._copiloto = CopilotoService()
+        return self._copiloto
 
     # ── Redis ─────────────────────────────────────────────────────────────────
 
@@ -292,7 +297,7 @@ class TelegramCopilotoService:
 
         # Chamar CopilotoService (RAG pipeline)
         try:
-            resultado = await self.copiloto.processar_mensagem(
+            resultado = await self._get_copiloto().processar_mensagem(
                 query=query,
                 inquerito_id=str(ip.id),
                 historico=[
