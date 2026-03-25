@@ -26,6 +26,8 @@ const STATUS_LABEL: Record<string, { label: string; className: string }> = {
   realizada: { label: "Realizada", className: "bg-green-500/15 text-green-400 border-green-500/20" },
   cancelada: { label: "Cancelada", className: "bg-zinc-700/40 text-zinc-500 border-zinc-600/20" },
   erro_agenda: { label: "Erro no Agenda", className: "bg-red-500/15 text-red-400 border-red-500/20" },
+  sem_calendario: { label: "Sem Calendário", className: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20" },
+  dados_incompletos: { label: "Dados incompletos", className: "bg-orange-500/15 text-orange-400 border-orange-500/20" },
 };
 
 const QUAL_LABEL: Record<string, string> = {

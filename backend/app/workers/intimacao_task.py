@@ -157,9 +157,9 @@ def processar_intimacao(self, intimacao_id: str):
                         f"[INTIMACAO-TASK] Evento Google criado: {intim.google_event_id}"
                     )
                 except RuntimeError as e:
-                    # Google Calendar não configurado — registra mas não falha
+                    # Google Calendar não configurado — registra e marca como pendente
                     logger.warning(f"[INTIMACAO-TASK] Google Calendar não configurado: {e}")
-                    intim.status = "agendada"
+                    intim.status = "sem_calendario"
                 except Exception as e:
                     logger.error(f"[INTIMACAO-TASK] Erro ao criar evento Google: {e}")
                     intim.status = "erro_agenda"
@@ -172,7 +172,7 @@ def processar_intimacao(self, intimacao_id: str):
                 logger.warning(
                     f"[INTIMACAO-TASK] Evento não criado — campos ausentes: {missing}"
                 )
-                intim.status = "agendada"
+                intim.status = "dados_incompletos"
 
             await db.commit()
             logger.info(f"[INTIMACAO-TASK] Concluído — intimacao_id={intimacao_id}")

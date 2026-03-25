@@ -29,7 +29,7 @@ async def _transcrever_audio(audio_bytes: bytes, file_path: str) -> str:
     mime_map = {"ogg": "audio/ogg", "mp3": "audio/mp3", "m4a": "audio/mp4", "wav": "audio/wav"}
     mime = mime_map.get(ext, "audio/ogg")
 
-    model = genai.GenerativeModel("gemini-2.0-flash-lite")
+    model = genai.GenerativeModel("gemini-2.0-flash")
     part = {"inline_data": {"mime_type": mime, "data": base64.b64encode(audio_bytes).decode()}}
     response = model.generate_content([
         "Transcreva fielmente o que foi dito neste áudio em português. Retorne apenas a transcrição, sem comentários.",
@@ -119,8 +119,14 @@ async def telegram_webhook(
                     audio_bytes = await _get_bot().download_file(file_path)
                     text = await _transcrever_audio(audio_bytes, file_path)
                     logger.info(f"[TELEGRAM] Áudio transcrito: {text[:100]}")
+                else:
+                    logger.warning(f"[TELEGRAM] file_path vazio para file_id={file_id}. Resposta: {file_meta}")
+                    await _get_bot().send_message(chat_id, "⚠️ Não consegui baixar o áudio. Tente novamente ou envie como texto.")
+                    return {"ok": True}
             except Exception as e:
                 logger.error(f"[TELEGRAM] Erro ao transcrever áudio: {e}", exc_info=True)
+                await _get_bot().send_message(chat_id, f"⚠️ Erro ao transcrever áudio: {type(e).__name__}. Tente enviar como texto.")
+                return {"ok": True}
 
     if not text:
         return {"ok": True}

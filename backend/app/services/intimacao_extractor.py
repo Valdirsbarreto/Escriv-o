@@ -46,8 +46,8 @@ class IntimacaoExtractor:
             return self._ocr_tesseract_fallback(content, content_type)
 
     def _ocr_gemini(self, content: bytes, content_type: str) -> str:
-        """OCR via Gemini Vision (gemini-2.0-flash-lite)."""
-        model = genai.GenerativeModel("gemini-2.0-flash-lite")
+        """OCR via Gemini Vision (gemini-2.0-flash)."""
+        model = genai.GenerativeModel("gemini-2.0-flash")
 
         # Gemini aceita PDFs e imagens como inline_data
         mime = content_type if content_type else "application/pdf"
