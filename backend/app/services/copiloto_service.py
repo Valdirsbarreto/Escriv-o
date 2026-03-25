@@ -20,78 +20,6 @@ from app.core.prompts import (
 
 logger = logging.getLogger(__name__)
 
-# ── Detecção de intenção de geração ──────────────────────────────────────────
-
-_INTENT_GERAR: list[tuple[list[str], str]] = [
-    (["despacho saneador", "despacho sanead"], "despacho_saneador"),
-    (["relatório final", "relatorio final"], "relatorio_final"),
-    (["relatório parcial", "relatorio parcial"], "relatorio_parcial"),
-    (["ofício de requisição", "oficio de requisicao", "ofício requisição"], "oficio_requisicao"),
-    (["busca e apreensão", "busca e apreensao", "mandado de busca"], "mandado_busca"),
-    (["interceptação", "interceptacao"], "interceptacao_telefonica"),
-    (["sigilo bancário", "sigilo bancario", "quebra de sigilo"], "quebra_sigilo_bancario"),
-    (["prisão preventiva", "prisao preventiva"], "autorizacao_prisao"),
-    (["despacho"], "despacho_generico"),
-    (["ofício", "oficio"], "oficio_generico"),
-    (["relatório", "relatorio"], "relatorio_final"),
-]
-
-_VERBOS_GERAR = [
-    "faça", "faz", "elabore", "elabora", "redija", "redige",
-    "gere", "gera", "produza", "produz", "crie", "cria",
-    "escreva", "escreve", "prepare", "prepara", "minutar", "minuta",
-]
-
-_PALAVRAS_APROVACAO = [
-    "aprovado", "aprovar", "aprovei", "finalizar", "finalizado",
-    "ok finalizar", "salvar", "aceito", "perfeito, finalizar",
-]
-
-
-def _detectar_intencao_gerar(query: str) -> str | None:
-    q = query.lower().strip()
-    tem_verbo = any(v in q for v in _VERBOS_GERAR)
-    if not tem_verbo:
-        return None
-    for keywords, tipo in _INTENT_GERAR:
-        if any(kw in q for kw in keywords):
-            return tipo
-    return None
-
-
-def _eh_aprovacao(query: str) -> bool:
-    q = query.lower().strip()
-    return any(p in q for p in _PALAVRAS_APROVACAO)
-
-
-# ── Armazenamento de rascunho em Redis ───────────────────────────────────────
-
-async def _redis_client():
-    import redis.asyncio as aioredis
-    from app.core.config import settings
-    return aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-
-
-async def _salvar_rascunho(sessao_id: str, dados: dict):
-    r = await _redis_client()
-    import json
-    await r.set(f"copiloto:draft:{sessao_id}", json.dumps(dados, ensure_ascii=False), ex=86400)
-    await r.aclose()
-
-
-async def _obter_rascunho(sessao_id: str) -> dict | None:
-    r = await _redis_client()
-    import json
-    raw = await r.get(f"copiloto:draft:{sessao_id}")
-    await r.aclose()
-    return json.loads(raw) if raw else None
-
-
-async def _limpar_rascunho(sessao_id: str):
-    r = await _redis_client()
-    await r.delete(f"copiloto:draft:{sessao_id}")
-    await r.aclose()
-
 
 class CopilotoService:
     """
@@ -116,7 +44,6 @@ class CopilotoService:
         self,
         query: str,
         inquerito_id: str,
-        sessao_id: str = "",
         historico: List[Dict[str, str]] = None,
         numero_inquerito: str = "",
         estado_atual: str = "",
@@ -153,19 +80,6 @@ class CopilotoService:
             }
         """
         t_total = time.time()
-
-        # ── 0. Modo editor de documentos ──────────────────
-        if sessao_id:
-            draft = await _obter_rascunho(sessao_id)
-            if draft:
-                if _eh_aprovacao(query):
-                    return await self._aprovar_documento(draft, inquerito_id, sessao_id, numero_inquerito, db, t_total)
-                else:
-                    return await self._editar_documento(draft, query, inquerito_id, sessao_id, numero_inquerito, db, t_total)
-
-            tipo = _detectar_intencao_gerar(query)
-            if tipo:
-                return await self._gerar_documento(tipo, query, inquerito_id, sessao_id, numero_inquerito, db, t_total)
 
         # ── 1. Busca RAG ──────────────────────────────────
         logger.info(f"[COPILOTO] Buscando contexto para: {query[:80]}...")
@@ -302,150 +216,6 @@ class CopilotoService:
             "tokens_resposta": llm_result["tokens_resposta"],
             "custo_estimado": llm_result["custo_estimado"],
             "tempo_total_ms": tempo_total,
-        }
-
-    async def _obter_contexto_inquerito(self, inquerito_id: str, db) -> str:
-        """Busca síntese/resumo do caso para contexto de geração."""
-        contexto = ""
-        if db is not None:
-            try:
-                from app.services.summary_service import SummaryService
-                resumo = await SummaryService().obter_resumo_caso(db, uuid.UUID(inquerito_id))
-                if resumo:
-                    contexto = resumo[:6000]
-            except Exception as e:
-                logger.warning(f"[COPILOTO] Falha ao buscar resumo para geração: {e}")
-        return contexto or "Contexto do inquérito não disponível."
-
-    async def _gerar_documento(
-        self, tipo: str, query: str, inquerito_id: str,
-        sessao_id: str, numero_inquerito: str, db, t_total: float,
-    ) -> Dict[str, Any]:
-        from app.core.prompts import PROMPT_GERAR_DOCUMENTO
-        from app.services.agente_cautelar import TIPOS_CAUTELAR
-
-        titulo_tipo = TIPOS_CAUTELAR.get(tipo, tipo.replace("_", " ").title())
-        contexto = await self._obter_contexto_inquerito(inquerito_id, db)
-
-        prompt = PROMPT_GERAR_DOCUMENTO.format(
-            tipo_documento=titulo_tipo,
-            numero_inquerito=numero_inquerito,
-            instrucoes=query,
-            contexto=contexto,
-            exemplos_estilo="",
-        )
-
-        result = await self.llm_service.chat_completion(
-            messages=[{"role": "user", "content": prompt}],
-            tier="premium",
-            temperature=0.4,
-            max_tokens=4000,
-        )
-        texto = result["content"].strip()
-
-        draft = {"tipo": tipo, "titulo": titulo_tipo, "conteudo": texto, "versao": 1}
-        await _salvar_rascunho(sessao_id, draft)
-        logger.info(f"[COPILOTO] Rascunho '{titulo_tipo}' criado para sessão {sessao_id}")
-
-        return {
-            "resposta": texto,
-            "fontes": [],
-            "auditoria": None,
-            "modo": "edicao_documento",
-            "tipo_documento": tipo,
-            "versao_rascunho": 1,
-            "modelo": result["model"],
-            "tokens_prompt": result["tokens_prompt"],
-            "tokens_resposta": result["tokens_resposta"],
-            "custo_estimado": result["custo_estimado"],
-            "tempo_total_ms": int((time.time() - t_total) * 1000),
-        }
-
-    async def _editar_documento(
-        self, draft: dict, instrucao: str, inquerito_id: str,
-        sessao_id: str, numero_inquerito: str, db, t_total: float,
-    ) -> Dict[str, Any]:
-        from app.core.prompts import PROMPT_EDITAR_DOCUMENTO
-
-        versao_atual = draft["versao"]
-        contexto = await self._obter_contexto_inquerito(inquerito_id, db)
-
-        prompt = PROMPT_EDITAR_DOCUMENTO.format(
-            tipo_documento=draft["titulo"],
-            versao=versao_atual,
-            documento_atual=draft["conteudo"],
-            instrucao=instrucao,
-            contexto=contexto[:2000],
-            proxima_versao=versao_atual + 1,
-        )
-
-        result = await self.llm_service.chat_completion(
-            messages=[{"role": "user", "content": prompt}],
-            tier="premium",
-            temperature=0.3,
-            max_tokens=4000,
-        )
-        texto = result["content"].strip()
-
-        draft["conteudo"] = texto
-        draft["versao"] = versao_atual + 1
-        await _salvar_rascunho(sessao_id, draft)
-        logger.info(f"[COPILOTO] Rascunho '{draft['titulo']}' atualizado para v{draft['versao']}")
-
-        return {
-            "resposta": texto,
-            "fontes": [],
-            "auditoria": None,
-            "modo": "edicao_documento",
-            "tipo_documento": draft["tipo"],
-            "versao_rascunho": draft["versao"],
-            "modelo": result["model"],
-            "tokens_prompt": result["tokens_prompt"],
-            "tokens_resposta": result["tokens_resposta"],
-            "custo_estimado": result["custo_estimado"],
-            "tempo_total_ms": int((time.time() - t_total) * 1000),
-        }
-
-    async def _aprovar_documento(
-        self, draft: dict, inquerito_id: str,
-        sessao_id: str, numero_inquerito: str, db, t_total: float,
-    ) -> Dict[str, Any]:
-        from app.models.resultado_agente import ResultadoAgente
-
-        await _limpar_rascunho(sessao_id)
-
-        if db is not None:
-            try:
-                registro = ResultadoAgente(
-                    inquerito_id=uuid.UUID(inquerito_id),
-                    tipo_agente="copiloto_editor",
-                    resultado_json={"tipo": draft["tipo"], "versoes": draft["versao"]},
-                    texto_gerado=draft["conteudo"],
-                    modelo_llm="premium",
-                )
-                db.add(registro)
-                await db.commit()
-                logger.info(f"[COPILOTO] Documento '{draft['titulo']}' aprovado e salvo.")
-            except Exception as e:
-                logger.warning(f"[COPILOTO] Falha ao salvar documento aprovado: {e}")
-
-        confirmacao = (
-            f"✅ **{draft['titulo']}** aprovado e salvo nos autos do IP {numero_inquerito}.\n\n"
-            f"O documento (versão {draft['versao']}) foi registrado no sistema. "
-            f"Você pode copiá-lo acima ou acessá-lo em Cautelares."
-        )
-
-        return {
-            "resposta": confirmacao,
-            "fontes": [],
-            "auditoria": None,
-            "modo": "documento_aprovado",
-            "tipo_documento": draft["tipo"],
-            "modelo": "—",
-            "tokens_prompt": 0,
-            "tokens_resposta": 0,
-            "custo_estimado": 0.0,
-            "tempo_total_ms": int((time.time() - t_total) * 1000),
         }
 
     async def _auditar_resposta(
