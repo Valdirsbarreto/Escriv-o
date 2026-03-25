@@ -1,6 +1,7 @@
 """
 Escrivão AI — Serviço: Extrator de Intimações
-OCR via Gemini Vision + extração LLM de dados estruturados de intimações.
+Gemini Vision extrai texto E dados estruturados em uma única chamada.
+Fallback: OCR Tesseract + DeepSeek para extração.
 """
 
 import base64
@@ -12,12 +13,29 @@ from typing import Optional
 import google.generativeai as genai
 
 from app.core.config import settings
-from app.core.prompts import PROMPT_EXTRACAO_INTIMACAO
-from app.services.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
 
-_GEMINI_OCR_PROMPT = (
+_PROMPT_EXTRACAO_DIRETA = """Você é um extrator especializado em intimações policiais brasileiras.
+
+Analise este documento e retorne APENAS um objeto JSON com os campos abaixo.
+
+Campos:
+- intimado_nome: nome completo da pessoa intimada (string ou null)
+- intimado_cpf: CPF apenas dígitos ou formato XXX.XXX.XXX-XX (string ou null)
+- intimado_qualificacao: "testemunha", "investigado", "vitima", "perito" ou "outro" (string ou null)
+- numero_inquerito: número do IP no formato DDD-NNNNNN/AAAA ou similar (string ou null)
+- data_oitiva: data/hora em ISO 8601 YYYY-MM-DDTHH:MM:00 — se só houver data use T09:00:00 (string ou null)
+- local_oitiva: endereço ou local da oitiva (string ou null)
+- texto_completo: transcrição fiel do documento completo (string)
+
+Regras:
+1. Não invente dados. Campo ausente = null.
+2. Para datas em português (ex: "15 de março de 2026 às 14h30") converta para ISO 8601.
+3. Retorne SOMENTE o JSON, sem markdown ou explicações.
+"""
+
+_PROMPT_OCR_ONLY = (
     "Você é um OCR especializado em documentos jurídicos brasileiros. "
     "Transcreva fielmente o texto completo desta intimação/documento policial, "
     "preservando nomes, datas, números de inquérito e endereços. "
@@ -26,42 +44,36 @@ _GEMINI_OCR_PROMPT = (
 
 
 class IntimacaoExtractor:
-    """Extrai dados estruturados de intimações a partir de PDF ou imagem."""
+    """
+    Extrai texto e dados estruturados de intimações via Gemini Vision.
+    Uma única chamada faz OCR + extração de campos em JSON.
+    """
 
     def __init__(self):
-        self.llm = LLMService()
         if settings.GEMINI_API_KEY:
             genai.configure(api_key=settings.GEMINI_API_KEY)
 
+    def _mime(self, content_type: str) -> str:
+        if content_type in ("image/jpg",):
+            return "image/jpeg"
+        return content_type or "application/pdf"
+
+    def _part(self, content: bytes, content_type: str) -> dict:
+        return {"inline_data": {"mime_type": self._mime(content_type), "data": base64.b64encode(content).decode()}}
+
     def extrair_texto(self, content: bytes, content_type: str) -> str:
-        """
-        Extrai texto via Gemini Vision (OCR). Funciona para PDF, PNG, JPG e TIFF.
-        Fallback para Tesseract em caso de falha.
-        """
-        # Gemini aceita PDF diretamente e imagens via inline_data
+        """OCR simples via Gemini Vision (usado como fallback quando extrair_tudo falha)."""
         try:
-            return self._ocr_gemini(content, content_type)
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content([_PROMPT_OCR_ONLY, self._part(content, content_type)])
+            texto = response.text.strip()
+            logger.info(f"[INTIMACAO] OCR Gemini extraiu {len(texto)} chars")
+            return texto
         except Exception as e:
-            logger.warning(f"[INTIMACAO] Gemini Vision falhou, tentando Tesseract: {e}")
+            logger.warning(f"[INTIMACAO] Gemini Vision OCR falhou, tentando Tesseract: {e}")
             return self._ocr_tesseract_fallback(content, content_type)
 
-    def _ocr_gemini(self, content: bytes, content_type: str) -> str:
-        """OCR via Gemini Vision (gemini-2.0-flash)."""
-        model = genai.GenerativeModel("gemini-1.5-flash")
-
-        # Gemini aceita PDFs e imagens como inline_data
-        mime = content_type if content_type else "application/pdf"
-        if mime in ("image/jpg",):
-            mime = "image/jpeg"
-
-        part = {"inline_data": {"mime_type": mime, "data": base64.b64encode(content).decode()}}
-        response = model.generate_content([_GEMINI_OCR_PROMPT, part])
-        texto = response.text.strip()
-        logger.info(f"[INTIMACAO] Gemini Vision extraiu {len(texto)} chars")
-        return texto
-
     def _ocr_tesseract_fallback(self, content: bytes, content_type: str) -> str:
-        """Fallback: Tesseract para imagens ou extração nativa para PDFs."""
         is_image = content_type in ("image/png", "image/jpeg", "image/jpg", "image/tiff")
         if is_image:
             try:
@@ -73,67 +85,65 @@ class IntimacaoExtractor:
             except Exception as e:
                 logger.error(f"[INTIMACAO] Tesseract falhou: {e}")
                 return ""
-
         from app.services.pdf_extractor import PDFExtractorService
         pdf_svc = PDFExtractorService()
         resultado = pdf_svc.extract_text(content)
         paginas = resultado.get("paginas", [])
-        paginas_ocr = [p["numero"] for p in paginas if p.get("precisa_ocr")]
-        if paginas_ocr:
-            textos_ocr = pdf_svc.apply_ocr(content, paginas_ocr)
-            for p in paginas:
-                if p["numero"] in textos_ocr:
-                    p["texto"] = textos_ocr[p["numero"]]
         return "\n\n".join(p["texto"] for p in paginas if p.get("texto"))
+
+    def extrair_tudo(self, content: bytes, content_type: str) -> tuple[str, dict]:
+        """
+        Chama Gemini Vision UMA VEZ e retorna (texto_completo, dados_estruturados).
+        Elimina a dependência do DeepSeek para extração de dados.
+        """
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content([_PROMPT_EXTRACAO_DIRETA, self._part(content, content_type)])
+            raw = response.text.strip()
+
+            # Remove markdown se presente
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            raw = raw.strip()
+
+            dados_raw = json.loads(raw)
+            texto = dados_raw.pop("texto_completo", "") or ""
+            logger.info(f"[INTIMACAO] Gemini Vision extraiu texto ({len(texto)} chars) + dados estruturados")
+            return texto, dados_raw
+
+        except Exception as e:
+            logger.error(f"[INTIMACAO] extrair_tudo falhou: {e} — usando fallback")
+            return "", {}
 
     async def extrair_dados(self, texto: str) -> dict:
         """
-        Usa LLM (tier econômico) para extrair campos estruturados da intimação.
-
-        Retorna:
-        {
-            "intimado_nome": str | None,
-            "intimado_cpf": str | None,
-            "intimado_qualificacao": str | None,
-            "numero_inquerito": str | None,
-            "data_oitiva": datetime | None,
-            "local_oitiva": str | None,
-        }
+        Fallback: extrai dados de texto já transcrito via Gemini (sem Vision).
+        Usado quando extrair_tudo não retornou dados suficientes.
         """
-        prompt = PROMPT_EXTRACAO_INTIMACAO.format(texto=texto[:4000])
-
-        resposta = await self.llm.chat_completion(
-            messages=[{"role": "user", "content": prompt}],
-            tier="economico",
-            temperature=0.0,
-            max_tokens=500,
-            json_mode=True,
-        )
-
-        raw = resposta.get("content", "").strip()
-
-        # Remove markdown code fences se presentes
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        raw = raw.strip()
-
+        from app.core.prompts import PROMPT_EXTRACAO_INTIMACAO
         try:
-            dados = json.loads(raw)
-        except json.JSONDecodeError:
-            logger.warning(f"[INTIMACAO] LLM retornou JSON inválido: {raw[:200]}")
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            prompt = PROMPT_EXTRACAO_INTIMACAO.format(texto=texto[:4000])
+            response = model.generate_content(prompt)
+            raw = response.text.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            dados = json.loads(raw.strip())
+        except Exception as e:
+            logger.warning(f"[INTIMACAO] extrair_dados fallback falhou: {e}")
             dados = {}
 
-        # Converte data_oitiva string → datetime
+        return self._normalizar_dados(dados)
+
+    def _normalizar_dados(self, dados: dict) -> dict:
         data_oitiva: Optional[datetime] = None
         data_str = dados.get("data_oitiva")
         if data_str:
-            for fmt in (
-                "%Y-%m-%dT%H:%M:%S",
-                "%Y-%m-%dT%H:%M",
-                "%Y-%m-%d",
-            ):
+            for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d"):
                 try:
                     data_oitiva = datetime.strptime(data_str, fmt)
                     break

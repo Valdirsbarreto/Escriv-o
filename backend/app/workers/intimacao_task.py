@@ -89,22 +89,21 @@ def processar_intimacao(self, intimacao_id: str):
                 except Exception as e:
                     logger.error(f"[INTIMACAO-TASK] Erro ao baixar documento: {e}")
 
-            # ── 2. OCR + extração LLM ─────────────────────────────────
+            # ── 2. OCR + extração via Gemini Vision (única chamada) ───────
             extractor = IntimacaoExtractor()
             texto = ""
+            dados = {}
             if content:
                 try:
-                    texto = extractor.extrair_texto(content, content_type)
-                    logger.info(f"[INTIMACAO-TASK] Texto extraído: {len(texto)} chars")
+                    texto, dados_raw = extractor.extrair_tudo(content, content_type)
+                    logger.info(f"[INTIMACAO-TASK] Gemini Vision extraiu {len(texto)} chars + dados estruturados")
+                    if dados_raw:
+                        dados = extractor._normalizar_dados(dados_raw)
+                    elif texto:
+                        # Fallback: extração só de texto → LLM tenta estruturar
+                        dados = await extractor.extrair_dados(texto)
                 except Exception as e:
-                    logger.error(f"[INTIMACAO-TASK] Erro na extração de texto: {e}")
-
-            dados = {}
-            if texto:
-                try:
-                    dados = await extractor.extrair_dados(texto)
-                except Exception as e:
-                    logger.error(f"[INTIMACAO-TASK] Erro na extração LLM: {e}")
+                    logger.error(f"[INTIMACAO-TASK] Erro na extração Gemini Vision: {e}")
 
             # Salvar texto e dados extraídos na intimação
             intim.texto_extraido = texto[:10000] if texto else None
