@@ -29,7 +29,7 @@ async def _transcrever_audio(audio_bytes: bytes, file_path: str) -> str:
     mime_map = {"ogg": "audio/ogg", "mp3": "audio/mp3", "m4a": "audio/mp4", "wav": "audio/wav"}
     mime = mime_map.get(ext, "audio/ogg")
 
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    model = genai.GenerativeModel("gemini-1.5-flash")
     part = {"inline_data": {"mime_type": mime, "data": base64.b64encode(audio_bytes).decode()}}
     response = model.generate_content([
         "Transcreva fielmente o que foi dito neste áudio em português. Retorne apenas a transcrição, sem comentários.",
