@@ -156,6 +156,7 @@ async def enviar_mensagem(
     resultado = await copiloto.processar_mensagem(
         query=dados.mensagem,
         inquerito_id=str(sessao.inquerito_id),
+        sessao_id=str(sessao.id),
         historico=historico,
         numero_inquerito=inquerito.numero,
         estado_atual=inquerito.estado_atual,

@@ -26,6 +26,10 @@ TIPOS_CAUTELAR = {
     "quebra_sigilo_bancario": "Requerimento de Quebra de Sigilo Bancário",
     "autorizacao_prisao": "Requerimento de Prisão Preventiva",
     "oficio_generico": "Ofício",
+    "despacho_saneador": "Despacho Saneador",
+    "despacho_generico": "Despacho",
+    "relatorio_final": "Relatório Final de Inquérito",
+    "relatorio_parcial": "Relatório Parcial de Investigação",
 }
 
 

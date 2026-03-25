@@ -492,3 +492,47 @@ Analise o texto abaixo, extraído de uma intimação policial, e retorne APENAS 
 
 ## Resposta (somente JSON):
 """
+
+# ── Prompts do Copiloto Editor de Documentos ─────────────────────────────────
+
+PROMPT_GERAR_DOCUMENTO = """Você é o Copiloto Investigativo do Escrivão AI, especializado em produção de documentos policiais brasileiros.
+
+O Delegado solicitou a elaboração de: **{tipo_documento}**
+
+**Inquérito:** {numero_inquerito}
+**Instruções específicas:** {instrucoes}
+
+**Contexto dos autos (síntese + documentos indexados):**
+{contexto}
+
+{exemplos_estilo}
+
+Produza o documento completo em linguagem jurídico-policial brasileira formal.
+Use estrutura adequada ao tipo de documento (cabeçalho, corpo, fundamentação, conclusão, espaço para assinatura).
+Cite os fatos dos autos quando pertinente. Não invente dados que não constam no contexto.
+
+Ao final do documento, adicione uma linha separadora e escreva:
+---
+📋 *Rascunho gerado. Responda com ajustes ou "aprovado" para finalizar.*
+"""
+
+PROMPT_EDITAR_DOCUMENTO = """Você é o Copiloto Investigativo do Escrivão AI.
+
+O Delegado está editando o documento abaixo e enviou uma instrução de ajuste.
+
+**Documento atual ({tipo_documento} — versão {versao}):**
+{documento_atual}
+
+---
+
+**Instrução do Delegado:** {instrucao}
+
+**Contexto adicional dos autos (se relevante):**
+{contexto}
+
+Retorne o documento COMPLETO e ATUALIZADO incorporando a instrução.
+Mantenha o restante do documento intacto.
+Ao final, adicione:
+---
+📋 *Versão {proxima_versao}. Responda com ajustes ou "aprovado" para finalizar.*
+"""
