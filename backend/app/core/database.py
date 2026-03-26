@@ -38,16 +38,21 @@ _is_remote = "supabase" in _db_url or "localhost" not in _db_url
 
 _engine_kwargs = {
     "echo": settings.APP_ENV == "development",
-    "pool_size": 10,
-    "max_overflow": 5,
+    "pool_size": 5,
+    "max_overflow": 10,
     "pool_pre_ping": True,
+    "pool_recycle": 300,   # recicla conexões a cada 5min (evita conexões mortas)
+    "pool_timeout": 30,    # espera até 30s por conexão do pool
 }
 
 if _is_remote:
     ssl_context = ssl.create_default_context()
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
-    _engine_kwargs["connect_args"] = {"ssl": ssl_context}
+    _engine_kwargs["connect_args"] = {
+        "ssl": ssl_context,
+        "timeout": 10,  # asyncpg: timeout de conexão em segundos
+    }
 
 engine = create_async_engine(_db_url, **_engine_kwargs)
 
