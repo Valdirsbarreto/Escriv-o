@@ -38,8 +38,8 @@ _is_remote = "supabase" in _db_url or "localhost" not in _db_url
 
 _engine_kwargs = {
     "echo": settings.APP_ENV == "development",
-    "pool_size": 5,
-    "max_overflow": 10,
+    "pool_size": 2,
+    "max_overflow": 3,     # máximo 5 conexões total — Supabase free tier suporta ~6
     "pool_pre_ping": True,
     "pool_recycle": 300,   # recicla conexões a cada 5min (evita conexões mortas)
     "pool_timeout": 30,    # espera até 30s por conexão do pool

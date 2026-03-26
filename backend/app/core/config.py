@@ -47,13 +47,13 @@ class Settings(BaseSettings):
 
     # ── LLM Camada Standard ────────────────────────────────
     LLM_STANDARD_PROVIDER: str = "google"
-    LLM_STANDARD_MODEL: str = "gemini-1.5-flash"
+    LLM_STANDARD_MODEL: str = "gemini-2.0-flash"
     LLM_STANDARD_BASE_URL: str = "https://generativelanguage.googleapis.com"
     LLM_STANDARD_API_KEY: Optional[str] = None
 
     # ── LLM Camada Premium ─────────────────────────────────
     LLM_PREMIUM_PROVIDER: str = "google"
-    LLM_PREMIUM_MODEL: str = "gemini-pro-latest"
+    LLM_PREMIUM_MODEL: str = "gemini-2.0-flash"
     LLM_PREMIUM_BASE_URL: str = "https://generativelanguage.googleapis.com"
     LLM_PREMIUM_API_KEY: Optional[str] = None
 
