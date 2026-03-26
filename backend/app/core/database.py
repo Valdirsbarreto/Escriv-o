@@ -61,11 +61,11 @@ if _is_remote:
     connect_args: dict = {
         "ssl": ssl_context,
         "timeout": 30,  # asyncpg: segundos para estabelecer a conexão
+        "statement_cache_size": 0,  # desabilita prepared statements nomeados (compatível com PgBouncer em qualquer modo)
     }
 
     if _is_pooler:
-        # PgBouncer em transaction mode não suporta prepared statements
-        connect_args["statement_cache_size"] = 0
+        # PgBouncer em transaction mode: desabilita JIT também
         connect_args["server_settings"] = {"jit": "off"}
 
     _engine_kwargs["connect_args"] = connect_args
