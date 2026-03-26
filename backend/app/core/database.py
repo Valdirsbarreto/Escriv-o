@@ -31,6 +31,12 @@ def _encode_password_in_url(url: str) -> str:
 
 
 _db_url = _encode_password_in_url(settings.DATABASE_URL)
+
+# SQLAlchemy asyncio exige driver asyncpg — corrige esquema se necessário
+if _db_url.startswith("postgresql://") or _db_url.startswith("postgres://"):
+    _db_url = _db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    _db_url = _db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+
 _parsed = urlparse(_db_url)
 
 _is_remote = "supabase" in _db_url or "localhost" not in _db_url
