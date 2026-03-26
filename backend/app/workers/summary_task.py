@@ -40,6 +40,8 @@ def generate_summaries_task(self, inquerito_id: str, documento_id: str):
 
         # Engine async dedicado pro worker
         async_url = _encode_password_in_url(settings.DATABASE_URL)
+        async_url = async_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        async_url = async_url.replace("postgres://", "postgresql+asyncpg://", 1)
 
         import ssl
         connect_args = {}
@@ -169,6 +171,8 @@ def generate_analise_task(self, inquerito_id: str):
         from app.core.prompts import PROMPT_SINTESE_INVESTIGATIVA
 
         async_url = _encode_password_in_url(settings.DATABASE_URL)
+        async_url = async_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        async_url = async_url.replace("postgres://", "postgresql+asyncpg://", 1)
 
         import ssl
         connect_args = {}

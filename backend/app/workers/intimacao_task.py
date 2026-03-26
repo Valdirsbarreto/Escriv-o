@@ -41,6 +41,8 @@ def processar_intimacao(self, intimacao_id: str):
         from app.services.storage import StorageService
 
         async_url = _encode_password_in_url(settings.DATABASE_URL)
+        async_url = async_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        async_url = async_url.replace("postgres://", "postgresql+asyncpg://", 1)
 
         import ssl
         connect_args = {}
