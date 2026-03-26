@@ -10,7 +10,8 @@ import time
 from typing import List, Dict, Optional, Any
 
 import httpx
-import google.generativeai as genai
+from google import genai
+from google.genai import types as genai_types
 
 from app.core.config import settings
 
@@ -42,8 +43,7 @@ class LLMService:
         self.premium_api_key = settings.LLM_PREMIUM_API_KEY
         self.premium_provider = settings.LLM_PREMIUM_PROVIDER
 
-        if settings.GEMINI_API_KEY:
-            genai.configure(api_key=settings.GEMINI_API_KEY)
+        self._genai_client = genai.Client(api_key=settings.GEMINI_API_KEY) if settings.GEMINI_API_KEY else None
 
     async def chat_completion(
         self,
@@ -174,30 +174,19 @@ class LLMService:
                     system_instruction = msg["content"]
                 else:
                     role = "user" if msg["role"] == "user" else "model"
-                    gemini_messages.append({"role": role, "parts": [msg["content"]]})
+                    gemini_messages.append({"role": role, "parts": [{"text": msg["content"]}]})
 
-            generation_config = {
-                "temperature": temperature,
-                "max_output_tokens": max_tokens,
-            }
-            
-            if json_mode:
-                generation_config["response_mime_type"] = "application/json"
-
-            # Nota: O modelo no settings pode vir como 'gemini-1.5-flash' ou 'models/gemini-1.5-flash'
-            model_name = model
-
-            gemini_model = genai.GenerativeModel(
-                model_name=model_name,
-                system_instruction=system_instruction
+            config = genai_types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+                response_mime_type="application/json" if json_mode else None,
             )
-            
-            # Executar chamada (usando thread pool se necessário, mas genai é síncrono por padrão)
-            # Para manter assincronismo real, poderíamos usar loop.run_in_executor
-            # No entanto, para esse MVP, faremos a chamada direta.
-            response = gemini_model.generate_content(
-                gemini_messages,
-                generation_config=generation_config
+
+            response = self._genai_client.models.generate_content(
+                model=model,
+                contents=gemini_messages,
+                config=config,
             )
 
             tempo_ms = int((time.time() - t0) * 1000)

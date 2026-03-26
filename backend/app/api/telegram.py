@@ -18,23 +18,23 @@ router = APIRouter(prefix="/telegram", tags=["Telegram Bot"])
 
 async def _transcrever_audio(audio_bytes: bytes, file_path: str) -> str:
     """Transcreve áudio de voz usando Gemini Vision (suporta OGG/MP3/M4A)."""
-    import base64
-    import google.generativeai as genai
+    from google import genai as _genai
+    from google.genai import types as _genai_types
     from app.core.config import settings as _s
 
-    if _s.GEMINI_API_KEY:
-        genai.configure(api_key=_s.GEMINI_API_KEY)
-
+    client = _genai.Client(api_key=_s.GEMINI_API_KEY)
     ext = file_path.rsplit(".", 1)[-1].lower() if "." in file_path else "ogg"
     mime_map = {"ogg": "audio/ogg", "mp3": "audio/mp3", "m4a": "audio/mp4", "wav": "audio/wav"}
     mime = mime_map.get(ext, "audio/ogg")
 
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    part = {"inline_data": {"mime_type": mime, "data": base64.b64encode(audio_bytes).decode()}}
-    response = model.generate_content([
-        "Transcreva fielmente o que foi dito neste áudio em português. Retorne apenas a transcrição, sem comentários.",
-        part,
-    ])
+    part = _genai_types.Part.from_bytes(data=audio_bytes, mime_type=mime)
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=[
+            "Transcreva fielmente o que foi dito neste áudio em português. Retorne apenas a transcrição, sem comentários.",
+            part,
+        ],
+    )
     return response.text.strip()
 
 _bot = None
