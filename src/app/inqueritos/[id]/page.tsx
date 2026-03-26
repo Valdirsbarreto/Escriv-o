@@ -369,6 +369,7 @@ export default function InqueritoDetalhePage() {
   };
 
   if (loading) return <div className="p-8 text-zinc-500 animate-pulse">Carregando autos...</div>;
+  if (!inquerito) return null;
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 h-full flex flex-col">
