@@ -49,6 +49,9 @@ Ações disponíveis:
 - listar_inqueritos: Lista inquéritos cadastrados. Parâmetros: {{}}
 - status_inquerito: Detalhes de um inquérito específico. Parâmetros: {{"numero_ip": "ex: 915-001234/2024"}}
 - busca_autos: Busca semântica nos documentos de um inquérito. Parâmetros: {{"numero_ip": "número (use inquerito_atual se já mencionado)", "query": "o que pesquisar"}}
+- sintese_investigativa: Consulta ou gera a síntese investigativa completa de um IP. Use quando pedir "síntese", "resumo do caso", "análise do IP", "relatório de situação". Parâmetros: {{"numero_ip": "número do IP (use inquerito_atual se mencionado antes)"}}
+- gerar_cautelar: Gera minuta de ato cautelar/processual policial. Use para: ofício, requisição, mandado de busca, interceptação telefônica, quebra de sigilo bancário, prisão preventiva. Parâmetros: {{"numero_ip": "número do IP", "tipo_cautelar": "oficio_requisicao|mandado_busca|interceptacao_telefonica|quebra_sigilo_bancario|autorizacao_prisao|oficio_generico", "instrucoes": "instruções livres do delegado sobre o conteúdo"}}
+- despachar_inquerito: Avança ou muda o estado de um inquérito no sistema. Use para: despachar, avançar, mudar fase, mandar para investigação/relatório/etc. Parâmetros: {{"numero_ip": "número do IP", "novo_estado": "triagem|investigacao|diligencias|analise|relatorio|encerramento|arquivamento"}}
 - agenda: Próximas oitivas, audiências e intimações. Parâmetros: {{}}
 - ficha_pessoa: Consulta pessoa nos índices do inquérito. Parâmetros: {{"nome": "nome da pessoa", "numero_ip": "inquérito (use inquerito_atual se já mencionado)", "cpf": "CPF se informado (opcional)"}}
 - osint_avulso: Consulta OSINT avulsa por CPF, CNPJ, placa, nome ou RG. Use para QUALQUER pedido informal de pesquisa de pessoa ou veículo: "ve esse cpf", "pesquisa essa placa", "quem é esse cara", "puxa o cpf", "consulta esse número", "me passa os dados de", "verifica essa placa", etc. Extraia CPF/CNPJ/placa/nome do texto ignorando pontuação. Parâmetros: {{"cpf": "somente dígitos, se informado", "cnpj": "somente dígitos, se informado", "placa": "placa do veículo, se informado", "nome": "nome completo, se informado", "rg": "RG, se informado"}}
@@ -58,9 +61,16 @@ Ações disponíveis:
 Exemplos de classificação (português informal):
 - "ve esse cpf pra mim: 86512587715" → {{"acao": "osint_avulso", "parametros": {{"cpf": "86512587715"}}}}
 - "puxa a placa ABC1D23" → {{"acao": "osint_avulso", "parametros": {{"placa": "ABC1D23"}}}}
-- "quem é João Silva?" → {{"acao": "osint_avulso", "parametros": {{"nome": "João Silva"}}}}
 - "lista os IPs" → {{"acao": "listar_inqueritos", "parametros": {{}}}}
 - "o que tem no IP 921-00332 sobre o suspeito?" → {{"acao": "busca_autos", "parametros": {{"numero_ip": "921-00332", "query": "suspeito"}}}}
+- "gera a síntese do 915-001" → {{"acao": "sintese_investigativa", "parametros": {{"numero_ip": "915-001"}}}}
+- "resumo do caso" → {{"acao": "sintese_investigativa", "parametros": {{"numero_ip": "{inquerito_atual}"}}}}
+- "faz um ofício de requisição pro 915-001 pedindo extratos bancários do suspeito" → {{"acao": "gerar_cautelar", "parametros": {{"numero_ip": "915-001", "tipo_cautelar": "oficio_requisicao", "instrucoes": "pedindo extratos bancários do suspeito"}}}}
+- "manda um mandado de busca pro juiz" → {{"acao": "gerar_cautelar", "parametros": {{"numero_ip": "{inquerito_atual}", "tipo_cautelar": "mandado_busca", "instrucoes": "conforme os fatos do inquérito"}}}}
+- "faz uma requisição de quebra de sigilo bancário da conta do investigado" → {{"acao": "gerar_cautelar", "parametros": {{"numero_ip": "{inquerito_atual}", "tipo_cautelar": "quebra_sigilo_bancario", "instrucoes": "conta do investigado"}}}}
+- "despacha o 915-001 para investigação" → {{"acao": "despachar_inquerito", "parametros": {{"numero_ip": "915-001", "novo_estado": "investigacao"}}}}
+- "manda esse IP pra fase de relatório" → {{"acao": "despachar_inquerito", "parametros": {{"numero_ip": "{inquerito_atual}", "novo_estado": "relatorio"}}}}
+- "arquiva o 915-001" → {{"acao": "despachar_inquerito", "parametros": {{"numero_ip": "915-001", "novo_estado": "arquivamento"}}}}
 
 IMPORTANTE: Retorne APENAS JSON válido. Nunca retorne conversa quando o usuário pedir para pesquisar, ver, consultar, puxar ou verificar um CPF, CNPJ, placa ou nome."""
 
@@ -161,6 +171,27 @@ class TelegramCopilotoService:
                 if numero:
                     ctx["inquerito_atual"] = numero
                 resposta = await self._ficha_pessoa(nome, cpf, numero, db)
+
+            elif acao == "sintese_investigativa":
+                numero = params.get("numero_ip") or ctx.get("inquerito_atual", "")
+                if numero:
+                    ctx["inquerito_atual"] = numero
+                resposta = await self._sintese_investigativa(numero, db)
+
+            elif acao == "gerar_cautelar":
+                numero = params.get("numero_ip") or ctx.get("inquerito_atual", "")
+                tipo = params.get("tipo_cautelar", "oficio_generico")
+                instrucoes = params.get("instrucoes", "")
+                if numero:
+                    ctx["inquerito_atual"] = numero
+                resposta = await self._gerar_cautelar(numero, tipo, instrucoes, db)
+
+            elif acao == "despachar_inquerito":
+                numero = params.get("numero_ip") or ctx.get("inquerito_atual", "")
+                novo_estado = params.get("novo_estado", "")
+                if numero:
+                    ctx["inquerito_atual"] = numero
+                resposta = await self._despachar_inquerito(numero, novo_estado, db)
 
             elif acao == "osint_avulso":
                 resposta = await self._osint_avulso(params)
@@ -522,6 +553,126 @@ class TelegramCopilotoService:
         return "\n".join(partes)
 
 
+    # ── Ação: síntese investigativa ───────────────────────────────────────────
+
+    async def _sintese_investigativa(self, numero_ip: str, db: AsyncSession) -> str:
+        if not numero_ip:
+            return "ℹ️ Informe o número do IP. Ex: <i>síntese do IP 915-001/2024</i>"
+
+        result = await db.execute(
+            select(Inquerito).where(Inquerito.numero.ilike(f"%{numero_ip.strip()}%"))
+        )
+        ip = result.scalars().first()
+        if not ip:
+            return f"❌ Inquérito <code>{_esc(numero_ip)}</code> não encontrado."
+
+        try:
+            from app.services.summary_service import SummaryService
+            resumo = await SummaryService().obter_resumo_caso(db, ip.id)
+        except Exception as e:
+            logger.error(f"[TG-COPILOTO] Erro ao buscar síntese: {e}", exc_info=True)
+            return f"⚠️ Erro ao consultar síntese: {_esc(str(e)[:200])}"
+
+        if not resumo:
+            return (
+                f"⚠️ Síntese não disponível para o IP <code>{_esc(ip.numero)}</code>.\n"
+                "Acesse a interface web e clique em <b>✨ Gerar Síntese</b>."
+            )
+
+        preview = resumo[:3200]
+        if len(resumo) > 3200:
+            preview += "\n\n<i>… (acesse a interface web para a síntese completa)</i>"
+
+        return f"📊 <b>Síntese — IP {_esc(ip.numero)}</b>\n\n{_esc(preview)}"
+
+    # ── Ação: gerar cautelar ──────────────────────────────────────────────────
+
+    _TIPOS_CAUTELAR_VALIDOS = {
+        "oficio_requisicao", "mandado_busca", "interceptacao_telefonica",
+        "quebra_sigilo_bancario", "autorizacao_prisao", "oficio_generico",
+    }
+
+    async def _gerar_cautelar(
+        self, numero_ip: str, tipo_cautelar: str, instrucoes: str, db: AsyncSession
+    ) -> str:
+        if not numero_ip:
+            return (
+                "ℹ️ Informe o IP e o tipo de ato.\n"
+                "Ex: <i>faz um ofício de requisição para o IP 915-001/2024</i>"
+            )
+
+        result = await db.execute(
+            select(Inquerito).where(Inquerito.numero.ilike(f"%{numero_ip.strip()}%"))
+        )
+        ip = result.scalars().first()
+        if not ip:
+            return f"❌ Inquérito <code>{_esc(numero_ip)}</code> não encontrado."
+
+        if tipo_cautelar not in self._TIPOS_CAUTELAR_VALIDOS:
+            tipo_cautelar = "oficio_generico"
+
+        try:
+            from app.services.agente_cautelar import AgenteCautelar
+            resultado = await AgenteCautelar().gerar_cautelar(
+                db=db,
+                inquerito_id=ip.id,
+                tipo_cautelar=tipo_cautelar,
+                instrucoes=instrucoes or "Redija conforme os fatos do inquérito.",
+            )
+        except Exception as e:
+            logger.error(f"[TG-COPILOTO] Erro ao gerar cautelar: {e}", exc_info=True)
+            return f"⚠️ Erro ao gerar o ato: {_esc(str(e)[:200])}"
+
+        titulo = resultado["tipo"]
+        texto = resultado["texto_gerado"]
+
+        # Telegram suporta até 4096 chars; enviar prévia + aviso
+        preview = texto[:1800]
+        if len(texto) > 1800:
+            preview += "\n\n<i>… (texto truncado — acesse Cautelares na interface web para o documento completo)</i>"
+
+        return (
+            f"📄 <b>{_esc(titulo)}</b>\n"
+            f"IP: <code>{_esc(ip.numero)}</code>\n\n"
+            f"{_esc(preview)}"
+        )
+
+    # ── Ação: despachar inquérito ─────────────────────────────────────────────
+
+    async def _despachar_inquerito(
+        self, numero_ip: str, novo_estado: str, db: AsyncSession
+    ) -> str:
+        if not numero_ip or not novo_estado:
+            return (
+                "ℹ️ Informe o IP e o novo estado.\n"
+                "Ex: <i>despacha o IP 915-001/2024 para investigação</i>\n"
+                f"Estados: {', '.join(ESTADO_LABEL.values())}"
+            )
+
+        result = await db.execute(
+            select(Inquerito).where(Inquerito.numero.ilike(f"%{numero_ip.strip()}%"))
+        )
+        ip = result.scalars().first()
+        if not ip:
+            return f"❌ Inquérito <code>{_esc(numero_ip)}</code> não encontrado."
+
+        if novo_estado not in ESTADO_LABEL:
+            return (
+                f"❌ Estado inválido: <code>{_esc(novo_estado)}</code>\n"
+                f"Estados válidos: {', '.join(ESTADO_LABEL.keys())}"
+            )
+
+        estado_anterior = ESTADO_LABEL.get(ip.estado_atual, ip.estado_atual)
+        ip.estado_atual = novo_estado
+        await db.commit()
+
+        estado_novo_label = ESTADO_LABEL[novo_estado]
+        return (
+            f"✅ IP <code>{_esc(ip.numero)}</code> despachado.\n"
+            f"{_esc(estado_anterior)} → <b>{_esc(estado_novo_label)}</b>"
+        )
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _esc(text: str) -> str:
@@ -534,16 +685,22 @@ def _esc(text: str) -> str:
 def _mensagem_ajuda() -> str:
     return (
         "🤖 <b>Escrivão AI — Copiloto Telegram</b>\n\n"
-        "<b>Comandos disponíveis:</b>\n"
+        "<b>📋 Inquéritos</b>\n"
         "• <i>listar inquéritos</i> — todos os IPs cadastrados\n"
-        "• <i>status do IP 915-001/2024</i> — detalhes de um inquérito\n"
-        "• <i>no IP 915-001/2024, o que sabemos sobre X?</i> — busca nos autos\n"
-        "• <i>agenda</i> ou <i>próximas audiências</i> — oitivas agendadas\n"
-        "• <i>ficha do João Silva no IP 915-001/2024</i> — perfil de pessoa\n"
-        "• <i>pesquisar CPF 000.000.000-00</i> — consulta OSINT avulsa\n"
-        "• <i>verificar placa ABC1234</i> — consulta veicular avulsa\n"
-        "• <i>pesquisar CNPJ 00.000.000/0001-00</i> — consulta empresarial\n\n"
-        "💡 <b>Dica:</b> Após mencionar um IP, mantenho o contexto "
-        "para as próximas perguntas sem precisar repetir o número.\n\n"
+        "• <i>status do IP 915-001/2024</i> — detalhes de um IP\n"
+        "• <i>síntese do IP 915-001/2024</i> — análise investigativa completa\n"
+        "• <i>despacha o 915-001 para investigação</i> — avança o estado\n\n"
+        "<b>🔎 Busca e pessoas</b>\n"
+        "• <i>no IP 915-001, o que sabemos sobre X?</i> — busca nos autos\n"
+        "• <i>ficha do João Silva no IP 915-001</i> — perfil de pessoa\n\n"
+        "<b>📄 Atos processuais</b>\n"
+        "• <i>faz um ofício de requisição para o 915-001</i> — gera minuta\n"
+        "• <i>manda um mandado de busca para o juiz</i> — gera minuta\n"
+        "• <i>requisição de quebra de sigilo bancário</i> — gera minuta\n\n"
+        "<b>🔍 OSINT e agenda</b>\n"
+        "• <i>pesquisar CPF 000.000.000-00</i> — consulta avulsa\n"
+        "• <i>verificar placa ABC1234</i> — consulta veicular\n"
+        "• <i>agenda</i> — próximas oitivas e audiências\n\n"
+        "💡 Após mencionar um IP, mantenho o contexto para as próximas mensagens.\n"
         "/ajuda — exibe esta mensagem"
     )
