@@ -45,7 +45,7 @@ def processar_intimacao(self, intimacao_id: str):
         async_url = async_url.replace("postgres://", "postgresql+asyncpg://", 1)
 
         import ssl
-        connect_args = {}
+        connect_args = {"statement_cache_size": 0}
         if "supabase" in async_url or "localhost" not in async_url:
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
@@ -53,7 +53,7 @@ def processar_intimacao(self, intimacao_id: str):
             connect_args["ssl"] = ctx
 
         engine = create_async_engine(
-            async_url, connect_args=connect_args if connect_args else {}, poolclass=NullPool
+            async_url, connect_args=connect_args, poolclass=NullPool
         )
         AsyncSession_ = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
