@@ -1,10 +1,10 @@
 """
 Escrivão AI — Serviço: Extrator de Intimações
 Gemini Vision extrai texto E dados estruturados em uma única chamada.
-Fallback: OCR Tesseract + DeepSeek para extração.
+Fallback: OCR Tesseract para extração de texto.
 """
 
-import base64
+import asyncio
 import json
 import logging
 from datetime import datetime
@@ -61,20 +61,6 @@ class IntimacaoExtractor:
     def _part(self, content: bytes, content_type: str):
         return genai_types.Part.from_bytes(data=content, mime_type=self._mime(content_type))
 
-    def extrair_texto(self, content: bytes, content_type: str) -> str:
-        """OCR simples via Gemini Vision (usado como fallback quando extrair_tudo falha)."""
-        try:
-            response = self._client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=[_PROMPT_OCR_ONLY, self._part(content, content_type)],
-            )
-            texto = response.text.strip()
-            logger.info(f"[INTIMACAO] OCR Gemini extraiu {len(texto)} chars")
-            return texto
-        except Exception as e:
-            logger.warning(f"[INTIMACAO] Gemini Vision OCR falhou, tentando Tesseract: {e}")
-            return self._ocr_tesseract_fallback(content, content_type)
-
     def _ocr_tesseract_fallback(self, content: bytes, content_type: str) -> str:
         is_image = content_type in ("image/png", "image/jpeg", "image/jpg", "image/tiff")
         if is_image:
@@ -93,15 +79,17 @@ class IntimacaoExtractor:
         paginas = resultado.get("paginas", [])
         return "\n\n".join(p["texto"] for p in paginas if p.get("texto"))
 
-    def extrair_tudo(self, content: bytes, content_type: str) -> tuple[str, dict]:
+    async def extrair_tudo(self, content: bytes, content_type: str) -> tuple[str, dict]:
         """
         Chama Gemini Vision UMA VEZ e retorna (texto_completo, dados_estruturados).
-        Elimina a dependência do DeepSeek para extração de dados.
+        Executa o SDK síncrono em thread separada para não bloquear o event loop.
         """
         try:
-            response = self._client.models.generate_content(
+            part = self._part(content, content_type)
+            response = await asyncio.to_thread(
+                self._client.models.generate_content,
                 model="gemini-2.0-flash",
-                contents=[_PROMPT_EXTRACAO_DIRETA, self._part(content, content_type)],
+                contents=[_PROMPT_EXTRACAO_DIRETA, part],
             )
             raw = response.text.strip()
 
@@ -129,7 +117,8 @@ class IntimacaoExtractor:
         from app.core.prompts import PROMPT_EXTRACAO_INTIMACAO
         try:
             prompt = PROMPT_EXTRACAO_INTIMACAO.format(texto=texto[:4000])
-            response = self._client.models.generate_content(
+            response = await asyncio.to_thread(
+                self._client.models.generate_content,
                 model="gemini-2.0-flash",
                 contents=prompt,
             )

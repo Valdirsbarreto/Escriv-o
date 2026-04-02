@@ -97,7 +97,7 @@ def processar_intimacao(self, intimacao_id: str):
             dados = {}
             if content:
                 try:
-                    texto, dados_raw = extractor.extrair_tudo(content, content_type)
+                    texto, dados_raw = await extractor.extrair_tudo(content, content_type)
                     logger.info(f"[INTIMACAO-TASK] Gemini Vision extraiu {len(texto)} chars + dados estruturados")
                     if dados_raw:
                         dados = extractor._normalizar_dados(dados_raw)
