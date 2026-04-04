@@ -183,7 +183,7 @@ class LLMService:
                 response_mime_type="application/json" if json_mode else None,
             )
 
-            response = self._genai_client.models.generate_content(
+            response = await self._genai_client.aio.models.generate_content(
                 model=model,
                 contents=gemini_messages,
                 config=config,
