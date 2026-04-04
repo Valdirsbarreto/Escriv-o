@@ -23,6 +23,7 @@ interface Intimacao {
 
 const STATUS_LABEL: Record<string, { label: string; className: string }> = {
   processando: { label: "Processando...", className: "bg-zinc-700/40 text-zinc-400 border-zinc-600/20" },
+  data_passada: { label: "Data passada", className: "bg-amber-500/15 text-amber-400 border-amber-500/20" },
   agendada: { label: "Agendada", className: "bg-blue-500/15 text-blue-400 border-blue-500/20" },
   realizada: { label: "Realizada", className: "bg-green-500/15 text-green-400 border-green-500/20" },
   cancelada: { label: "Cancelada", className: "bg-zinc-700/40 text-zinc-500 border-zinc-600/20" },
@@ -70,6 +71,7 @@ export default function IntimacoesPAge() {
   const [erro, setErro] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [deletando, setDeletando] = useState<string | null>(null);
+  const [confirmando, setConfirmando] = useState<string | null>(null);
 
   const carregar = async () => {
     setLoading(true);
@@ -93,6 +95,28 @@ export default function IntimacoesPAge() {
     const interval = setInterval(carregar, 5000);
     return () => clearInterval(interval);
   }, [intimacoes]);
+
+  const handleConfirmarAgenda = async (id: string) => {
+    setConfirmando(id);
+    try {
+      await api.post(`/intimacoes/${id}/confirmar-agenda`);
+      await carregar();
+    } catch {
+      alert("Erro ao criar evento no Google Agenda.");
+    } finally {
+      setConfirmando(null);
+    }
+  };
+
+  const handleIgnorarDataPassada = async (id: string) => {
+    setConfirmando(id);
+    try {
+      await api.post(`/intimacoes/${id}/ignorar-data-passada`);
+      await carregar();
+    } finally {
+      setConfirmando(null);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Cancelar esta intimação? O evento no Google Agenda também será removido.")) return;
@@ -214,6 +238,8 @@ export default function IntimacoesPAge() {
                       </div>
                     </div>
 
+                    </div>
+
                     {/* Ações */}
                     <div className="flex items-center gap-2 shrink-0">
                       {intim.google_event_url && (
@@ -250,6 +276,28 @@ export default function IntimacoesPAge() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Confirmação: data passada */}
+                  {intim.status === "data_passada" && (
+                    <div className="mt-3 flex items-center gap-3 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-xs text-amber-300">
+                      <AlertCircle size={14} className="shrink-0" />
+                      <span className="flex-1">A data da oitiva já passou. Deseja incluir no Google Agenda mesmo assim?</span>
+                      <button
+                        onClick={() => handleConfirmarAgenda(intim.id)}
+                        disabled={confirmando === intim.id}
+                        className="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/40 text-amber-200 font-medium transition-colors disabled:opacity-40 whitespace-nowrap"
+                      >
+                        {confirmando === intim.id ? <Loader2 size={12} className="animate-spin" /> : "Sim, agendar"}
+                      </button>
+                      <button
+                        onClick={() => handleIgnorarDataPassada(intim.id)}
+                        disabled={confirmando === intim.id}
+                        className="px-2 py-1 rounded hover:bg-zinc-700/50 text-zinc-400 transition-colors disabled:opacity-40"
+                      >
+                        Ignorar
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}

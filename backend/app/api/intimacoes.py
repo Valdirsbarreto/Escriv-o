@@ -311,6 +311,63 @@ async def cancelar_intimacao(
     await db.commit()
 
 
+@router.post("/{intimacao_id}/confirmar-agenda", response_model=IntimacaoResponse)
+async def confirmar_agenda_data_passada(
+    intimacao_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Confirma criação do evento no Google Agenda mesmo com data já passada.
+    Chamado quando o usuário decide agendar uma intimação com data anterior à importação.
+    """
+    intimacao = await db.get(Intimacao, intimacao_id)
+    if not intimacao:
+        raise HTTPException(status_code=404, detail="Intimação não encontrada")
+    if intimacao.status != "data_passada":
+        raise HTTPException(status_code=400, detail="Intimação não está aguardando confirmação de data passada")
+
+    try:
+        from app.services.google_calendar_service import GoogleCalendarService
+        gcal = GoogleCalendarService()
+        evento = gcal.criar_evento_oitiva(
+            intimado_nome=intimacao.intimado_nome,
+            data_oitiva=intimacao.data_oitiva,
+            numero_inquerito=intimacao.numero_inquerito_extraido,
+            local_oitiva=intimacao.local_oitiva,
+            qualificacao=intimacao.intimado_qualificacao,
+        )
+        intimacao.google_event_id = evento.get("event_id")
+        intimacao.google_event_url = evento.get("event_url")
+        intimacao.status = "agendada"
+        logger.info(f"[INTIMACAO] Evento criado após confirmação: {intimacao.google_event_id}")
+    except RuntimeError as e:
+        logger.warning(f"[INTIMACAO] Google Calendar não configurado: {e}")
+        intimacao.status = "sem_calendario"
+    except Exception as e:
+        logger.error(f"[INTIMACAO] Erro ao criar evento: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao criar evento no Google Agenda")
+
+    await db.commit()
+    await db.refresh(intimacao)
+    return intimacao
+
+
+@router.post("/{intimacao_id}/ignorar-data-passada", response_model=IntimacaoResponse)
+async def ignorar_data_passada(
+    intimacao_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Descarta a intimação com data passada sem criar evento no Google Agenda."""
+    intimacao = await db.get(Intimacao, intimacao_id)
+    if not intimacao:
+        raise HTTPException(status_code=404, detail="Intimação não encontrada")
+
+    intimacao.status = "dados_incompletos"
+    await db.commit()
+    await db.refresh(intimacao)
+    return intimacao
+
+
 @router.post("/{intimacao_id}/reprocessar")
 async def reprocessar_intimacao(
     intimacao_id: uuid.UUID,

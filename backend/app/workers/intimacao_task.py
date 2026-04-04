@@ -147,28 +147,34 @@ def processar_intimacao(self, intimacao_id: str):
 
             # ── 4. Criar evento no Google Agenda ──────────────────────
             if intim.data_oitiva and intim.intimado_nome:
-                try:
-                    gcal = GoogleCalendarService()
-                    evento = gcal.criar_evento_oitiva(
-                        intimado_nome=intim.intimado_nome,
-                        data_oitiva=intim.data_oitiva,
-                        numero_inquerito=intim.numero_inquerito_extraido,
-                        local_oitiva=intim.local_oitiva,
-                        qualificacao=intim.intimado_qualificacao,
+                # Se a data da oitiva já passou, aguarda confirmação do usuário
+                if intim.data_oitiva < datetime.utcnow():
+                    logger.warning(
+                        f"[INTIMACAO-TASK] Data passada ({intim.data_oitiva}) — aguardando confirmação"
                     )
-                    intim.google_event_id = evento.get("event_id")
-                    intim.google_event_url = evento.get("event_url")
-                    intim.status = "agendada"
-                    logger.info(
-                        f"[INTIMACAO-TASK] Evento Google criado: {intim.google_event_id}"
-                    )
-                except RuntimeError as e:
-                    # Google Calendar não configurado — registra e marca como pendente
-                    logger.warning(f"[INTIMACAO-TASK] Google Calendar não configurado: {e}")
-                    intim.status = "sem_calendario"
-                except Exception as e:
-                    logger.error(f"[INTIMACAO-TASK] Erro ao criar evento Google: {e}")
-                    intim.status = "erro_agenda"
+                    intim.status = "data_passada"
+                else:
+                    try:
+                        gcal = GoogleCalendarService()
+                        evento = gcal.criar_evento_oitiva(
+                            intimado_nome=intim.intimado_nome,
+                            data_oitiva=intim.data_oitiva,
+                            numero_inquerito=intim.numero_inquerito_extraido,
+                            local_oitiva=intim.local_oitiva,
+                            qualificacao=intim.intimado_qualificacao,
+                        )
+                        intim.google_event_id = evento.get("event_id")
+                        intim.google_event_url = evento.get("event_url")
+                        intim.status = "agendada"
+                        logger.info(
+                            f"[INTIMACAO-TASK] Evento Google criado: {intim.google_event_id}"
+                        )
+                    except RuntimeError as e:
+                        logger.warning(f"[INTIMACAO-TASK] Google Calendar não configurado: {e}")
+                        intim.status = "sem_calendario"
+                    except Exception as e:
+                        logger.error(f"[INTIMACAO-TASK] Erro ao criar evento Google: {e}")
+                        intim.status = "erro_agenda"
             else:
                 missing = []
                 if not intim.data_oitiva:
