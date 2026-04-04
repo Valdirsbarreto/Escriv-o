@@ -6,13 +6,17 @@ import { api } from "@/lib/api";
 
 interface Intimacao {
   id: string;
+  inquerito_id: string | null;
   intimado_nome: string | null;
   intimado_cpf: string | null;
   intimado_qualificacao: string | null;
   numero_inquerito_extraido: string | null;
   data_oitiva: string | null;
   local_oitiva: string | null;
+  google_event_id: string | null;
+  google_event_url: string | null;
   status: string;
+  created_at: string;
 }
 
 interface IntimacaoEditModalProps {

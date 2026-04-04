@@ -6,6 +6,7 @@ OCR + extração LLM + criação de evento no Google Agenda + vínculo ao inqué
 import asyncio
 import logging
 import uuid
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
