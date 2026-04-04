@@ -117,6 +117,52 @@ class CopilotoService:
             except Exception as e:
                 logger.warning(f"[COPILOTO] Falha ao buscar resumo do caso: {e}")
 
+        # Injetar índice estruturado de pessoas e empresas (consulta direta ao banco)
+        if db is not None:
+            try:
+                from sqlalchemy import select as sa_select
+                from app.models.pessoa import Pessoa
+                from app.models.empresa import Empresa
+
+                pessoas_result = await db.execute(
+                    sa_select(Pessoa)
+                    .where(Pessoa.inquerito_id == uuid.UUID(inquerito_id))
+                    .order_by(Pessoa.nome)
+                )
+                pessoas = pessoas_result.scalars().all()
+
+                empresas_result = await db.execute(
+                    sa_select(Empresa)
+                    .where(Empresa.inquerito_id == uuid.UUID(inquerito_id))
+                    .order_by(Empresa.nome)
+                )
+                empresas = empresas_result.scalars().all()
+
+                if pessoas or empresas:
+                    bloco = ["### Índice de Pessoas e Empresas Identificadas nos Autos\n"]
+
+                    if pessoas:
+                        bloco.append("**Pessoas físicas:**")
+                        for p in pessoas:
+                            papel = f" [{p.tipo_pessoa}]" if p.tipo_pessoa else ""
+                            cpf = f" CPF: {p.cpf}" if p.cpf else ""
+                            obs = f" — {p.observacoes}" if p.observacoes else ""
+                            bloco.append(f"- {p.nome}{papel}{cpf}{obs}")
+
+                    if empresas:
+                        bloco.append("\n**Pessoas jurídicas:**")
+                        for e in empresas:
+                            tipo = f" [{e.tipo_empresa}]" if e.tipo_empresa else ""
+                            cnpj = f" CNPJ: {e.cnpj}" if e.cnpj else ""
+                            bloco.append(f"- {e.nome}{tipo}{cnpj}")
+
+                    bloco.append("\n---")
+                    contexto_partes.append("\n".join(bloco))
+                    logger.info(f"[COPILOTO] Índice injetado: {len(pessoas)} pessoas, {len(empresas)} empresas")
+
+            except Exception as e:
+                logger.warning(f"[COPILOTO] Falha ao buscar índice de pessoas/empresas: {e}")
+
         for i, r in enumerate(resultados, 1):
             payload = r.get("payload", {})
             texto_preview = payload.get("texto_preview", "")
@@ -146,8 +192,9 @@ class CopilotoService:
             })
 
         contexto_rag = "\n".join(contexto_partes) if contexto_partes else (
-            "Nenhum trecho relevante encontrado nos autos indexados. "
-            "Informe ao delegado que a informação solicitada pode não constar nos documentos disponíveis."
+            "Nenhum contexto disponível ainda: documentos ainda não indexados ou coleção vetorial vazia. "
+            "Responda com base no conhecimento geral sobre investigação policial e informe que os autos "
+            "ainda não foram indexados para busca vetorial."
         )
 
         # ── 3. Montar mensagens ───────────────────────────
