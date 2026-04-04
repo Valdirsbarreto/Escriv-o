@@ -1,6 +1,3 @@
-[build]
-buildCommand = "PYTHONPATH=/app alembic upgrade head || true"
-
 [deploy]
 healthcheckPath = "/health"
 healthcheckTimeout = 100
