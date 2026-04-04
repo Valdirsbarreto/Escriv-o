@@ -24,7 +24,7 @@ async def _transcrever_audio(audio_bytes: bytes, file_path: str) -> str:
 
     client = _genai.Client(api_key=_s.GEMINI_API_KEY)
     ext = file_path.rsplit(".", 1)[-1].lower() if "." in file_path else "ogg"
-    mime_map = {"ogg": "audio/ogg", "mp3": "audio/mp3", "m4a": "audio/mp4", "wav": "audio/wav"}
+    mime_map = {"ogg": "audio/ogg", "mp3": "audio/mp3", "m4a": "audio/mp4", "wav": "audio/wav", "mp4": "video/mp4"}
     mime = mime_map.get(ext, "audio/ogg")
 
     part = _genai_types.Part.from_bytes(data=audio_bytes, mime_type=mime)
@@ -102,7 +102,7 @@ async def telegram_webhook(
     chat_id: int = message.get("chat", {}).get("id")
     user_id: int = message.get("from", {}).get("id")
     text: str = (message.get("text") or "").strip()
-    voice = message.get("voice") or message.get("audio")
+    voice = message.get("voice") or message.get("audio") or message.get("video_note")
 
     if not chat_id:
         return {"ok": True}
