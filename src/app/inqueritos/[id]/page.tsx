@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/app";
 import { api } from "@/lib/api";
 import { deleteInquerito } from "@/lib/api";
@@ -228,6 +228,7 @@ export default function InqueritoDetalhePage() {
   const [docViewer, setDocViewer] = useState<{ open: boolean; doc: any; conteudo: any | null; loading: boolean }>({ open: false, doc: null, conteudo: null, loading: false });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sintesePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const searchParams = useSearchParams();
 
   const fetchDados = async () => {
     try {
@@ -240,6 +241,19 @@ export default function InqueritoDetalhePage() {
       setDocumentos(docsRes.data);
       setIntimacoes(intRes.data);
       setInqueritoAtivoId(inqId);
+
+      // Se veio de intimação (?sintese=1), abre a síntese automaticamente
+      if (searchParams.get("sintese") === "1") {
+        const sintese = docsRes.data.find((d: any) => d.tipo_peca === "sintese_investigativa");
+        if (sintese) {
+          try {
+            const res = await api.get(`/inqueritos/${inqId}/documentos/${sintese.id}/conteudo`);
+            setDocViewer({ open: true, doc: sintese, conteudo: res.data, loading: false });
+          } catch {
+            setDocViewer({ open: true, doc: sintese, conteudo: null, loading: false });
+          }
+        }
+      }
     } catch (e) {
       console.error(e);
       alert("Inquérito não encontrado.");

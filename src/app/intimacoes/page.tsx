@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { CalendarPlus, Calendar, Clock, MapPin, User, ExternalLink, Loader2, AlertCircle, Trash2, ChevronRight, Pencil } from "lucide-react";
+import { CalendarPlus, Calendar, Clock, MapPin, User, ExternalLink, Loader2, AlertCircle, Trash2, ChevronRight, Pencil, Hash } from "lucide-react";
 import { IntimacaoUploadModal } from "@/components/IntimacaoUploadModal";
 import { IntimacaoEditModal } from "@/components/IntimacaoEditModal";
 import { CalendarioIntimacoes } from "@/components/CalendarioIntimacoes";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 interface Intimacao {
   id: string;
@@ -85,6 +86,7 @@ export default function IntimacoesPAge() {
   const [confirmando, setConfirmando] = useState<string | null>(null);
   const [editando, setEditando] = useState<Intimacao | null>(null);
   const [diaSelecionado, setDiaSelecionado] = useState<string | null>(null);
+  const router = useRouter();
 
   const carregar = async () => {
     setLoading(true);
@@ -243,7 +245,11 @@ export default function IntimacoesPAge() {
               return (
                 <div
                   key={intim.id}
-                  className="border border-zinc-800 rounded-xl p-4 bg-zinc-900/40 hover:bg-zinc-900/70 transition-colors"
+                  onDoubleClick={() => {
+                    if (intim.inquerito_id) router.push(`/inqueritos/${intim.inquerito_id}?sintese=1`);
+                  }}
+                  className={`border border-zinc-800 rounded-xl p-4 bg-zinc-900/40 hover:bg-zinc-900/70 transition-colors ${intim.inquerito_id ? "cursor-pointer" : ""}`}
+                  title={intim.inquerito_id ? "Duplo clique para abrir inquérito e síntese" : undefined}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-2 flex-1 min-w-0">
@@ -271,8 +277,14 @@ export default function IntimacoesPAge() {
                         </span>
                       </div>
 
-                      {/* Data, local, inquérito */}
+                      {/* Inquérito, data, local */}
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
+                        {intim.numero_inquerito_extraido && (
+                          <span className="flex items-center gap-1 font-medium text-zinc-400">
+                            <Hash size={11} className="shrink-0" />
+                            IP {intim.numero_inquerito_extraido}
+                          </span>
+                        )}
                         {intim.data_oitiva && (
                           <span className="flex items-center gap-1">
                             <Clock size={12} />
@@ -283,11 +295,6 @@ export default function IntimacoesPAge() {
                           <span className="flex items-center gap-1 truncate max-w-xs">
                             <MapPin size={12} className="shrink-0" />
                             {intim.local_oitiva}
-                          </span>
-                        )}
-                        {intim.numero_inquerito_extraido && (
-                          <span className="flex items-center gap-1">
-                            IP {intim.numero_inquerito_extraido}
                           </span>
                         )}
                       </div>
