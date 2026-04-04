@@ -22,6 +22,8 @@ COPY . .
 
 EXPOSE 8000
 
-# Permitir celery rodar como root no container e garantir que uvicorn seja o PID 1
-ENV C_FORCE_ROOT=1
-CMD ["sh", "-c", "celery -A app.workers.celery_app worker --loglevel=info --concurrency=2 & exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Tornar o script de inicialização executável
+RUN chmod +x start.sh
+
+# Usa o script start.sh como entrypoint para executar celery e uvicorn
+CMD ["./start.sh"]
