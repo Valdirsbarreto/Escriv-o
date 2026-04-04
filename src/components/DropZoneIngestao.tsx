@@ -236,7 +236,7 @@ export function DropZoneIngestao() {
         className={cn(
           "relative border-2 border-dashed rounded-2xl p-10 text-center transition-all duration-300 cursor-pointer group",
           isDragActive ? "border-blue-500 bg-blue-500/10 scale-[1.01]"
-            : stage === "concluido" ? "border-green-500/60 bg-green-500/5"
+            : stage === "concluido" ? "border-blue-500/60 bg-blue-500/5"
             : isOrquestrando ? "border-blue-500/40 bg-blue-500/5 cursor-not-allowed"
             : isNetworkError ? "border-orange-500/60 bg-orange-500/5"
             : stage === "erro" ? "border-red-500/60 bg-red-500/5"
@@ -251,7 +251,7 @@ export function DropZoneIngestao() {
           ) : isOrquestrando ? (
             <Brain className="w-14 h-14 text-blue-400 animate-pulse" />
           ) : stage === "concluido" ? (
-            <CheckCircle2 className="w-14 h-14 text-green-400 animate-bounce" />
+            <Loader2 className="w-14 h-14 text-blue-400 animate-spin" />
           ) : isNetworkError ? (
             <WifiOff className="w-14 h-14 text-orange-400" />
           ) : stage === "erro" ? (
@@ -318,13 +318,11 @@ export function DropZoneIngestao() {
 
           {stage === "concluido" && (
             <div className="text-center">
-              <p className="text-lg font-semibold text-green-400">
-                {inqueritoCriado ? "Inquérito Criado!" : "Ingestão Concluída!"}
+              <p className="text-lg font-semibold text-blue-400">
+                {inqueritoCriado ? `IP Nº ${inqueritoCriado.numero} criado` : "Ingestão recebida"}
               </p>
               <p className="text-zinc-400 text-sm mt-1">
-                {inqueritoCriado
-                  ? `Nº ${inqueritoCriado.numero} — processamento em andamento`
-                  : resultado?.mensagem}
+                Documentos sendo processados em segundo plano — pode levar alguns minutos
               </p>
             </div>
           )}
@@ -401,9 +399,9 @@ export function DropZoneIngestao() {
           {stage === "concluido" && inqueritoCriado && (
             <a
               href={`/inqueritos/${inqueritoCriado.id}`}
-              className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-green-700 hover:bg-green-600 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-blue-700 hover:bg-blue-600 rounded-lg transition-colors"
             >
-              <ArrowRight className="w-3.5 h-3.5" /> Abrir Inquérito
+              <ArrowRight className="w-3.5 h-3.5" /> Acompanhar Processamento
             </a>
           )}
           {(stage === "concluido" || stage === "orquestrando") && (

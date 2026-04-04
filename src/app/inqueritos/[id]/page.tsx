@@ -40,7 +40,7 @@ function ProgressoPipeline({ inqId, onConcluido }: { inqId: string; onConcluido:
   const [gerandoSintese, setGerandoSintese] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCount = useRef(0);
-  const MAX_POLLS_IDLE = 40; // ~2min sem progresso → para de pedir síntese automaticamente
+  const MAX_POLLS_IDLE = 120; // ~6min sem progresso → exibe botão "Gerar síntese"
 
   const poll = async () => {
     try {
@@ -53,12 +53,11 @@ function ProgressoPipeline({ inqId, onConcluido }: { inqId: string; onConcluido:
         setTimeout(onConcluido, 2000);
         return;
       }
-      // Se todos os docs concluídos mas síntese não pronta, conta polls ociosos
-      if (data.processando === 0 && data.pendentes === 0 && !data.sintese_pronta) {
+      // Conta idle apenas quando há docs registrados e todos terminaram
+      // (evita parar cedo por causa da race condition orquestrador x documentos)
+      if (data.total > 0 && data.processando === 0 && data.pendentes === 0 && !data.sintese_pronta) {
         pollCount.current += 1;
-        if (pollCount.current >= MAX_POLLS_IDLE) {
-          if (intervalRef.current) clearInterval(intervalRef.current);
-        }
+        // Nunca para o polling — apenas exibe o botão manual após MAX_POLLS_IDLE
       } else {
         pollCount.current = 0;
       }
