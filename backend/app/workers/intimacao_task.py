@@ -98,7 +98,12 @@ def processar_intimacao(self, intimacao_id: str):
             if content:
                 try:
                     texto, dados_raw = await extractor.extrair_tudo(content, content_type)
-                    logger.info(f"[INTIMACAO-TASK] Gemini Vision extraiu {len(texto)} chars + dados estruturados")
+                    logger.info(
+                        f"[INTIMACAO-TASK] Gemini Vision extraiu {len(texto)} chars | "
+                        f"nome={dados_raw.get('intimado_nome')!r} "
+                        f"data={dados_raw.get('data_oitiva')!r} "
+                        f"inq={dados_raw.get('numero_inquerito')!r}"
+                    )
                     if dados_raw:
                         dados = extractor._normalizar_dados(dados_raw)
                     elif texto:
@@ -175,6 +180,10 @@ def processar_intimacao(self, intimacao_id: str):
                 )
                 intim.status = "dados_incompletos"
 
+            logger.info(
+                f"[INTIMACAO-TASK] Commit — nome={intim.intimado_nome!r} "
+                f"data={intim.data_oitiva!r} status={intim.status!r}"
+            )
             await db.commit()
             logger.info(f"[INTIMACAO-TASK] Concluído — intimacao_id={intimacao_id}")
 
