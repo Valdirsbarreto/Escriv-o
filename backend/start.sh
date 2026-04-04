@@ -1,6 +1,7 @@
 #!/bin/bash
-# Escrivão AI — Script de inicialização
-# Alembic NÃO roda aqui — executa no buildCommand do railway.toml (fora do healthcheck window)
+# Escrivão AI — Script de inicialização (NÃO usado pelo Dockerfile — mantido como fallback local)
+# Dockerfile usa CMD inline: celery & exec uvicorn ${PORT:-8000}
+# Para rodar localmente: bash start.sh
 
 export C_FORCE_ROOT=1
 
