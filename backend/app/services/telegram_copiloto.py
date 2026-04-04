@@ -38,10 +38,13 @@ ESTADO_LABEL = {
 
 SYSTEM_PROMPT = """Você é o Escrivão AI, copiloto investigativo do Delegado Valdir, da Polícia Civil.
 Inquérito em foco: {inquerito_atual}
+Última pessoa/CPF pesquisada: {ultimo_alvo}
 Data e hora atual: {data_hoje}
 
 Responda em português informal, direto e eficiente — como um assistente de confiança.
 Ao receber um número de IP, sempre use o inquerito_atual do contexto se o usuário não informar um novo.
+Quando o usuário pedir algo sobre "ele", "ela", "esse cara", "o endereço", "mais dados" sem especificar quem,
+use o último_alvo do contexto (CPF ou nome da última pesquisa).
 Se faltar alguma informação para executar uma ação, pergunte de forma concisa e aguarde a resposta."""
 
 
@@ -237,7 +240,7 @@ class TelegramCopilotoService:
                 return json.loads(raw)
             except Exception:
                 pass
-        return {"historico": [], "inquerito_atual": None}
+        return {"historico": [], "inquerito_atual": None, "ultimo_alvo": None}
 
     async def _save_ctx(self, chat_id: int, ctx: dict) -> None:
         r = await self._get_redis()
@@ -327,9 +330,22 @@ class TelegramCopilotoService:
             elif fc_name == "buscar_pessoa_sistema":
                 nome = fc_args.get("nome", "")
                 cpf = fc_args.get("cpf", "")
+                if cpf:
+                    ctx["ultimo_alvo"] = f"CPF {cpf} ({nome})" if nome else f"CPF {cpf}"
+                elif nome:
+                    ctx["ultimo_alvo"] = nome
                 resposta = await self._buscar_pessoa_sistema(nome, cpf, db)
 
             elif fc_name == "osint_avulso":
+                cpf = fc_args.get("cpf", "")
+                nome = fc_args.get("nome", "")
+                placa = fc_args.get("placa", "")
+                if cpf:
+                    ctx["ultimo_alvo"] = f"CPF {cpf}" + (f" ({nome})" if nome else "")
+                elif nome:
+                    ctx["ultimo_alvo"] = nome
+                elif placa:
+                    ctx["ultimo_alvo"] = f"placa {placa}"
                 resposta = await self._osint_avulso(fc_args)
 
             elif fc_name == "ajuda":
@@ -365,10 +381,12 @@ class TelegramCopilotoService:
         from google.genai import types as _gt
 
         inquerito_atual = ctx.get("inquerito_atual") or "nenhum"
+        ultimo_alvo = ctx.get("ultimo_alvo") or "nenhum"
         data_hoje = datetime.now().strftime("%d/%m/%Y %H:%M")
 
         system = SYSTEM_PROMPT.format(
             inquerito_atual=inquerito_atual,
+            ultimo_alvo=ultimo_alvo,
             data_hoje=data_hoje,
         )
 
