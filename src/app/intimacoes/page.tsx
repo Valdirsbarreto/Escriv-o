@@ -86,6 +86,7 @@ export default function IntimacoesPAge() {
   const [confirmando, setConfirmando] = useState<string | null>(null);
   const [editando, setEditando] = useState<Intimacao | null>(null);
   const [diaSelecionado, setDiaSelecionado] = useState<string | null>(null);
+  const [avisoSemInquerito, setAvisoSemInquerito] = useState<string | null>(null);
   const router = useRouter();
 
   const carregar = async () => {
@@ -246,7 +247,12 @@ export default function IntimacoesPAge() {
                 <div
                   key={intim.id}
                   onDoubleClick={() => {
-                    if (intim.inquerito_id) router.push(`/inqueritos/${intim.inquerito_id}?sintese=1`);
+                    if (intim.inquerito_id) {
+                      router.push(`/inqueritos/${intim.inquerito_id}?sintese=1`);
+                    } else {
+                      setAvisoSemInquerito(intim.id);
+                      setTimeout(() => setAvisoSemInquerito(null), 4000);
+                    }
                   }}
                   className={`border border-zinc-800 rounded-xl p-4 bg-zinc-900/40 hover:bg-zinc-900/70 transition-colors ${intim.inquerito_id ? "cursor-pointer" : ""}`}
                   title={intim.inquerito_id ? "Duplo clique para abrir inquérito e síntese" : undefined}
@@ -345,6 +351,14 @@ export default function IntimacoesPAge() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Aviso: sem inquérito vinculado */}
+                  {avisoSemInquerito === intim.id && (
+                    <div className="mt-3 flex items-center gap-2 rounded-lg bg-zinc-800/80 border border-zinc-700 px-3 py-2 text-xs text-zinc-400">
+                      <AlertCircle size={13} className="shrink-0 text-zinc-500" />
+                      Nenhum inquérito importado no sistema para esta intimação. Importe o procedimento em <span className="text-blue-400 mx-1">Inquéritos</span> para acessar a síntese investigativa.
+                    </div>
+                  )}
 
                   {/* Confirmação: data passada */}
                   {intim.status === "data_passada" && (
