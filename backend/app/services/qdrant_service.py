@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 class QdrantService:
     """Gerencia operações no banco vetorial Qdrant."""
 
-    VECTOR_SIZE = 384  # all-MiniLM-L6-v2
+    VECTOR_SIZE = 768  # text-embedding-004
 
     def __init__(self):
         self.client = QdrantClient(

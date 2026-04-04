@@ -1,48 +1,51 @@
 """
 Escrivão AI — Serviço de Embeddings
-Geração de embeddings com sentence-transformers (local, custo zero).
-Modelo padrão: all-MiniLM-L6-v2 (384 dimensões, rápido e eficiente).
+Geração de embeddings via API do Google Gemini (text-embedding-004).
+Substituiu o sentence-transformers local para economizar RAM e reduzir tempo de build.
+Dimensões: 768.
 """
 
 import logging
 from typing import List, Optional
 
+from google import genai
+from google.genai import types as genai_types
+
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
-# Singleton do modelo para evitar carregamento repetido
-_model = None
-_model_name = None
-
-DEFAULT_MODEL = "all-MiniLM-L6-v2"
-DEFAULT_VECTOR_SIZE = 384
-
-
-def _get_model(model_name: str = DEFAULT_MODEL):
-    """Carrega o modelo de embeddings (singleton)."""
-    global _model, _model_name
-
-    if _model is None or _model_name != model_name:
-        logger.info(f"[EMBEDDINGS] Carregando modelo: {model_name}")
-        from sentence_transformers import SentenceTransformer
-        _model = SentenceTransformer(model_name)
-        _model_name = model_name
-        logger.info(f"[EMBEDDINGS] Modelo carregado: {model_name}")
-
-    return _model
+DEFAULT_MODEL = "text-embedding-004"
+DEFAULT_VECTOR_SIZE = 768
 
 
 class EmbeddingService:
-    """Gera embeddings vetoriais a partir de texto."""
+    """Gera embeddings vetoriais via API do Google."""
 
     def __init__(self, model_name: str = DEFAULT_MODEL):
         self.model_name = model_name
         self.vector_size = DEFAULT_VECTOR_SIZE
+        self._client = genai.Client(api_key=settings.GEMINI_API_KEY) if settings.GEMINI_API_KEY else None
 
     def generate(self, text: str) -> List[float]:
-        """Gera embedding para um único texto."""
-        model = _get_model(self.model_name)
-        embedding = model.encode(text, normalize_embeddings=True)
-        return embedding.tolist()
+        """Gera embedding para um único texto (chamada síncrona)."""
+        if not self._client:
+            raise RuntimeError("GEMINI_API_KEY não configurada")
+        
+        # Limpeza básica do texto
+        text = str(text).replace("\x00", "").strip()
+        if not text:
+            return [0.0] * self.vector_size
+
+        try:
+            result = self._client.models.embed_content(
+                model=self.model_name,
+                contents=text[:8000], 
+            )
+            return result.embeddings[0].values
+        except Exception as e:
+            logger.error(f"[EMBEDDINGS] Erro ao gerar embedding: {e}")
+            return [0.0] * self.vector_size
 
     def generate_batch(
         self,
@@ -51,17 +54,29 @@ class EmbeddingService:
         show_progress: bool = False,
     ) -> List[List[float]]:
         """
-        Gera embeddings em lote para performance.
-        Otimizado para inquéritos grandes (3000+ páginas = ~500+ chunks).
+        Gera embeddings em lote via API.
         """
-        model = _get_model(self.model_name)
-        embeddings = model.encode(
-            texts,
-            batch_size=batch_size,
-            normalize_embeddings=True,
-            show_progress_bar=show_progress,
-        )
-        return [e.tolist() for e in embeddings]
+        if not self._client:
+            raise RuntimeError("GEMINI_API_KEY não configurada")
+
+        all_embeddings = []
+        
+        for i in range(0, len(texts), batch_size):
+            batch = [str(t).replace("\x00", "").strip() for t in texts[i:i + batch_size]]
+            batch = [t if t else " " for t in batch]
+            
+            try:
+                result = self._client.models.embed_content(
+                    model=self.model_name,
+                    contents=batch,
+                )
+                batch_vecs = [e.values for e in result.embeddings]
+                all_embeddings.extend(batch_vecs)
+            except Exception as e:
+                logger.error(f"[EMBEDDINGS] Erro no batch {i}: {e}")
+                all_embeddings.extend([[0.0] * self.vector_size] * len(batch))
+
+        return all_embeddings
 
     def get_vector_size(self) -> int:
         """Retorna o tamanho do vetor do modelo."""

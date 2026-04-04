@@ -184,7 +184,7 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
                 embeddings = embedding_service.generate_batch(textos, batch_size=64)
 
                 for chunk, embedding in zip(chunk_records, embeddings):
-                    chunk.embedding_model = "all-MiniLM-L6-v2"
+                    chunk.embedding_model = "text-embedding-004"
 
                 db.commit()
 
@@ -192,8 +192,8 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
                            duracao_ms=int((time.time() - t0) * 1000),
                            dados_extras={
                                "total_embeddings": len(embeddings),
-                               "modelo": "all-MiniLM-L6-v2",
-                               "dimensoes": 384,
+                               "modelo": "text-embedding-004",
+                               "dimensoes": 768,
                            })
 
             except Exception as e:
@@ -212,7 +212,7 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
                     from app.services.qdrant_service import QdrantService
 
                     qdrant = QdrantService()
-                    qdrant.ensure_collection(vector_size=384)
+                    qdrant.ensure_collection(vector_size=768)
 
                     points = [
                         {
