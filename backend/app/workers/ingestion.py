@@ -9,7 +9,10 @@ import time
 import uuid
 from datetime import datetime
 
-from sqlalchemy import create_engine, select
+import unicodedata
+import re
+
+from sqlalchemy import create_engine, select, func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -21,6 +24,113 @@ logger = logging.getLogger(__name__)
 
 # Engine síncrono para uso dentro do worker Celery
 sync_engine = create_engine(settings.DATABASE_URL_SYNC)
+
+# Prioridade de tipo de pessoa (maior = mais específico)
+_TIPO_PRIORIDADE = {"investigado": 4, "vitima": 3, "testemunha": 2, "outro": 1}
+
+
+def _normalizar_nome(nome: str) -> str:
+    """Remove acentos, espaços extras e converte para minúsculas para comparação."""
+    nome = unicodedata.normalize("NFKD", nome).encode("ascii", "ignore").decode("ascii")
+    nome = re.sub(r"\s+", " ", nome).strip().lower()
+    return nome
+
+
+def _upsert_pessoa(db: Session, inquerito_id: uuid.UUID, p_dict: dict) -> None:
+    """
+    Insere ou atualiza uma Pessoa dentro do mesmo inquérito.
+    Prioridade de deduplicação: CPF > nome normalizado.
+    Atualiza tipo_pessoa para o mais específico entre o existente e o novo.
+    """
+    from app.models.pessoa import Pessoa
+
+    nome_raw = (p_dict.get("nome") or "Desconhecido")[:300]
+    cpf = (p_dict.get("cpf") or "").strip()[:14]
+    tipo_novo = (p_dict.get("tipo") or "outro")[:50].lower()
+    nome_norm = _normalizar_nome(nome_raw)
+
+    # Tentar achar pelo CPF primeiro (mais confiável)
+    existente = None
+    if cpf:
+        existente = db.execute(
+            select(Pessoa)
+            .where(Pessoa.inquerito_id == inquerito_id)
+            .where(Pessoa.cpf == cpf)
+        ).scalar_one_or_none()
+
+    # Se não achou por CPF, tenta por nome normalizado
+    if not existente:
+        candidatos = db.execute(
+            select(Pessoa)
+            .where(Pessoa.inquerito_id == inquerito_id)
+        ).scalars().all()
+
+        for c in candidatos:
+            if _normalizar_nome(c.nome) == nome_norm:
+                existente = c
+                break
+
+    obs_nova = (p_dict.get("observacoes") or "").strip() or None
+
+    if existente:
+        # Atualiza CPF se ainda não tinha
+        if cpf and not existente.cpf:
+            existente.cpf = cpf
+        # Atualiza tipo para o mais específico
+        tipo_atual = (existente.tipo_pessoa or "outro").lower()
+        if _TIPO_PRIORIDADE.get(tipo_novo, 0) > _TIPO_PRIORIDADE.get(tipo_atual, 0):
+            existente.tipo_pessoa = tipo_novo
+        # Acumula observações únicas
+        if obs_nova:
+            obs_atual = existente.observacoes or ""
+            if obs_nova not in obs_atual:
+                existente.observacoes = (obs_atual + "; " + obs_nova).strip("; ")
+    else:
+        db.add(Pessoa(
+            inquerito_id=inquerito_id,
+            nome=nome_raw,
+            cpf=cpf or None,
+            tipo_pessoa=tipo_novo,
+            observacoes=obs_nova,
+        ))
+
+
+def _upsert_empresa(db: Session, inquerito_id: uuid.UUID, e_dict: dict) -> None:
+    """Insere ou atualiza Empresa (deduplicação por CNPJ > nome normalizado)."""
+    from app.models.empresa import Empresa
+
+    nome_raw = (e_dict.get("nome") or "Desconhecida")[:300]
+    cnpj = (e_dict.get("cnpj") or "").strip()[:18]
+    tipo = (e_dict.get("tipo") or "outro")[:50]
+    nome_norm = _normalizar_nome(nome_raw)
+
+    existente = None
+    if cnpj:
+        existente = db.execute(
+            select(Empresa)
+            .where(Empresa.inquerito_id == inquerito_id)
+            .where(Empresa.cnpj == cnpj)
+        ).scalar_one_or_none()
+
+    if not existente:
+        candidatos = db.execute(
+            select(Empresa).where(Empresa.inquerito_id == inquerito_id)
+        ).scalars().all()
+        for c in candidatos:
+            if _normalizar_nome(c.nome) == nome_norm:
+                existente = c
+                break
+
+    if existente:
+        if cnpj and not existente.cnpj:
+            existente.cnpj = cnpj
+    else:
+        db.add(Empresa(
+            inquerito_id=inquerito_id,
+            nome=nome_raw,
+            cnpj=cnpj or None,
+            tipo_empresa=tipo,
+        ))
 
 
 def _log_etapa(db: Session, documento_id: str, inquerito_id: str,
@@ -253,8 +363,6 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
             logger.info("[INGESTÃO] Executando Extrator LLM Econômico (Classificação e NER)")
             try:
                 from app.services.extractor_service import ExtractorService
-                from app.models.pessoa import Pessoa
-                from app.models.empresa import Empresa
                 from app.models.endereco import Endereco
                 from app.models.contato import Contato
                 from app.models.evento_cronologico import EventoCronologico
@@ -279,21 +387,12 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
                 doc.tipo_peca = categoria
                 logger.info(f"[INGESTÃO] Documento classificado como: {categoria}")
                 
-                # Inserir entidades (usar `or ""` antes de slice: LLM pode retornar null)
+                # Upsert de entidades (deduplicação por CPF > nome normalizado)
+                inquerito_uuid = uuid.UUID(inquerito_id)
                 for p_dict in entidades.get("pessoas", []) or []:
-                    db.add(Pessoa(
-                        inquerito_id=uuid.UUID(inquerito_id),
-                        nome=(p_dict.get("nome") or "Desconhecido")[:300],
-                        cpf=(p_dict.get("cpf") or "")[:14],
-                        tipo_pessoa=(p_dict.get("tipo") or "")[:50]
-                    ))
+                    _upsert_pessoa(db, inquerito_uuid, p_dict)
                 for e_dict in entidades.get("empresas", []) or []:
-                    db.add(Empresa(
-                        inquerito_id=uuid.UUID(inquerito_id),
-                        nome=(e_dict.get("nome") or "Desconhecida")[:300],
-                        cnpj=(e_dict.get("cnpj") or "")[:18],
-                        tipo_empresa=(e_dict.get("tipo") or "")[:50]
-                    ))
+                    _upsert_empresa(db, inquerito_uuid, e_dict)
                 for end_dict in entidades.get("enderecos", []) or []:
                     db.add(Endereco(
                         inquerito_id=uuid.UUID(inquerito_id),
