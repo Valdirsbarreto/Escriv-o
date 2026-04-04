@@ -311,6 +311,46 @@ async def cancelar_intimacao(
     await db.commit()
 
 
+@router.post("/{intimacao_id}/vincular-inquerito", response_model=IntimacaoResponse)
+async def vincular_inquerito(
+    intimacao_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Tenta vincular a intimação ao inquérito pelo número extraído,
+    normalizando o formato (ignora traços, barras e espaços extras).
+    """
+    import re
+
+    intimacao = await db.get(Intimacao, intimacao_id)
+    if not intimacao:
+        raise HTTPException(status_code=404, detail="Intimação não encontrada")
+    if not intimacao.numero_inquerito_extraido:
+        raise HTTPException(status_code=400, detail="Nenhum número de inquérito extraído para vincular")
+
+    # Normaliza: remove tudo que não for dígito ou letra
+    def _norm(s: str) -> str:
+        return re.sub(r"[^a-zA-Z0-9]", "", s).upper()
+
+    numero_norm = _norm(intimacao.numero_inquerito_extraido)
+
+    result = await db.execute(select(Inquerito))
+    inqueritos = result.scalars().all()
+    match = next((i for i in inqueritos if _norm(i.numero) == numero_norm), None)
+
+    if not match:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Inquérito '{intimacao.numero_inquerito_extraido}' não encontrado no sistema mesmo após normalização."
+        )
+
+    intimacao.inquerito_id = match.id
+    await db.commit()
+    await db.refresh(intimacao)
+    logger.info(f"[INTIMACAO] Vinculada ao inquérito {match.numero} (id={match.id})")
+    return intimacao
+
+
 @router.post("/{intimacao_id}/confirmar-agenda", response_model=IntimacaoResponse)
 async def confirmar_agenda_data_passada(
     intimacao_id: uuid.UUID,

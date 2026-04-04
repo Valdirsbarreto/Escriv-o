@@ -87,6 +87,7 @@ export default function IntimacoesPAge() {
   const [editando, setEditando] = useState<Intimacao | null>(null);
   const [diaSelecionado, setDiaSelecionado] = useState<string | null>(null);
   const [avisoSemInquerito, setAvisoSemInquerito] = useState<string | null>(null);
+  const [vinculando, setVinculando] = useState<string | null>(null);
   const router = useRouter();
 
   const carregar = async () => {
@@ -354,9 +355,36 @@ export default function IntimacoesPAge() {
 
                   {/* Aviso: sem inquérito vinculado */}
                   {avisoSemInquerito === intim.id && (
-                    <div className="mt-3 flex items-center gap-2 rounded-lg bg-zinc-800/80 border border-zinc-700 px-3 py-2 text-xs text-zinc-400">
-                      <AlertCircle size={13} className="shrink-0 text-zinc-500" />
-                      Nenhum inquérito importado no sistema para esta intimação. Importe o procedimento em <span className="text-blue-400 mx-1">Inquéritos</span> para acessar a síntese investigativa.
+                    <div className="mt-3 flex items-start gap-2 rounded-lg bg-zinc-800/80 border border-zinc-700 px-3 py-2 text-xs text-zinc-400">
+                      <AlertCircle size={13} className="shrink-0 text-zinc-500 mt-0.5" />
+                      <span className="flex-1">
+                        {intim.numero_inquerito_extraido
+                          ? <>Inquérito <span className="text-zinc-300 font-medium">{intim.numero_inquerito_extraido}</span> não vinculado. O sistema pode tentar o vínculo automaticamente.</>
+                          : <>Nenhum inquérito detectado. Importe o procedimento em <span className="text-blue-400 mx-1">Inquéritos</span> para acessar a síntese.</>
+                        }
+                      </span>
+                      {intim.numero_inquerito_extraido && (
+                        <button
+                          disabled={vinculando === intim.id}
+                          onClick={async () => {
+                            setVinculando(intim.id);
+                            try {
+                              const res = await api.post(`/intimacoes/${intim.id}/vincular-inquerito`);
+                              setIntimacoes(prev => prev.map(i => i.id === intim.id ? res.data : i));
+                              setAvisoSemInquerito(null);
+                              router.push(`/inqueritos/${res.data.inquerito_id}?sintese=1`);
+                            } catch {
+                              alert("Inquérito não encontrado no sistema. Verifique se o número foi importado.");
+                            } finally {
+                              setVinculando(null);
+                            }
+                          }}
+                          className="shrink-0 px-2 py-1 rounded bg-blue-500/20 hover:bg-blue-500/40 text-blue-300 font-medium transition-colors disabled:opacity-40 whitespace-nowrap flex items-center gap-1"
+                        >
+                          {vinculando === intim.id ? <Loader2 size={11} className="animate-spin" /> : null}
+                          Vincular e abrir
+                        </button>
+                      )}
                     </div>
                   )}
 
