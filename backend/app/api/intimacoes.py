@@ -90,7 +90,7 @@ async def upload_intimacao(
         inquerito_id=inquerito_id,
         documento_id=documento_id,
         storage_path=storage_path,
-        status="agendada",
+        status="processando",
     )
     db.add(intimacao)
     await db.flush()

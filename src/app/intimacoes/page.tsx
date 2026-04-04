@@ -22,6 +22,7 @@ interface Intimacao {
 }
 
 const STATUS_LABEL: Record<string, { label: string; className: string }> = {
+  processando: { label: "Processando...", className: "bg-zinc-700/40 text-zinc-400 border-zinc-600/20" },
   agendada: { label: "Agendada", className: "bg-blue-500/15 text-blue-400 border-blue-500/20" },
   realizada: { label: "Realizada", className: "bg-green-500/15 text-green-400 border-green-500/20" },
   cancelada: { label: "Cancelada", className: "bg-zinc-700/40 text-zinc-500 border-zinc-600/20" },
@@ -84,6 +85,14 @@ export default function IntimacoesPAge() {
   };
 
   useEffect(() => { carregar(); }, []);
+
+  // Polling: quando há intimações em processamento, recarrega a cada 5s
+  useEffect(() => {
+    const temProcessando = intimacoes.some((i) => i.status === "processando");
+    if (!temProcessando) return;
+    const interval = setInterval(carregar, 5000);
+    return () => clearInterval(interval);
+  }, [intimacoes]);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Cancelar esta intimação? O evento no Google Agenda também será removido.")) return;
@@ -162,8 +171,16 @@ export default function IntimacoesPAge() {
                       {/* Nome + qualificação */}
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-zinc-100 flex items-center gap-1.5">
-                          <User size={14} className="text-zinc-500 shrink-0" />
-                          {intim.intimado_nome ?? <span className="text-zinc-500 italic">Nome não extraído</span>}
+                          {intim.status === "processando" ? (
+                            <Loader2 size={14} className="text-zinc-500 shrink-0 animate-spin" />
+                          ) : (
+                            <User size={14} className="text-zinc-500 shrink-0" />
+                          )}
+                          {intim.intimado_nome ?? (
+                            intim.status === "processando"
+                              ? <span className="text-zinc-600 italic">Extraindo dados...</span>
+                              : <span className="text-zinc-500 italic">Nome não extraído</span>
+                          )}
                         </span>
                         {intim.intimado_qualificacao && (
                           <span className="text-[11px] px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400">
