@@ -88,7 +88,7 @@ class IntimacaoExtractor:
             part = self._part(content, content_type)
             response = await asyncio.to_thread(
                 self._client.models.generate_content,
-                model="gemini-2.0-flash-001",
+                model="gemini-1.5-flash",
                 contents=[_PROMPT_EXTRACAO_DIRETA, part],
             )
             raw = response.text.strip()
@@ -119,7 +119,7 @@ class IntimacaoExtractor:
             prompt = PROMPT_EXTRACAO_INTIMACAO.format(texto=texto[:4000])
             response = await asyncio.to_thread(
                 self._client.models.generate_content,
-                model="gemini-2.0-flash-001",
+                model="gemini-1.5-flash",
                 contents=prompt,
             )
             raw = response.text.strip()

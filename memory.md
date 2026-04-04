@@ -72,6 +72,14 @@ Commits: `cff2c44`, `df09856`, `6995094`, `5b4c67e`, `dd8b7fe`, `dd8e9a9`, `d043
 - **Axios timeout** (`dd8e9a9`): Frontend ficava em spinner eterno sem timeout. Adicionado 15s para API e 60s para upload.
 - **Número TEMP** (`d0430c3`): Orquestrador criava inquéritos com `TEMP-XXXXXX` por falha na extração via LLM. Adicionada extração por regex do filename antes de chamar o LLM (ex: `033-07699-2016.pdf` → número `033-07699-2016`).
 
+### ✅ Sessão de Estabilização — 04/04/2026 (`d555260`)
+- **Dependência LLM fixada**: `google-genai` instalada no venv local.
+- **Migração de Embeddings**: `sentence-transformers` removido; migrado para **Gemini API Embeddings** (768-dim) para build ultra-rápido (< 2min) e economia de ~2GB RAM.
+- **Correção 404 Gemini**: O modelo `gemini-2.0-flash-001` estava depreciado para novos usuários; atualizado para `gemini-1.5-flash` em todos os serviços.
+- **Fix do Deploy Railway**: O comando de start no `nixpacks.toml` não expandia a variável `$PORT` corretamente; fixado para usar `sh -c`.
+- **Correção de números TEMP**: Criado script `backend/scripts/fix_temp_numbers.py` para registros legados.
+- **Testes validados**: `test_auditoria.py`, `test_copiloto.py` e `test_state_machine.py` passando.
+
 ---
 
 ## 3. Estado Atual (20/03/2026)
@@ -81,8 +89,8 @@ Commits: `cff2c44`, `df09856`, `6995094`, `5b4c67e`, `dd8b7fe`, `dd8e9a9`, `d043
 - ✅ Inquéritos aparecem no Dashboard após ingestão
 - ✅ Página de detalhes carregando documentos com status de indexação
 - ✅ 4/4 documentos indexados em teste real com IP 033-07699-2026
-- ⚠️ Número do IP ainda mostra TEMP nos inquéritos já criados (fix aplicado para novos)
-- ⚠️ Copiloto não testado ainda em produção
+- ✅ Número do IP Corrigido: Script de manutenção disponível
+- ✅ Copiloto testado localmente com mocks (passed)
 
 ---
 
