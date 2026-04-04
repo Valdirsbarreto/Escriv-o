@@ -795,16 +795,31 @@ class TelegramCopilotoService:
             if isinstance(telefones, str):
                 telefones = [telefones]
             if isinstance(telefones, list) and telefones:
-                fones = [_esc(str(t.get("numero") or t) if isinstance(t, dict) else str(t)) for t in telefones[:4]]
-                partes.append(f"📞 Telefones: {', '.join(fones)}")
+                partes.append("📞 <b>Telefones:</b>")
+                for t in telefones[:5]:
+                    if isinstance(t, dict):
+                        numero = t.get("telefoneComDDD") or t.get("numero") or t.get("telefone") or ""
+                        tipo = t.get("tipoTelefone") or ""
+                        operadora = t.get("operadora") or ""
+                        whats = " · WhatsApp ✓" if t.get("whatsApp") else ""
+                        bloqueado = " · Bloqueado" if t.get("telemarketingBloqueado") else ""
+                        info = f"{tipo} · {operadora}".strip(" ·") if tipo or operadora else ""
+                        partes.append(f"  • <code>{_esc(numero)}</code>" + (f" ({_esc(info)})" if info else "") + _esc(whats) + _esc(bloqueado))
+                    else:
+                        partes.append(f"  • <code>{_esc(str(t))}</code>")
 
             # Emails
             emails = cad.get("emails") or cad.get("email") or []
             if isinstance(emails, str):
                 emails = [emails]
             if isinstance(emails, list) and emails:
-                email_list = [_esc(str(e.get("email") or e) if isinstance(e, dict) else str(e)) for e in emails[:3]]
-                partes.append(f"✉️ Emails: {', '.join(email_list)}")
+                partes.append("✉️ <b>Emails:</b>")
+                for e in emails[:3]:
+                    if isinstance(e, dict):
+                        addr = e.get("enderecoEmail") or e.get("email") or e.get("endereco") or str(e)
+                    else:
+                        addr = str(e)
+                    partes.append(f"  • {_esc(addr)}")
 
         veiculo = (
             dados.get("veiculo")
