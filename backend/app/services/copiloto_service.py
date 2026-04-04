@@ -86,11 +86,18 @@ class CopilotoService:
 
         query_vector = await self.embedding_service.agenerate(query)
 
-        resultados = self.qdrant_service.search(
-            query_vector=query_vector,
-            limit=max_chunks,
-            inquerito_id=inquerito_id,
-        )
+        # Se o embedding falhou (retornou vetor nulo), pula busca RAG
+        qdrant_ok = any(v != 0.0 for v in query_vector[:10])
+        resultados = []
+        if qdrant_ok:
+            try:
+                resultados = self.qdrant_service.search(
+                    query_vector=query_vector,
+                    limit=max_chunks,
+                    inquerito_id=inquerito_id,
+                )
+            except Exception as e:
+                logger.warning(f"[COPILOTO] Qdrant indisponível: {e} — respondendo sem RAG")
 
         # ── 2. Montar contexto ────────────────────────────
         contexto_partes = []
