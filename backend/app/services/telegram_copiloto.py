@@ -146,9 +146,10 @@ def _get_fc_tools():
         _gt.FunctionDeclaration(
             name="osint_avulso",
             description=(
-                "Consulta OSINT avulsa por CPF, CNPJ, placa, nome ou RG. "
-                "Use para QUALQUER pedido informal: 've esse CPF', 'pesquisa essa placa', "
-                "'quem é esse cara', 'puxa o CPF', 'consulta esse número', 'verifica essa placa'."
+                "Consulta OSINT em fontes EXTERNAS (fora do sistema). "
+                "Use SOMENTE para: placas de veículo, ou quando o usuário JÁ confirmou que quer pesquisa externa "
+                "após buscar internamente ('sim, pesquisa fora', 'faz o OSINT', 'pesquisa nas fontes externas'). "
+                "NUNCA use como primeira opção para CPF ou nome — use buscar_pessoa_sistema primeiro."
             ),
             parameters=_gt.Schema(
                 type=_gt.Type.OBJECT,
@@ -164,9 +165,11 @@ def _get_fc_tools():
         _gt.FunctionDeclaration(
             name="buscar_pessoa_sistema",
             description=(
-                "Busca uma pessoa em TODO o sistema: autos dos inquéritos E intimações agendadas. "
-                "Use quando perguntar: 'tem fulano no sistema?', 'tem João Silva com intimação?', "
-                "'encontra essa pessoa', 'essa pessoa está nos autos?', 'tem intimação para João?'."
+                "SEMPRE use esta ferramenta PRIMEIRO quando o usuário perguntar sobre uma pessoa ou CPF/CNPJ. "
+                "Busca em TODO o sistema interno: autos dos inquéritos E intimações agendadas. "
+                "Use para: 'tem fulano no sistema?', 've esse CPF', 'pesquisa esse CPF', 'quem é esse cara', "
+                "'tem João Silva com intimação?', 'encontra essa pessoa', 'essa pessoa está nos autos?'. "
+                "Só chame osint_avulso DEPOIS desta, se o usuário confirmar que quer pesquisa externa."
             ),
             parameters=_gt.Schema(
                 type=_gt.Type.OBJECT,
@@ -681,9 +684,11 @@ class TelegramCopilotoService:
             partes.append("")
 
         if not encontrou:
+            alvo = nome or cpf
+            tipo = "CPF <code>" + _esc(cpf) + "</code>" if cpf else f"<i>{_esc(nome)}</i>"
             return (
-                f"❌ Nenhuma ocorrência de <i>{_esc(nome or cpf)}</i> encontrada nos autos ou intimações.\n"
-                "Para busca OSINT externa, diga: <i>pesquisa o CPF 000.000.000-00</i>"
+                f"❌ {tipo} não encontrado nos autos nem nas intimações do sistema.\n\n"
+                f"Quer que eu faça uma pesquisa complementar nas <b>fontes externas (OSINT)</b>?"
             )
 
         return "\n".join(partes)
