@@ -162,6 +162,21 @@ def _get_fc_tools():
             ),
         ),
         _gt.FunctionDeclaration(
+            name="buscar_pessoa_sistema",
+            description=(
+                "Busca uma pessoa em TODO o sistema: autos dos inquéritos E intimações agendadas. "
+                "Use quando perguntar: 'tem fulano no sistema?', 'tem João Silva com intimação?', "
+                "'encontra essa pessoa', 'essa pessoa está nos autos?', 'tem intimação para João?'."
+            ),
+            parameters=_gt.Schema(
+                type=_gt.Type.OBJECT,
+                properties={
+                    "nome": _gt.Schema(type=_gt.Type.STRING, description="Nome (parcial) da pessoa"),
+                    "cpf": _gt.Schema(type=_gt.Type.STRING, description="CPF somente dígitos (opcional)"),
+                },
+            ),
+        ),
+        _gt.FunctionDeclaration(
             name="ajuda",
             description="Exibe a lista de comandos e capacidades disponíveis.",
             parameters=_gt.Schema(type=_gt.Type.OBJECT, properties={}),
@@ -305,6 +320,11 @@ class TelegramCopilotoService:
                 if numero:
                     ctx["inquerito_atual"] = numero
                 resposta = await self._despachar_inquerito(numero, novo_estado, db)
+
+            elif fc_name == "buscar_pessoa_sistema":
+                nome = fc_args.get("nome", "")
+                cpf = fc_args.get("cpf", "")
+                resposta = await self._buscar_pessoa_sistema(nome, cpf, db)
 
             elif fc_name == "osint_avulso":
                 resposta = await self._osint_avulso(fc_args)
@@ -604,6 +624,70 @@ class TelegramCopilotoService:
         linhas.append("💡 Para enriquecimento OSINT (P1–P4) use a interface web.")
         return "\n".join(linhas)
 
+    # ── Ação: buscar pessoa em todo o sistema ────────────────────────────────
+
+    async def _buscar_pessoa_sistema(self, nome: str, cpf: str, db: AsyncSession) -> str:
+        """Busca pessoa nos autos indexados E nas intimações agendadas."""
+        if not nome and not cpf:
+            return "ℹ️ Informe o nome ou CPF da pessoa para buscar."
+
+        partes = [f"🔍 <b>Busca por: {_esc(nome or cpf)}</b>\n"]
+        encontrou = False
+
+        # 1. Buscar nos autos (tabela Pessoa)
+        query = select(Pessoa)
+        if cpf:
+            query = query.where(Pessoa.cpf == cpf.strip())
+        else:
+            query = query.where(Pessoa.nome.ilike(f"%{nome.strip()}%"))
+        query = query.limit(5)
+
+        result = await db.execute(query)
+        pessoas = result.scalars().all()
+
+        if pessoas:
+            encontrou = True
+            partes.append("👥 <b>Nos autos dos inquéritos:</b>")
+            for p in pessoas:
+                tipo = _esc(p.tipo_pessoa or "não classificado")
+                cpf_str = f" · CPF: <code>{_esc(p.cpf)}</code>" if p.cpf else ""
+                partes.append(f"• <b>{_esc(p.nome)}</b> — {tipo}{cpf_str}")
+                if p.resumo_contexto:
+                    partes.append(f"  <i>{_esc(p.resumo_contexto[:200])}</i>")
+            partes.append("")
+
+        # 2. Buscar nas intimações
+        intim_query = select(Intimacao)
+        if cpf:
+            intim_query = intim_query.where(Intimacao.intimado_cpf == cpf.strip())
+        else:
+            intim_query = intim_query.where(Intimacao.intimado_nome.ilike(f"%{nome.strip()}%"))
+        intim_query = intim_query.order_by(Intimacao.data_oitiva.desc()).limit(5)
+
+        intim_result = await db.execute(intim_query)
+        intimacoes = intim_result.scalars().all()
+
+        if intimacoes:
+            encontrou = True
+            partes.append("📅 <b>Intimações encontradas:</b>")
+            for it in intimacoes:
+                data_str = it.data_oitiva.strftime("%d/%m/%Y %H:%M") if it.data_oitiva else "sem data"
+                status = it.status or "—"
+                local = _esc(it.local_oitiva or "local não informado")
+                partes.append(f"• <b>{data_str}</b> — {_esc(it.intimado_nome or '—')} ({_esc(status)})")
+                partes.append(f"  📍 {local}")
+                if it.google_event_url:
+                    partes.append(f'  <a href="{it.google_event_url}">→ Google Agenda</a>')
+            partes.append("")
+
+        if not encontrou:
+            return (
+                f"❌ Nenhuma ocorrência de <i>{_esc(nome or cpf)}</i> encontrada nos autos ou intimações.\n"
+                "Para busca OSINT externa, diga: <i>pesquisa o CPF 000.000.000-00</i>"
+            )
+
+        return "\n".join(partes)
+
     # ── Ação: OSINT avulso ────────────────────────────────────────────────────
 
     async def _osint_avulso(self, params: dict) -> str:
@@ -619,8 +703,8 @@ class TelegramCopilotoService:
                 "Ex: <i>pesquisar CPF 000.000.000-00</i> ou <i>verificar placa ABC1234</i>"
             )
 
-        from app.services.osint_service import OSINTService
-        osint = OSINTService()
+        from app.services.osint_service import OsintService
+        osint = OsintService()
 
         try:
             dados = await osint.consulta_avulsa(
