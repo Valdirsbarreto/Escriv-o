@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { CalendarPlus, Calendar, Clock, MapPin, User, ExternalLink, Loader2, AlertCircle, Trash2, ChevronRight } from "lucide-react";
+import { CalendarPlus, Calendar, Clock, MapPin, User, ExternalLink, Loader2, AlertCircle, Trash2, ChevronRight, Pencil } from "lucide-react";
 import { IntimacaoUploadModal } from "@/components/IntimacaoUploadModal";
+import { IntimacaoEditModal } from "@/components/IntimacaoEditModal";
+import { CalendarioIntimacoes } from "@/components/CalendarioIntimacoes";
 import Link from "next/link";
 
 interface Intimacao {
@@ -53,6 +55,15 @@ function formatData(iso: string | null) {
   });
 }
 
+function isoDay(iso: string): string {
+  // Interpreta como local para corresponder ao calendário
+  const d = new Date(iso.replace("T", " ").substring(0, 16));
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function groupByMonth(intimacoes: Intimacao[]) {
   const groups: Record<string, Intimacao[]> = {};
   for (const i of intimacoes) {
@@ -72,6 +83,8 @@ export default function IntimacoesPAge() {
   const [showModal, setShowModal] = useState(false);
   const [deletando, setDeletando] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState<string | null>(null);
+  const [editando, setEditando] = useState<Intimacao | null>(null);
+  const [diaSelecionado, setDiaSelecionado] = useState<string | null>(null);
 
   const carregar = async () => {
     setLoading(true);
@@ -96,6 +109,19 @@ export default function IntimacoesPAge() {
     return () => clearInterval(interval);
   }, [intimacoes]);
 
+  const handleDelete = async (id: string) => {
+    if (!confirm("Cancelar esta intimação? O evento no Google Agenda também será removido.")) return;
+    setDeletando(id);
+    try {
+      await api.delete(`/intimacoes/${id}`);
+      setIntimacoes((prev) => prev.filter((i) => i.id !== id));
+    } catch {
+      alert("Erro ao cancelar.");
+    } finally {
+      setDeletando(null);
+    }
+  };
+
   const handleConfirmarAgenda = async (id: string) => {
     setConfirmando(id);
     try {
@@ -118,25 +144,21 @@ export default function IntimacoesPAge() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Cancelar esta intimação? O evento no Google Agenda também será removido.")) return;
-    setDeletando(id);
-    try {
-      await api.delete(`/intimacoes/${id}`);
-      setIntimacoes((prev) => prev.filter((i) => i.id !== id));
-    } catch {
-      alert("Erro ao cancelar.");
-    } finally {
-      setDeletando(null);
-    }
+  const handleSaved = (atualizada: Intimacao) => {
+    setIntimacoes((prev) => prev.map((i) => (i.id === atualizada.id ? atualizada : i)));
   };
 
-  const grupos = groupByMonth(intimacoes);
+  // Filtra por dia selecionado no calendário
+  const intimacoesFiltradas = diaSelecionado
+    ? intimacoes.filter((i) => i.data_oitiva && isoDay(i.data_oitiva) === diaSelecionado)
+    : intimacoes;
+
+  const grupos = groupByMonth(intimacoesFiltradas);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 p-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Calendar size={24} className="text-blue-400" />
@@ -155,6 +177,35 @@ export default function IntimacoesPAge() {
         </button>
       </div>
 
+      {/* Calendário */}
+      <div className="mb-6">
+        <CalendarioIntimacoes
+          intimacoes={intimacoes}
+          diaSelecionado={diaSelecionado}
+          onDiaClick={setDiaSelecionado}
+        />
+      </div>
+
+      {/* Filtro ativo */}
+      {diaSelecionado && (
+        <div className="flex items-center gap-2 mb-4 text-sm">
+          <span className="text-zinc-400">
+            Mostrando:{" "}
+            <span className="text-blue-400 font-medium">
+              {new Date(diaSelecionado + "T12:00:00").toLocaleDateString("pt-BR", {
+                weekday: "long", day: "2-digit", month: "long",
+              })}
+            </span>
+          </span>
+          <button
+            onClick={() => setDiaSelecionado(null)}
+            className="text-xs text-zinc-600 hover:text-zinc-400 underline transition-colors"
+          >
+            ver todas
+          </button>
+        </div>
+      )}
+
       {/* Conteúdo */}
       {loading && (
         <div className="flex items-center justify-center py-20">
@@ -169,11 +220,15 @@ export default function IntimacoesPAge() {
         </div>
       )}
 
-      {!loading && !erro && intimacoes.length === 0 && (
-        <div className="text-center py-20 text-zinc-600">
+      {!loading && !erro && intimacoesFiltradas.length === 0 && (
+        <div className="text-center py-16 text-zinc-600">
           <Calendar size={40} className="mx-auto mb-3 opacity-40" />
-          <p className="text-sm">Nenhuma intimação lançada ainda.</p>
-          <p className="text-xs mt-1">Clique em "Lançar Intimação" para começar.</p>
+          <p className="text-sm">
+            {diaSelecionado ? "Nenhuma intimação neste dia." : "Nenhuma intimação lançada ainda."}
+          </p>
+          {!diaSelecionado && (
+            <p className="text-xs mt-1">Clique em "Lançar Intimação" para começar.</p>
+          )}
         </div>
       )}
 
@@ -238,10 +293,17 @@ export default function IntimacoesPAge() {
                       </div>
                     </div>
 
-                    </div>
-
                     {/* Ações */}
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0">
+                      {intim.status !== "processando" && (
+                        <button
+                          onClick={() => setEditando(intim)}
+                          className="p-1.5 text-zinc-600 hover:text-blue-400 transition-colors"
+                          title="Editar intimação"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      )}
                       {intim.google_event_url && (
                         <a
                           href={intim.google_event_url}
@@ -305,12 +367,24 @@ export default function IntimacoesPAge() {
         </div>
       ))}
 
+      {/* Modais */}
       {showModal && (
         <IntimacaoUploadModal
           onClose={() => setShowModal(false)}
           onSuccess={() => {
             setShowModal(false);
-            setTimeout(carregar, 2000); // recarrega após 2s para dar tempo ao worker
+            setTimeout(carregar, 2000);
+          }}
+        />
+      )}
+
+      {editando && (
+        <IntimacaoEditModal
+          intimacao={editando}
+          onClose={() => setEditando(null)}
+          onSaved={(atualizada) => {
+            handleSaved(atualizada);
+            setEditando(null);
           }}
         />
       )}
