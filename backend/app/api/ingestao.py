@@ -110,3 +110,36 @@ async def iniciar_ingestao(
         mensagem=f"Recebidos {len(storage_paths)} arquivo(s){aviso}. O Orquestrador IA está analisando para criar o inquérito automaticamente.",
         arquivos_recebidos=filenames
     )
+
+
+# ── Admin: Gerenciamento Qdrant ───────────────────────────────────────────────
+
+@router.post("/admin/qdrant/recreate", tags=["Admin"])
+async def admin_recreate_qdrant():
+    """
+    Apaga e recria a coleção Qdrant com as dimensões corretas (768-dim / text-embedding-004).
+    ATENÇÃO: apaga todos os vetores indexados — re-indexar documentos após executar.
+    """
+    from app.services.qdrant_service import QdrantService
+    svc = QdrantService()
+    result = svc.recreate_collection()
+    return result
+
+
+@router.get("/admin/qdrant/info", tags=["Admin"])
+async def admin_qdrant_info():
+    """Retorna informações da coleção Qdrant (dims, total de pontos, status)."""
+    from app.services.qdrant_service import QdrantService
+    svc = QdrantService()
+    try:
+        info = svc.client.get_collection(svc.collection_name)
+        config = info.config.params.vectors
+        dims = config.size if hasattr(config, "size") else "?"
+        return {
+            "collection": svc.collection_name,
+            "dims": dims,
+            "points_count": info.points_count,
+            "status": info.status.value,
+        }
+    except Exception as e:
+        return {"erro": str(e)}

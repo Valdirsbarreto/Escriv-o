@@ -55,6 +55,25 @@ class QdrantService:
                 f"[QDRANT] Coleção '{self.collection_name}' já existe"
             )
 
+    def recreate_collection(self, vector_size: int = None) -> Dict[str, Any]:
+        """
+        Apaga e recria a coleção com as dimensões corretas.
+        ATENÇÃO: todos os vetores indexados serão perdidos — re-indexar os documentos após.
+        """
+        size = vector_size or self.VECTOR_SIZE
+        try:
+            self.client.delete_collection(self.collection_name)
+            logger.warning(f"[QDRANT] Coleção '{self.collection_name}' apagada")
+        except Exception:
+            pass  # Pode não existir
+
+        self.client.create_collection(
+            collection_name=self.collection_name,
+            vectors_config=VectorParams(size=size, distance=Distance.COSINE),
+        )
+        logger.info(f"[QDRANT] Coleção '{self.collection_name}' recriada (dims={size})")
+        return {"ok": True, "collection": self.collection_name, "dims": size}
+
     def upsert_chunks(
         self,
         points: List[Dict[str, Any]],
