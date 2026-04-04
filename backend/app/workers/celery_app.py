@@ -15,6 +15,7 @@ celery_app = Celery(
         "app.workers.orchestrator",
         "app.workers.summary_task",
         "app.workers.intimacao_task",
+        "app.workers.telegram_alertas",
     ],
 )
 
@@ -32,4 +33,11 @@ celery_app.conf.update(
     task_max_retries=3,
     # Evita warning de deprecação no Celery 6
     broker_connection_retry_on_startup=True,
+    # Beat schedule — alertas proativos Telegram
+    beat_schedule={
+        "alertas-intimacoes-diario": {
+            "task": "app.workers.telegram_alertas.verificar_alertas_intimacoes",
+            "schedule": 60 * 60 * 24,  # 24h — ajustar para crontab se precisar horário fixo
+        },
+    },
 )

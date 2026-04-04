@@ -1,7 +1,6 @@
 """
-Escrivão AI — Copiloto Telegram
-Orquestra mensagens recebidas via Telegram: detecta intenção via LLM e
-despacha para os serviços apropriados (busca RAG, agenda, índices, etc.).
+Escrivão AI — Copiloto Telegram (Sprint B + C)
+Dispatcher via Gemini Function Calling nativo + contexto conversacional rico.
 """
 
 import json
@@ -35,67 +34,174 @@ ESTADO_LABEL = {
     "arquivamento": "Arquivado",
 }
 
-# ── System prompt do dispatcher ───────────────────────────────────────────────
+# ── System prompt ─────────────────────────────────────────────────────────────
 
-DISPATCHER_PROMPT = """Você é o despachante do Escrivão AI via Telegram.
-O usuário autorizado chama-se Valdir. Trate-o pelo nome nas saudações.
-Analise a mensagem e retorne um JSON com a ação a executar.
+SYSTEM_PROMPT = """Você é o Escrivão AI, copiloto investigativo do Delegado Valdir, da Polícia Civil.
+Inquérito em foco: {inquerito_atual}
+Data e hora atual: {data_hoje}
 
-Contexto atual:
-- Inquérito em foco: {inquerito_atual}
-- Histórico recente: {historico_resumido}
+Responda em português informal, direto e eficiente — como um assistente de confiança.
+Ao receber um número de IP, sempre use o inquerito_atual do contexto se o usuário não informar um novo.
+Se faltar alguma informação para executar uma ação, pergunte de forma concisa e aguarde a resposta."""
 
-Ações disponíveis:
-- listar_inqueritos: Lista inquéritos cadastrados. Parâmetros: {{}}
-- status_inquerito: Detalhes de um inquérito específico. Parâmetros: {{"numero_ip": "ex: 915-001234/2024"}}
-- busca_autos: Busca semântica nos documentos de um inquérito. Parâmetros: {{"numero_ip": "número (use inquerito_atual se já mencionado)", "query": "o que pesquisar"}}
-- sintese_investigativa: Consulta ou gera a síntese investigativa completa de um IP. Use quando pedir "síntese", "resumo do caso", "análise do IP", "relatório de situação". Parâmetros: {{"numero_ip": "número do IP (use inquerito_atual se mencionado antes)"}}
-- gerar_cautelar: Gera minuta de ato cautelar/processual policial. Use para: ofício, requisição, mandado de busca, interceptação telefônica, quebra de sigilo bancário, prisão preventiva. Parâmetros: {{"numero_ip": "número do IP", "tipo_cautelar": "oficio_requisicao|mandado_busca|interceptacao_telefonica|quebra_sigilo_bancario|autorizacao_prisao|oficio_generico", "instrucoes": "instruções livres do delegado sobre o conteúdo"}}
-- despachar_inquerito: Avança ou muda o estado de um inquérito no sistema. Use para: despachar, avançar, mudar fase, mandar para investigação/relatório/etc. Parâmetros: {{"numero_ip": "número do IP", "novo_estado": "triagem|investigacao|diligencias|analise|relatorio|encerramento|arquivamento"}}
-- agenda: Próximas oitivas, audiências e intimações. Parâmetros: {{}}
-- ficha_pessoa: Consulta pessoa nos índices do inquérito. Parâmetros: {{"nome": "nome da pessoa", "numero_ip": "inquérito (use inquerito_atual se já mencionado)", "cpf": "CPF se informado (opcional)"}}
-- osint_avulso: Consulta OSINT avulsa por CPF, CNPJ, placa, nome ou RG. Use para QUALQUER pedido informal de pesquisa de pessoa ou veículo: "ve esse cpf", "pesquisa essa placa", "quem é esse cara", "puxa o cpf", "consulta esse número", "me passa os dados de", "verifica essa placa", etc. Extraia CPF/CNPJ/placa/nome do texto ignorando pontuação. Parâmetros: {{"cpf": "somente dígitos, se informado", "cnpj": "somente dígitos, se informado", "placa": "placa do veículo, se informado", "nome": "nome completo, se informado", "rg": "RG, se informado"}}
-- ajuda: Lista de comandos disponíveis. Parâmetros: {{}}
-- conversa: Saudações, agradecimentos ou perguntas gerais sem ação específica. Parâmetros: {{"resposta": "sua resposta amigável e concisa (máximo 3 linhas)"}}
 
-Exemplos de classificação (português informal):
-- "ve esse cpf pra mim: 86512587715" → {{"acao": "osint_avulso", "parametros": {{"cpf": "86512587715"}}}}
-- "puxa a placa ABC1D23" → {{"acao": "osint_avulso", "parametros": {{"placa": "ABC1D23"}}}}
-- "lista os IPs" → {{"acao": "listar_inqueritos", "parametros": {{}}}}
-- "o que tem no IP 921-00332 sobre o suspeito?" → {{"acao": "busca_autos", "parametros": {{"numero_ip": "921-00332", "query": "suspeito"}}}}
-- "gera a síntese do 915-001" → {{"acao": "sintese_investigativa", "parametros": {{"numero_ip": "915-001"}}}}
-- "resumo do caso" → {{"acao": "sintese_investigativa", "parametros": {{"numero_ip": "{inquerito_atual}"}}}}
-- "faz um ofício de requisição pro 915-001 pedindo extratos bancários do suspeito" → {{"acao": "gerar_cautelar", "parametros": {{"numero_ip": "915-001", "tipo_cautelar": "oficio_requisicao", "instrucoes": "pedindo extratos bancários do suspeito"}}}}
-- "manda um mandado de busca pro juiz" → {{"acao": "gerar_cautelar", "parametros": {{"numero_ip": "{inquerito_atual}", "tipo_cautelar": "mandado_busca", "instrucoes": "conforme os fatos do inquérito"}}}}
-- "faz uma requisição de quebra de sigilo bancário da conta do investigado" → {{"acao": "gerar_cautelar", "parametros": {{"numero_ip": "{inquerito_atual}", "tipo_cautelar": "quebra_sigilo_bancario", "instrucoes": "conta do investigado"}}}}
-- "despacha o 915-001 para investigação" → {{"acao": "despachar_inquerito", "parametros": {{"numero_ip": "915-001", "novo_estado": "investigacao"}}}}
-- "manda esse IP pra fase de relatório" → {{"acao": "despachar_inquerito", "parametros": {{"numero_ip": "{inquerito_atual}", "novo_estado": "relatorio"}}}}
-- "arquiva o 915-001" → {{"acao": "despachar_inquerito", "parametros": {{"numero_ip": "915-001", "novo_estado": "arquivamento"}}}}
+# ── Tool declarations (lazy) ───────────────────────────────────────────────────
 
-IMPORTANTE: Retorne APENAS JSON válido. Nunca retorne conversa quando o usuário pedir para pesquisar, ver, consultar, puxar ou verificar um CPF, CNPJ, placa ou nome."""
+_FC_TOOLS = None
+
+
+def _get_fc_tools():
+    global _FC_TOOLS
+    if _FC_TOOLS is not None:
+        return _FC_TOOLS
+
+    from google.genai import types as _gt
+
+    str_ = _gt.Schema(type=_gt.Type.STRING)
+
+    _FC_TOOLS = _gt.Tool(function_declarations=[
+        _gt.FunctionDeclaration(
+            name="listar_inqueritos",
+            description="Lista todos os inquéritos policiais cadastrados no sistema.",
+            parameters=_gt.Schema(type=_gt.Type.OBJECT, properties={}),
+        ),
+        _gt.FunctionDeclaration(
+            name="status_inquerito",
+            description="Exibe detalhes de um inquérito: estado, documentos, pessoas, delegacia.",
+            parameters=_gt.Schema(
+                type=_gt.Type.OBJECT,
+                properties={"numero_ip": _gt.Schema(type=_gt.Type.STRING, description="Número do IP, ex: 921-00332/2012")},
+                required=["numero_ip"],
+            ),
+        ),
+        _gt.FunctionDeclaration(
+            name="busca_autos",
+            description="Busca semântica nos documentos de um inquérito. Use para perguntas sobre fatos, pessoas ou eventos no caso.",
+            parameters=_gt.Schema(
+                type=_gt.Type.OBJECT,
+                properties={
+                    "numero_ip": _gt.Schema(type=_gt.Type.STRING, description="Número do IP"),
+                    "query": _gt.Schema(type=_gt.Type.STRING, description="O que pesquisar nos autos"),
+                },
+                required=["numero_ip", "query"],
+            ),
+        ),
+        _gt.FunctionDeclaration(
+            name="sintese_investigativa",
+            description="Consulta ou gera a síntese investigativa completa de um inquérito. Use para: 'síntese', 'resumo do caso', 'análise do IP', 'relatório de situação'.",
+            parameters=_gt.Schema(
+                type=_gt.Type.OBJECT,
+                properties={"numero_ip": _gt.Schema(type=_gt.Type.STRING, description="Número do IP")},
+                required=["numero_ip"],
+            ),
+        ),
+        _gt.FunctionDeclaration(
+            name="gerar_cautelar",
+            description="Gera minuta de ato processual. Use para: ofício, requisição, mandado de busca, interceptação telefônica, quebra de sigilo bancário, prisão preventiva.",
+            parameters=_gt.Schema(
+                type=_gt.Type.OBJECT,
+                properties={
+                    "numero_ip": _gt.Schema(type=_gt.Type.STRING, description="Número do IP"),
+                    "tipo_cautelar": _gt.Schema(
+                        type=_gt.Type.STRING,
+                        description="Um de: oficio_requisicao | mandado_busca | interceptacao_telefonica | quebra_sigilo_bancario | autorizacao_prisao | oficio_generico",
+                    ),
+                    "instrucoes": _gt.Schema(type=_gt.Type.STRING, description="Instruções específicas sobre o conteúdo do ato"),
+                },
+                required=["numero_ip", "tipo_cautelar"],
+            ),
+        ),
+        _gt.FunctionDeclaration(
+            name="despachar_inquerito",
+            description="Avança ou muda o estado de um inquérito. Use para: 'despacha', 'avança fase', 'manda para investigação/relatório/arquivo'.",
+            parameters=_gt.Schema(
+                type=_gt.Type.OBJECT,
+                properties={
+                    "numero_ip": _gt.Schema(type=_gt.Type.STRING, description="Número do IP"),
+                    "novo_estado": _gt.Schema(
+                        type=_gt.Type.STRING,
+                        description="Um de: triagem | investigacao | diligencias | analise | relatorio | encerramento | arquivamento",
+                    ),
+                },
+                required=["numero_ip", "novo_estado"],
+            ),
+        ),
+        _gt.FunctionDeclaration(
+            name="agenda",
+            description="Exibe as próximas oitivas e audiências agendadas.",
+            parameters=_gt.Schema(type=_gt.Type.OBJECT, properties={}),
+        ),
+        _gt.FunctionDeclaration(
+            name="ficha_pessoa",
+            description="Consulta a ficha de uma pessoa nos autos de um inquérito.",
+            parameters=_gt.Schema(
+                type=_gt.Type.OBJECT,
+                properties={
+                    "nome": _gt.Schema(type=_gt.Type.STRING, description="Nome da pessoa"),
+                    "cpf": _gt.Schema(type=_gt.Type.STRING, description="CPF (opcional)"),
+                    "numero_ip": _gt.Schema(type=_gt.Type.STRING, description="Número do IP (opcional se já em foco)"),
+                },
+            ),
+        ),
+        _gt.FunctionDeclaration(
+            name="osint_avulso",
+            description=(
+                "Consulta OSINT avulsa por CPF, CNPJ, placa, nome ou RG. "
+                "Use para QUALQUER pedido informal: 've esse CPF', 'pesquisa essa placa', "
+                "'quem é esse cara', 'puxa o CPF', 'consulta esse número', 'verifica essa placa'."
+            ),
+            parameters=_gt.Schema(
+                type=_gt.Type.OBJECT,
+                properties={
+                    "cpf": _gt.Schema(type=_gt.Type.STRING, description="CPF somente dígitos"),
+                    "cnpj": _gt.Schema(type=_gt.Type.STRING, description="CNPJ somente dígitos"),
+                    "placa": _gt.Schema(type=_gt.Type.STRING, description="Placa do veículo"),
+                    "nome": _gt.Schema(type=_gt.Type.STRING, description="Nome completo"),
+                    "rg": _gt.Schema(type=_gt.Type.STRING, description="RG"),
+                },
+            ),
+        ),
+        _gt.FunctionDeclaration(
+            name="ajuda",
+            description="Exibe a lista de comandos e capacidades disponíveis.",
+            parameters=_gt.Schema(type=_gt.Type.OBJECT, properties={}),
+        ),
+    ])
+    return _FC_TOOLS
+
+
+# ── Service principal ─────────────────────────────────────────────────────────
 
 
 class TelegramCopilotoService:
     """
-    Despachante principal do bot Telegram do Escrivão.
+    Copiloto Telegram do Escrivão AI.
 
     Fluxo por mensagem:
-    1. Carrega contexto (histórico + inquérito atual) do Redis
-    2. Chama LLM standard para classificar intenção → JSON de ação
+    1. Carrega contexto (histórico multi-turno + inquerito_atual) do Redis
+    2. Gemini Function Calling classifica intenção e extrai parâmetros tipados
+       - mode=AUTO: Gemini pode chamar função OU perguntar parâmetro faltante em texto
     3. Executa a ação com os serviços existentes
-    4. Atualiza contexto no Redis
-    5. Retorna texto formatado em HTML para o Telegram
+    4. Atualiza contexto no Redis (TTL 24h)
+    5. Retorna texto formatado em HTML
     """
 
     def __init__(self):
         self.llm = LLMService()
-        self._copiloto = None
+        self._copiloto: Optional[CopilotoService] = None
         self._redis = None
+        self._fc_client = None
 
     def _get_copiloto(self):
         if self._copiloto is None:
             self._copiloto = CopilotoService()
         return self._copiloto
+
+    def _get_fc_client(self):
+        if self._fc_client is None:
+            from google import genai as _genai
+            self._fc_client = _genai.Client(api_key=settings.GEMINI_API_KEY)
+        return self._fc_client
 
     # ── Redis ─────────────────────────────────────────────────────────────────
 
@@ -119,7 +225,7 @@ class TelegramCopilotoService:
         r = await self._get_redis()
         await r.setex(
             f"telegram:ctx:{chat_id}",
-            86400,  # 24 horas
+            86400,
             json.dumps(ctx, ensure_ascii=False, default=str),
         )
 
@@ -130,118 +236,158 @@ class TelegramCopilotoService:
     ) -> str:
         """Processa uma mensagem recebida e retorna a resposta formatada em HTML."""
 
-        # Comandos diretos sem passar pelo LLM
         if mensagem.strip().lower() in ("/start", "/ajuda", "/help", "ajuda", "help"):
             return _mensagem_ajuda()
 
         ctx = await self._load_ctx(chat_id)
 
-        # Dispatcher via LLM
-        acao_json = await self._dispatch(mensagem, ctx)
-        acao = acao_json.get("acao", "conversa")
-        params = acao_json.get("parametros", {})
+        # Dispatcher via Gemini Function Calling
+        fc_name, fc_args, texto_resposta = await self._dispatch_fc(mensagem, ctx)
 
-        logger.info(f"[TG-COPILOTO] chat={chat_id} acao={acao} params={params}")
+        # Se Gemini respondeu com texto (pergunta de clarificação ou conversa)
+        if fc_name is None:
+            resposta = texto_resposta or "Como posso ajudar, Valdir?"
+            ctx["historico"].append({"role": "user", "content": mensagem[:200]})
+            ctx["historico"].append({"role": "model", "content": resposta[:300]})
+            if len(ctx["historico"]) > 20:
+                ctx["historico"] = ctx["historico"][-20:]
+            await self._save_ctx(chat_id, ctx)
+            return resposta
 
-        # Execução da ação
+        logger.info(f"[TG-COPILOTO] chat={chat_id} fc={fc_name} args={fc_args}")
+
+        # Execução da função
         try:
-            if acao == "listar_inqueritos":
+            if fc_name == "listar_inqueritos":
                 resposta = await self._listar_inqueritos(db)
 
-            elif acao == "status_inquerito":
-                numero = params.get("numero_ip", "") or ctx.get("inquerito_atual", "")
+            elif fc_name == "status_inquerito":
+                numero = fc_args.get("numero_ip", "") or ctx.get("inquerito_atual", "")
                 if numero:
                     ctx["inquerito_atual"] = numero
                 resposta = await self._status_inquerito(numero, db)
 
-            elif acao == "busca_autos":
-                numero = params.get("numero_ip") or ctx.get("inquerito_atual", "")
-                query = params.get("query", mensagem)
+            elif fc_name == "busca_autos":
+                numero = fc_args.get("numero_ip") or ctx.get("inquerito_atual", "")
+                query = fc_args.get("query", mensagem)
                 if numero:
                     ctx["inquerito_atual"] = numero
                 resposta = await self._busca_autos(numero, query, ctx, db)
 
-            elif acao == "agenda":
+            elif fc_name == "agenda":
                 resposta = await self._agenda(db)
 
-            elif acao == "ficha_pessoa":
-                nome = params.get("nome", "")
-                cpf = params.get("cpf", "")
-                numero = params.get("numero_ip") or ctx.get("inquerito_atual", "")
+            elif fc_name == "ficha_pessoa":
+                nome = fc_args.get("nome", "")
+                cpf = fc_args.get("cpf", "")
+                numero = fc_args.get("numero_ip") or ctx.get("inquerito_atual", "")
                 if numero:
                     ctx["inquerito_atual"] = numero
                 resposta = await self._ficha_pessoa(nome, cpf, numero, db)
 
-            elif acao == "sintese_investigativa":
-                numero = params.get("numero_ip") or ctx.get("inquerito_atual", "")
+            elif fc_name == "sintese_investigativa":
+                numero = fc_args.get("numero_ip") or ctx.get("inquerito_atual", "")
                 if numero:
                     ctx["inquerito_atual"] = numero
                 resposta = await self._sintese_investigativa(numero, db)
 
-            elif acao == "gerar_cautelar":
-                numero = params.get("numero_ip") or ctx.get("inquerito_atual", "")
-                tipo = params.get("tipo_cautelar", "oficio_generico")
-                instrucoes = params.get("instrucoes", "")
+            elif fc_name == "gerar_cautelar":
+                numero = fc_args.get("numero_ip") or ctx.get("inquerito_atual", "")
+                tipo = fc_args.get("tipo_cautelar", "oficio_generico")
+                instrucoes = fc_args.get("instrucoes", "")
                 if numero:
                     ctx["inquerito_atual"] = numero
                 resposta = await self._gerar_cautelar(numero, tipo, instrucoes, db)
 
-            elif acao == "despachar_inquerito":
-                numero = params.get("numero_ip") or ctx.get("inquerito_atual", "")
-                novo_estado = params.get("novo_estado", "")
+            elif fc_name == "despachar_inquerito":
+                numero = fc_args.get("numero_ip") or ctx.get("inquerito_atual", "")
+                novo_estado = fc_args.get("novo_estado", "")
                 if numero:
                     ctx["inquerito_atual"] = numero
                 resposta = await self._despachar_inquerito(numero, novo_estado, db)
 
-            elif acao == "osint_avulso":
-                resposta = await self._osint_avulso(params)
+            elif fc_name == "osint_avulso":
+                resposta = await self._osint_avulso(fc_args)
 
-            elif acao == "ajuda":
+            elif fc_name == "ajuda":
                 resposta = _mensagem_ajuda()
 
-            else:  # conversa
-                resposta = params.get("resposta", "Como posso ajudar, Valdir?")
+            else:
+                resposta = texto_resposta or "Como posso ajudar, Valdir?"
 
         except Exception as e:
-            logger.error(f"[TG-COPILOTO] Erro na ação {acao}: {e}", exc_info=True)
-            resposta = f"⚠️ Erro ao executar <b>{acao}</b>: {_esc(str(e)[:200])}"
+            logger.error(f"[TG-COPILOTO] Erro na função {fc_name}: {e}", exc_info=True)
+            resposta = f"⚠️ Erro ao executar <b>{fc_name}</b>: {_esc(str(e)[:200])}"
 
-        # Atualizar contexto
-        ctx["historico"].append({"u": mensagem[:150], "b": resposta[:200]})
-        if len(ctx["historico"]) > 10:
-            ctx["historico"] = ctx["historico"][-10:]
+        # Atualizar histórico multi-turno
+        ctx["historico"].append({"role": "user", "content": mensagem[:200]})
+        ctx["historico"].append({"role": "model", "content": resposta[:300]})
+        if len(ctx["historico"]) > 20:
+            ctx["historico"] = ctx["historico"][-20:]
         await self._save_ctx(chat_id, ctx)
 
         return resposta
 
-    # ── Dispatcher LLM ────────────────────────────────────────────────────────
+    # ── Dispatcher via Gemini Function Calling ────────────────────────────────
 
-    async def _dispatch(self, mensagem: str, ctx: dict) -> dict:
-        """Chama LLM standard para classificar intenção. Retorna dict com acao+parametros."""
-        historico_resumido = "; ".join(
-            f"U:{h['u']}" for h in ctx.get("historico", [])[-3:]
-        ) or "nenhum"
+    async def _dispatch_fc(
+        self, mensagem: str, ctx: dict
+    ) -> tuple[Optional[str], dict, Optional[str]]:
+        """
+        Chama Gemini com function declarations.
+        Retorna (nome_funcao, argumentos, texto_resposta).
+        - Se Gemini chama função: (nome, args, None)
+        - Se Gemini responde com texto (pergunta/conversa): (None, {}, texto)
+        """
+        from google.genai import types as _gt
 
-        system = DISPATCHER_PROMPT.format(
-            inquerito_atual=ctx.get("inquerito_atual") or "nenhum",
-            historico_resumido=historico_resumido,
+        inquerito_atual = ctx.get("inquerito_atual") or "nenhum"
+        data_hoje = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+        system = SYSTEM_PROMPT.format(
+            inquerito_atual=inquerito_atual,
+            data_hoje=data_hoje,
         )
 
+        # Montar histórico como contents multi-turno
+        contents = []
+        for h in ctx.get("historico", [])[-8:]:  # últimas 4 trocas
+            role = h.get("role", "user")
+            content = h.get("content", "")
+            if content:
+                contents.append({"role": role, "parts": [{"text": content}]})
+
+        contents.append({"role": "user", "parts": [{"text": mensagem}]})
+
         try:
-            result = await self.llm.chat_completion(
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": mensagem},
-                ],
-                tier="standard",
-                temperature=0.1,
-                max_tokens=300,
-                json_mode=True,
+            response = await self._get_fc_client().aio.models.generate_content(
+                model=settings.LLM_STANDARD_MODEL,
+                contents=contents,
+                config=_gt.GenerateContentConfig(
+                    system_instruction=system,
+                    tools=[_get_fc_tools()],
+                    tool_config=_gt.ToolConfig(
+                        function_calling_config=_gt.FunctionCallingConfig(
+                            mode="AUTO",  # Gemini decide: chamar função OU perguntar em texto
+                        )
+                    ),
+                    temperature=0.1,
+                ),
             )
-            return json.loads(result["content"])
+
+            # Verificar se retornou function call
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, "function_call") and part.function_call:
+                    fc = part.function_call
+                    return fc.name, dict(fc.args), None
+
+            # Resposta em texto (pergunta de clarificação ou conversa)
+            texto = response.text.strip() if response.text else None
+            return None, {}, texto
+
         except Exception as e:
-            logger.warning(f"[TG-COPILOTO] Dispatcher falhou: {e}")
-            return {"acao": "conversa", "parametros": {"resposta": "Desculpe, não entendi. Digite /ajuda para ver os comandos disponíveis."}}
+            logger.warning(f"[TG-COPILOTO] Dispatcher FC falhou: {e}")
+            return None, {}, "Desculpe, tive um problema ao processar. Tente novamente."
 
     # ── Ação: listar inquéritos ───────────────────────────────────────────────
 
@@ -258,7 +404,7 @@ class TelegramCopilotoService:
         for ip in inqueritos:
             estado = ESTADO_LABEL.get(ip.estado_atual, ip.estado_atual)
             docs = ip.total_documentos
-            prio = f" 🔴" if ip.prioridade == "alta" else ""
+            prio = " 🔴" if ip.prioridade == "alta" else ""
             linhas.append(
                 f"• <code>{_esc(ip.numero)}</code> — {_esc(estado)}{prio}\n"
                 f"  {docs} doc(s) · {_esc(ip.delegacia_atual_nome or ip.delegacia or '—')}"
@@ -298,7 +444,6 @@ class TelegramCopilotoService:
         if ip.descricao:
             partes.append(f"\n📝 {_esc(ip.descricao[:300])}")
 
-        # Contar pessoas/entidades indexadas (query separada para não sobrecarregar)
         try:
             p_result = await db.execute(
                 select(Pessoa).where(Pessoa.inquerito_id == ip.id).limit(5)
@@ -324,7 +469,6 @@ class TelegramCopilotoService:
                 "Ex: <i>no IP 915-001/2024 o que sabemos sobre Fulano?</i>"
             )
 
-        # Localizar o inquérito no banco
         result = await db.execute(
             select(Inquerito).where(Inquerito.numero.ilike(f"%{numero.strip()}%"))
         )
@@ -338,20 +482,19 @@ class TelegramCopilotoService:
                 "Faça o upload dos autos na interface web para habilitar a busca."
             )
 
-        # Chamar CopilotoService (RAG pipeline)
         try:
             resultado = await self._get_copiloto().processar_mensagem(
                 query=query,
                 inquerito_id=str(ip.id),
                 historico=[
-                    {"role": "user" if "u" in h else "assistant", "content": h.get("u") or h.get("b", "")}
+                    {"role": h.get("role", "user"), "content": h.get("content", "")}
                     for h in ctx.get("historico", [])[-6:]
                 ],
                 numero_inquerito=ip.numero,
                 estado_atual=ip.estado_atual,
                 total_paginas=ip.total_paginas,
                 total_documentos=ip.total_documentos,
-                auditar=False,  # Desabilitar auditoria para agilidade no Telegram
+                auditar=False,
                 db=db,
             )
         except Exception as e:
@@ -361,7 +504,6 @@ class TelegramCopilotoService:
         resposta_texto = resultado.get("resposta", "Sem resposta.")
         fontes = resultado.get("fontes", [])
 
-        # Truncar resposta longa
         if len(resposta_texto) > 3000:
             resposta_texto = resposta_texto[:2997] + "..."
 
@@ -380,7 +522,7 @@ class TelegramCopilotoService:
     # ── Ação: agenda ─────────────────────────────────────────────────────────
 
     async def _agenda(self, db: AsyncSession) -> str:
-        agora = datetime.now(timezone.utc).replace(tzinfo=None)  # naive UTC
+        agora = datetime.now(timezone.utc).replace(tzinfo=None)
 
         result = await db.execute(
             select(Intimacao)
@@ -392,7 +534,6 @@ class TelegramCopilotoService:
         intimacoes = result.scalars().all()
 
         if not intimacoes:
-            # Verificar se há intimações passadas recentes
             result_past = await db.execute(
                 select(Intimacao)
                 .where(Intimacao.status == "agendada")
@@ -427,14 +568,12 @@ class TelegramCopilotoService:
         if not nome and not cpf:
             return "ℹ️ Informe o nome ou CPF da pessoa. Ex: <i>ficha do João Silva no IP 915-001/2024</i>"
 
-        # Montar filtro
         query = select(Pessoa)
         if cpf:
             query = query.where(Pessoa.cpf == cpf.strip())
         elif nome:
             query = query.where(Pessoa.nome.ilike(f"%{nome.strip()}%"))
 
-        # Filtrar por inquérito se disponível
         if numero_ip:
             ip_result = await db.execute(
                 select(Inquerito).where(Inquerito.numero.ilike(f"%{numero_ip.strip()}%"))
@@ -451,7 +590,7 @@ class TelegramCopilotoService:
             alvo = cpf or nome
             return f"❌ Nenhuma pessoa encontrada para <i>{_esc(alvo)}</i> nos autos indexados."
 
-        linhas = [f"👤 <b>Ficha(s) encontrada(s)</b>\n"]
+        linhas = ["👤 <b>Ficha(s) encontrada(s)</b>\n"]
         for p in pessoas:
             tipo = _esc(p.tipo_pessoa or "não classificado")
             cpf_str = f" · CPF: <code>{_esc(p.cpf)}</code>" if p.cpf else ""
@@ -464,7 +603,6 @@ class TelegramCopilotoService:
 
         linhas.append("💡 Para enriquecimento OSINT (P1–P4) use a interface web.")
         return "\n".join(linhas)
-
 
     # ── Ação: OSINT avulso ────────────────────────────────────────────────────
 
@@ -497,7 +635,7 @@ class TelegramCopilotoService:
             alvo = cpf or cnpj or placa or nome or rg
             return f"❌ Nenhum dado encontrado para <code>{_esc(alvo)}</code> nas fontes consultadas."
 
-        partes = [f"🔍 <b>Consulta OSINT Avulsa</b>"]
+        partes = ["🔍 <b>Consulta OSINT Avulsa</b>"]
         if cpf:
             partes.append(f"CPF: <code>{_esc(cpf)}</code>")
         if placa:
@@ -508,7 +646,6 @@ class TelegramCopilotoService:
             partes.append(f"Nome: <i>{_esc(nome)}</i>")
         partes.append("")
 
-        # Cadastro PF
         cad = dados.get("cadastro")
         if cad and isinstance(cad, dict):
             nome_ret = cad.get("nome") or cad.get("nome_completo") or ""
@@ -524,8 +661,12 @@ class TelegramCopilotoService:
             if sit:
                 partes.append(f"📋 CPF: {_esc(sit)}")
 
-        # Veículo
-        veiculo = dados.get("veiculo") or (dados.get("historico_veiculos") or [None])[0] if isinstance(dados.get("historico_veiculos"), list) else None
+        veiculo = (
+            dados.get("veiculo")
+            or (dados.get("historico_veiculos") or [None])[0]
+            if isinstance(dados.get("historico_veiculos"), list)
+            else None
+        )
         if isinstance(veiculo, dict) and veiculo:
             marca = veiculo.get("marca_modelo") or veiculo.get("marca") or ""
             cor = veiculo.get("cor") or ""
@@ -536,7 +677,6 @@ class TelegramCopilotoService:
             if prop:
                 partes.append(f"   Proprietário: {_esc(prop)}")
 
-        # Alertas
         alertas = []
         if dados.get("mandados_prisao") and isinstance(dados["mandados_prisao"], list) and dados["mandados_prisao"]:
             alertas.append("⚠️ MANDADO DE PRISÃO")
@@ -551,7 +691,6 @@ class TelegramCopilotoService:
 
         partes.append(f"\n📡 Fontes: {', '.join(_esc(f) for f in fontes_ok)}")
         return "\n".join(partes)
-
 
     # ── Ação: síntese investigativa ───────────────────────────────────────────
 
@@ -626,10 +765,9 @@ class TelegramCopilotoService:
         titulo = resultado["tipo"]
         texto = resultado["texto_gerado"]
 
-        # Telegram suporta até 4096 chars; enviar prévia + aviso
         preview = texto[:1800]
         if len(texto) > 1800:
-            preview += "\n\n<i>… (texto truncado — acesse Cautelares na interface web para o documento completo)</i>"
+            preview += "\n\n<i>… (acesse Cautelares na interface web para o documento completo)</i>"
 
         return (
             f"📄 <b>{_esc(titulo)}</b>\n"
@@ -673,10 +811,55 @@ class TelegramCopilotoService:
         )
 
 
+# ── Alerta proativo (chamado pelo Celery beat) ────────────────────────────────
+
+async def enviar_alertas_intimacoes(db: AsyncSession) -> list[str]:
+    """
+    Verifica intimações nas próximas 48h e retorna mensagens de alerta.
+    Chamado pelo Celery beat task telegram_alertas.
+    """
+    from datetime import timedelta
+
+    agora = datetime.now(timezone.utc).replace(tzinfo=None)
+    em_48h = agora + timedelta(hours=48)
+
+    result = await db.execute(
+        select(Intimacao)
+        .where(Intimacao.data_oitiva >= agora)
+        .where(Intimacao.data_oitiva <= em_48h)
+        .where(Intimacao.status == "agendada")
+        .order_by(Intimacao.data_oitiva.asc())
+    )
+    intimacoes = result.scalars().all()
+
+    if not intimacoes:
+        return []
+
+    alertas = []
+    for it in intimacoes:
+        data_str = it.data_oitiva.strftime("%d/%m %H:%M") if it.data_oitiva else "?"
+        delta = it.data_oitiva - agora if it.data_oitiva else None
+        horas = int(delta.total_seconds() / 3600) if delta else 0
+        nome = it.intimado_nome or "—"
+        local = it.local_oitiva or "local não informado"
+
+        urgencia = "🔴" if horas <= 24 else "🟡"
+        msg = (
+            f"{urgencia} <b>Oitiva em {horas}h</b>\n"
+            f"👤 {_esc(nome)}\n"
+            f"📅 {data_str}\n"
+            f"📍 {_esc(local)}"
+        )
+        if it.google_event_url:
+            msg += f'\n<a href="{it.google_event_url}">→ Google Agenda</a>'
+        alertas.append(msg)
+
+    return alertas
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _esc(text: str) -> str:
-    """Escapa caracteres especiais HTML."""
     if not text:
         return ""
     return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -684,23 +867,24 @@ def _esc(text: str) -> str:
 
 def _mensagem_ajuda() -> str:
     return (
-        "🤖 <b>Escrivão AI — Copiloto Telegram</b>\n\n"
+        "🤖 <b>Escrivão AI — Copiloto</b>\n\n"
         "<b>📋 Inquéritos</b>\n"
-        "• <i>listar inquéritos</i> — todos os IPs cadastrados\n"
-        "• <i>status do IP 915-001/2024</i> — detalhes de um IP\n"
-        "• <i>síntese do IP 915-001/2024</i> — análise investigativa completa\n"
-        "• <i>despacha o 915-001 para investigação</i> — avança o estado\n\n"
+        "• <i>listar inquéritos</i> — todos os IPs\n"
+        "• <i>status do IP 921-00332/2012</i> — detalhes\n"
+        "• <i>síntese do IP 921-00332/2012</i> — análise completa\n"
+        "• <i>despacha o 921-00332 para investigação</i>\n\n"
         "<b>🔎 Busca e pessoas</b>\n"
-        "• <i>no IP 915-001, o que sabemos sobre X?</i> — busca nos autos\n"
-        "• <i>ficha do João Silva no IP 915-001</i> — perfil de pessoa\n\n"
+        "• <i>no IP 921-00332, o que sabemos sobre X?</i>\n"
+        "• <i>ficha do João Silva no IP 921-00332</i>\n\n"
         "<b>📄 Atos processuais</b>\n"
-        "• <i>faz um ofício de requisição para o 915-001</i> — gera minuta\n"
-        "• <i>manda um mandado de busca para o juiz</i> — gera minuta\n"
-        "• <i>requisição de quebra de sigilo bancário</i> — gera minuta\n\n"
+        "• <i>faz um ofício de requisição para o 921-00332</i>\n"
+        "• <i>manda um mandado de busca para o juiz</i>\n"
+        "• <i>quebra de sigilo bancário do investigado</i>\n\n"
         "<b>🔍 OSINT e agenda</b>\n"
-        "• <i>pesquisar CPF 000.000.000-00</i> — consulta avulsa\n"
-        "• <i>verificar placa ABC1234</i> — consulta veicular\n"
-        "• <i>agenda</i> — próximas oitivas e audiências\n\n"
-        "💡 Após mencionar um IP, mantenho o contexto para as próximas mensagens.\n"
+        "• <i>ve esse CPF: 000.000.000-00</i>\n"
+        "• <i>verifica placa ABC1D23</i>\n"
+        "• <i>agenda</i> — próximas oitivas\n\n"
+        "💡 Mantenho o inquérito em foco entre mensagens.\n"
+        "Pode falar naturalmente — entendo português informal.\n"
         "/ajuda — exibe esta mensagem"
     )
