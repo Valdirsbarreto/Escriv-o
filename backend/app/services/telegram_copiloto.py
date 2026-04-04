@@ -759,14 +759,52 @@ class TelegramCopilotoService:
             nasc = cad.get("data_nascimento") or cad.get("nascimento") or ""
             mae = cad.get("nome_mae") or ""
             sit = cad.get("situacao_cpf") or cad.get("situacao") or ""
+            sexo = cad.get("sexo") or ""
             if nome_ret:
                 partes.append(f"👤 <b>{_esc(nome_ret)}</b>")
             if nasc:
-                partes.append(f"🎂 Nascimento: {_esc(str(nasc))}")
+                partes.append(f"🎂 Nascimento: {_esc(str(nasc))}" + (f" · {_esc(sexo)}" if sexo else ""))
             if mae:
                 partes.append(f"👩 Mãe: {_esc(mae)}")
             if sit:
                 partes.append(f"📋 CPF: {_esc(sit)}")
+
+            # Endereços
+            enderecos = cad.get("enderecos") or cad.get("endereco") or []
+            if isinstance(enderecos, dict):
+                enderecos = [enderecos]
+            if isinstance(enderecos, list) and enderecos:
+                partes.append("📍 <b>Endereços:</b>")
+                for end in enderecos[:3]:
+                    if isinstance(end, dict):
+                        logr = end.get("logradouro") or end.get("endereco") or ""
+                        num = end.get("numero") or ""
+                        bairro = end.get("bairro") or ""
+                        cidade = end.get("municipio") or end.get("cidade") or ""
+                        uf_end = end.get("uf") or end.get("estado") or ""
+                        cep = end.get("cep") or ""
+                        linha = f"{logr} {num}, {bairro} — {cidade}/{uf_end}"
+                        if cep:
+                            linha += f" CEP {cep}"
+                        partes.append(f"  • {_esc(linha.strip(', —'))}")
+                    elif isinstance(end, str):
+                        partes.append(f"  • {_esc(end)}")
+
+            # Telefones
+            telefones = cad.get("telefones") or cad.get("telefone") or []
+            if isinstance(telefones, str):
+                telefones = [telefones]
+            if isinstance(telefones, list) and telefones:
+                fones = [_esc(str(t.get("numero") or t) if isinstance(t, dict) else str(t)) for t in telefones[:4]]
+                partes.append(f"📞 Telefones: {', '.join(fones)}")
+
+            # Emails
+            emails = cad.get("emails") or cad.get("email") or []
+            if isinstance(emails, str):
+                emails = [emails]
+            if isinstance(emails, list) and emails:
+                email_list = [_esc(str(e.get("email") or e) if isinstance(e, dict) else str(e)) for e in emails[:3]]
+                partes.append(f"✉️ Emails: {', '.join(email_list)}")
 
         veiculo = (
             dados.get("veiculo")
