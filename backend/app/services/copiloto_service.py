@@ -84,7 +84,7 @@ class CopilotoService:
         # ── 1. Busca RAG ──────────────────────────────────
         logger.info(f"[COPILOTO] Buscando contexto para: {query[:80]}...")
 
-        query_vector = self.embedding_service.generate(query)
+        query_vector = await self.embedding_service.agenerate(query)
 
         resultados = self.qdrant_service.search(
             query_vector=query_vector,

@@ -28,11 +28,10 @@ class EmbeddingService:
         self._client = genai.Client(api_key=settings.GEMINI_API_KEY) if settings.GEMINI_API_KEY else None
 
     def generate(self, text: str) -> List[float]:
-        """Gera embedding para um único texto (chamada síncrona)."""
+        """Gera embedding para um único texto (chamada síncrona — use em workers/threads)."""
         if not self._client:
             raise RuntimeError("GEMINI_API_KEY não configurada")
-        
-        # Limpeza básica do texto
+
         text = str(text).replace("\x00", "").strip()
         if not text:
             return [0.0] * self.vector_size
@@ -40,11 +39,30 @@ class EmbeddingService:
         try:
             result = self._client.models.embed_content(
                 model=self.model_name,
-                contents=text[:8000], 
+                contents=text[:8000],
             )
             return result.embeddings[0].values
         except Exception as e:
             logger.error(f"[EMBEDDINGS] Erro ao gerar embedding: {e}")
+            return [0.0] * self.vector_size
+
+    async def agenerate(self, text: str) -> List[float]:
+        """Gera embedding de forma async — use em endpoints FastAPI."""
+        if not self._client:
+            raise RuntimeError("GEMINI_API_KEY não configurada")
+
+        text = str(text).replace("\x00", "").strip()
+        if not text:
+            return [0.0] * self.vector_size
+
+        try:
+            result = await self._client.aio.models.embed_content(
+                model=self.model_name,
+                contents=text[:8000],
+            )
+            return result.embeddings[0].values
+        except Exception as e:
+            logger.error(f"[EMBEDDINGS] Erro ao gerar embedding async: {e}")
             return [0.0] * self.vector_size
 
     def generate_batch(
