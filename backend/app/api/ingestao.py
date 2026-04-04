@@ -143,3 +143,54 @@ async def admin_qdrant_info():
         }
     except Exception as e:
         return {"erro": str(e)}
+
+
+@router.post("/admin/reindexa/{inquerito_id}", tags=["Admin"])
+async def admin_reindexa_inquerito(inquerito_id: uuid.UUID):
+    """
+    Re-dispara a ingestão de todos os documentos de um inquérito já existente.
+    Útil para re-indexar no Qdrant após recriar a coleção com dimensões corretas.
+    Os chunks antigos no PostgreSQL são apagados antes de reprocessar para evitar duplicatas.
+    """
+    from sqlalchemy import create_engine, select as sa_select, delete as sa_delete
+    from sqlalchemy.orm import Session
+    from app.core.config import settings as _s
+    from app.models.documento import Documento
+    from app.models.chunk import Chunk
+    from app.workers.ingestion import ingest_document
+
+    sync_engine = create_engine(_s.DATABASE_URL_SYNC)
+    disparados = []
+    ignorados = []
+
+    with Session(sync_engine) as db:
+        docs = db.execute(
+            sa_select(Documento)
+            .where(Documento.inquerito_id == inquerito_id)
+            .where(Documento.status_processamento == "concluido")
+        ).scalars().all()
+
+        if not docs:
+            return {"ok": False, "mensagem": "Nenhum documento concluído encontrado para este inquérito."}
+
+        for doc in docs:
+            # Apaga chunks antigos do PostgreSQL para evitar duplicatas
+            db.execute(
+                sa_delete(Chunk).where(Chunk.documento_id == doc.id)
+            )
+            # Marca para reprocessamento
+            doc.status_processamento = "pendente"
+
+        db.commit()
+
+        # Dispara re-ingestão para cada documento
+        for doc in docs:
+            ingest_document.delay(str(doc.id), str(inquerito_id))
+            disparados.append(str(doc.id))
+
+    return {
+        "ok": True,
+        "inquerito_id": str(inquerito_id),
+        "documentos_disparados": len(disparados),
+        "ids": disparados,
+    }

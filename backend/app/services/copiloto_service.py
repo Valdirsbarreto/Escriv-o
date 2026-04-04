@@ -163,6 +163,53 @@ class CopilotoService:
             except Exception as e:
                 logger.warning(f"[COPILOTO] Falha ao buscar índice de pessoas/empresas: {e}")
 
+        # Injetar contatos (telefones/emails) e cronologia de eventos
+        if db is not None:
+            try:
+                from sqlalchemy import select as sa_select  # noqa: F811
+                from app.models.contato import Contato
+                from app.models.evento_cronologico import EventoCronologico
+
+                contatos_result = await db.execute(
+                    sa_select(Contato)
+                    .where(Contato.inquerito_id == uuid.UUID(inquerito_id))
+                    .order_by(Contato.tipo_contato)
+                )
+                contatos = contatos_result.scalars().all()
+
+                eventos_result = await db.execute(
+                    sa_select(EventoCronologico)
+                    .where(EventoCronologico.inquerito_id == uuid.UUID(inquerito_id))
+                    .order_by(EventoCronologico.data_fato_str)
+                )
+                eventos = eventos_result.scalars().all()
+
+                bloco_extra = []
+
+                if contatos:
+                    bloco_extra.append("### Telefones e E-mails Identificados nos Autos\n")
+                    fones = [c for c in contatos if c.tipo_contato == "telefone"]
+                    emails = [c for c in contatos if c.tipo_contato == "email"]
+                    if fones:
+                        bloco_extra.append("**Telefones:** " + ", ".join(c.valor for c in fones))
+                    if emails:
+                        bloco_extra.append("**E-mails:** " + ", ".join(c.valor for c in emails))
+                    bloco_extra.append("---")
+
+                if eventos:
+                    bloco_extra.append("### Cronologia de Eventos\n")
+                    for ev in eventos:
+                        data = ev.data_fato_str or (ev.data_fato.strftime("%d/%m/%Y") if ev.data_fato else "Data não informada")
+                        bloco_extra.append(f"- {data}: {ev.descricao}")
+                    bloco_extra.append("---")
+
+                if bloco_extra:
+                    contexto_partes.append("\n".join(bloco_extra))
+                    logger.info(f"[COPILOTO] Contatos/cronologia injetados: {len(contatos)} contatos, {len(eventos)} eventos")
+
+            except Exception as e:
+                logger.warning(f"[COPILOTO] Falha ao buscar contatos/cronologia: {e}")
+
         for i, r in enumerate(resultados, 1):
             payload = r.get("payload", {})
             texto_preview = payload.get("texto_preview", "")
