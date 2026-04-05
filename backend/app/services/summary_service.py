@@ -131,7 +131,7 @@ class SummaryService:
         try:
             result = await self.llm.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
-                tier="economico",
+                tier="resumo",
                 temperature=0.2,
                 max_tokens=700,
                 agente="Resumo",
@@ -178,7 +178,7 @@ class SummaryService:
         try:
             result = await self.llm.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
-                tier="economico",
+                tier="resumo",
                 temperature=0.2,
                 max_tokens=800,
                 agente="Resumo",
@@ -224,7 +224,7 @@ class SummaryService:
         try:
             result = await self.llm.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
-                tier="standard",
+                tier="resumo",
                 temperature=0.3,
                 max_tokens=1000,
                 agente="Resumo",

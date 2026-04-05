@@ -64,6 +64,15 @@ class Settings(BaseSettings):
     # ── Gemini (Google) ────────────────────────────────────
     GEMINI_API_KEY: Optional[str] = None
 
+    # ── Groq (tiers Triagem / Extração / Resumo / Auditoria) ──
+    GROQ_API_KEY: Optional[str] = None
+    GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
+    # Modelos Groq por função (substituível via env var quando Gemma 3 estiver disponível)
+    LLM_TRIAGEM_MODEL: str = "llama-3.1-8b-instant"    # Classificação — rápido e barato
+    LLM_EXTRACAO_MODEL: str = "llama-3.3-70b-versatile" # NER — alta precisão
+    LLM_RESUMO_MODEL: str = "llama-3.3-70b-versatile"   # Resumos hierárquicos
+    LLM_AUDITORIA_MODEL: str = "llama-3.3-70b-versatile" # Auditoria factual do copiloto
+
     # ── DeepSeek ───────────────────────────────────────────
     DEEPSEEK_API_KEY: Optional[str] = None
 

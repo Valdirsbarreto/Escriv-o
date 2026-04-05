@@ -425,7 +425,7 @@ class CopilotoService:
                 {"role": "system", "content": "Você é um auditor factual. Responda em JSON."},
                 {"role": "user", "content": prompt_auditoria},
             ],
-            tier="economico",
+            tier="auditoria",
             temperature=0.1,
             agente="AuditoriaFactual",
             max_tokens=1000,
