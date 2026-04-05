@@ -43,10 +43,17 @@ class EmbeddingService:
             return [0.0] * self.vector_size
 
         url = _EMBED_URL.format(model=self.model_name)
-        payload = {"content": {"parts": [{"text": text[:8000]}]}}
+        payload = {
+            "model": f"models/{self.model_name}",
+            "content": {"parts": [{"text": text[:8000]}]},
+        }
         try:
             resp = httpx.post(url, params={"key": self._api_key}, json=payload, timeout=30)
-            resp.raise_for_status()
+            if not resp.is_success:
+                logger.error(
+                    f"[EMBEDDINGS] HTTP {resp.status_code} ao gerar embedding: {resp.text[:500]}"
+                )
+                return [0.0] * self.vector_size
             return resp.json()["embedding"]["values"]
         except Exception as e:
             logger.error(f"[EMBEDDINGS] Erro ao gerar embedding: {e}")
@@ -62,11 +69,18 @@ class EmbeddingService:
             return [0.0] * self.vector_size
 
         url = _EMBED_URL.format(model=self.model_name)
-        payload = {"content": {"parts": [{"text": text[:8000]}]}}
+        payload = {
+            "model": f"models/{self.model_name}",
+            "content": {"parts": [{"text": text[:8000]}]},
+        }
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(url, params={"key": self._api_key}, json=payload)
-                resp.raise_for_status()
+                if not resp.is_success:
+                    logger.error(
+                        f"[EMBEDDINGS] HTTP {resp.status_code} ao gerar embedding async: {resp.text[:500]}"
+                    )
+                    return [0.0] * self.vector_size
                 return resp.json()["embedding"]["values"]
         except Exception as e:
             logger.error(f"[EMBEDDINGS] Erro ao gerar embedding async: {e}")
