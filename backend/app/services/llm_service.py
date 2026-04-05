@@ -96,16 +96,14 @@ class LLMService:
             model = self.premium_model
             result = await self._gemini_completion(messages, model, temperature, max_tokens, json_mode)
 
-        # Registrar consumo em background (não bloqueia a resposta)
-        asyncio.create_task(
-            self._registrar_consumo(
-                agente=agente,
-                tier=tier,
-                model=model,
-                tokens_prompt=result["tokens_prompt"],
-                tokens_saida=result["tokens_resposta"],
-                custo_usd=result["custo_estimado"],
-            )
+        # Registrar consumo (await direto pois roda sob asyncio.run no Celery)
+        await self._registrar_consumo(
+            agente=agente,
+            tier=tier,
+            model=model,
+            tokens_prompt=result["tokens_prompt"],
+            tokens_saida=result["tokens_resposta"],
+            custo_usd=result["custo_estimado"],
         )
 
         return result
@@ -148,8 +146,9 @@ class LLMService:
 
             content = response.text
 
-            tokens_prompt   = response.usage_metadata.prompt_token_count     if hasattr(response, "usage_metadata") else 0
-            tokens_resposta = response.usage_metadata.candidates_token_count if hasattr(response, "usage_metadata") else 0
+            usage = getattr(response, "usage_metadata", None)
+            tokens_prompt   = getattr(usage, "prompt_token_count", 0) or 0
+            tokens_resposta = getattr(usage, "candidates_token_count", 0) or 0
 
             custo = self._estimar_custo(model, tokens_prompt, tokens_resposta)
 
