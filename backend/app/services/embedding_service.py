@@ -26,10 +26,7 @@ class EmbeddingService:
         self.model_name = model_name
         self.vector_size = DEFAULT_VECTOR_SIZE
         self._client = (
-            genai.Client(
-                api_key=settings.GEMINI_API_KEY,
-                http_options=genai_types.HttpOptions(api_version="v1"),
-            )
+            genai.Client(api_key=settings.GEMINI_API_KEY)
             if settings.GEMINI_API_KEY
             else None
         )
