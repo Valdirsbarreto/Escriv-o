@@ -121,6 +121,7 @@ Eventos/Cronologia:
                 temperature=0.2,
                 max_tokens=2000,
                 json_mode=True,
+                agente="AgenteFicha",
             )
 
             content = result["content"].strip()
@@ -214,6 +215,7 @@ Endereços:
                 temperature=0.2,
                 max_tokens=1500,
                 json_mode=True,
+                agente="AgenteFicha",
             )
 
             ficha_json = json.loads(result["content"].strip())

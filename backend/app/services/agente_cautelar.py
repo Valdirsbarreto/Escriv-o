@@ -83,6 +83,7 @@ class AgenteCautelar:
                 tier="premium",
                 temperature=0.4,
                 max_tokens=3000,
+                agente="AgenteCautelar",
             )
 
             texto = result["content"].strip()

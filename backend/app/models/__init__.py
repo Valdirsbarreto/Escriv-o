@@ -22,6 +22,7 @@ from app.models.resumo_cache import ResumoCache
 from app.models.resultado_agente import ResultadoAgente
 from app.models.delegacia import Delegacia
 from app.models.consulta_externa import ConsultaExterna
+from app.models.consumo_api import ConsumoApi
 
 __all__ = [
     "Inquerito",
@@ -43,4 +44,5 @@ __all__ = [
     "ResultadoAgente",
     "Delegacia",
     "ConsultaExterna",
+    "ConsumoApi",
 ]

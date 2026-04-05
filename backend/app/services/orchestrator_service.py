@@ -44,7 +44,8 @@ class OrchestratorService:
                 tier="standard",
                 temperature=0.1,
                 max_tokens=2000,
-                json_mode=True
+                json_mode=True,
+                agente="Orquestrador",
             )
             
             content = result["content"].strip()
@@ -71,7 +72,8 @@ class OrchestratorService:
                 messages=[{"role": "user", "content": prompt}],
                 tier="standard",
                 temperature=0.7,
-                max_tokens=1500
+                max_tokens=1500,
+                agente="Orquestrador",
             )
             return result["content"].strip()
         except Exception as e:

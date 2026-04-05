@@ -134,6 +134,7 @@ class SummaryService:
                 tier="economico",
                 temperature=0.2,
                 max_tokens=700,
+                agente="Resumo",
             )
             resumo = result["content"].strip()
             tokens = result.get("usage", {}).get("total_tokens")
@@ -180,6 +181,7 @@ class SummaryService:
                 tier="economico",
                 temperature=0.2,
                 max_tokens=800,
+                agente="Resumo",
             )
             resumo = result["content"].strip()
             tokens = result.get("usage", {}).get("total_tokens")
@@ -225,6 +227,7 @@ class SummaryService:
                 tier="standard",
                 temperature=0.3,
                 max_tokens=1000,
+                agente="Resumo",
             )
             resumo = result["content"].strip()
             tokens = result.get("usage", {}).get("total_tokens")

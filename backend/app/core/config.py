@@ -80,7 +80,12 @@ class Settings(BaseSettings):
     GOOGLE_CALENDAR_REFRESH_TOKEN: Optional[str] = None
     GOOGLE_CALENDAR_ID: str = "primary"  # ID do calendário (primary = calendário principal)
 
-    # ── Telegram Bot ─────────────────────────────────────────
+    # ── Controle de Orçamento LLM ─────────────────────────────
+    BUDGET_BRL: float = 250.0          # Limite mensal em Reais (Google AI Studio Nível 1)
+    BUDGET_ALERT_BRL: float = 200.0    # Dispara alerta Telegram ao atingir este valor
+    COTACAO_DOLAR: float = 5.80        # Cotação USD→BRL para estimativa (atualizar manualmente)
+
+    # ── Telegram Bot ─────────────────────────────────────────────────────────
     TELEGRAM_BOT_TOKEN: str = ""
     # IDs Telegram autorizados (separados por vírgula). Vazio = bloqueia todos.
     TELEGRAM_ALLOWED_USER_IDS: str = ""

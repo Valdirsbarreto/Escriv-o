@@ -2,10 +2,15 @@
 Escrivão AI — Serviço LLM
 Roteamento unificado via Google Gemini para todos os tiers.
 Econômico: gemini-1.5-flash-8b | Standard: gemini-1.5-flash | Premium: gemini-1.5-pro
+
+Registra automaticamente cada chamada em `consumo_api` (fire-and-forget).
 """
 
+import asyncio
 import logging
 import time
+import uuid
+from decimal import Decimal
 from typing import List, Dict, Optional, Any
 
 from google import genai
@@ -23,6 +28,10 @@ class LLMService:
     Econômico  (gemini-1.5-flash-8b) : NER, classificação, resumos — temperature 0.1
     Standard   (gemini-1.5-flash)    : orquestração, extrato bancário, OCR
     Premium    (gemini-1.5-pro)      : copiloto RAG, fichas, cautelares, síntese investigativa
+
+    Parâmetro `agente`: nome do componente chamador para rastreio de custo.
+    Exemplos: 'Copiloto', 'AgenteFicha', 'AgenteExtrato', 'Resumo', 'NER',
+              'Classificacao', 'Orquestrador', 'AgenteCautelar'
     """
 
     def __init__(self):
@@ -42,26 +51,21 @@ class LLMService:
         temperature: float = 0.3,
         max_tokens: int = 2000,
         json_mode: bool = False,
+        agente: str = "Desconhecido",
     ) -> Dict[str, Any]:
         """
         Envia mensagens para o LLM e retorna a resposta.
 
         Args:
-            messages: Lista de dicts com role e content
-            tier: "economico", "standard" ou "premium"
+            messages  : Lista de dicts com role e content
+            tier      : "economico", "standard" ou "premium"
             temperature: 0.0 a 1.0 (mais baixo = mais preciso)
             max_tokens: máximo de tokens na resposta
-            json_mode: se True, força resposta em JSON
+            json_mode : se True, força resposta em JSON
+            agente    : nome do componente chamador (para rastreio de custo)
 
         Returns:
-            {
-                "content": str,
-                "model": str,
-                "tokens_prompt": int,
-                "tokens_resposta": int,
-                "custo_estimado": float,
-                "tempo_ms": int,
-            }
+            {content, model, tokens_prompt, tokens_resposta, custo_estimado, tempo_ms}
         """
         if tier == "economico":
             model = self.eco_model
@@ -71,7 +75,21 @@ class LLMService:
         else:  # "premium"
             model = self.premium_model
 
-        return await self._gemini_completion(messages, model, temperature, max_tokens, json_mode)
+        result = await self._gemini_completion(messages, model, temperature, max_tokens, json_mode)
+
+        # Registrar consumo em background (não bloqueia a resposta)
+        asyncio.create_task(
+            self._registrar_consumo(
+                agente=agente,
+                tier=tier,
+                model=model,
+                tokens_prompt=result["tokens_prompt"],
+                tokens_saida=result["tokens_resposta"],
+                custo_usd=result["custo_estimado"],
+            )
+        )
+
+        return result
 
     async def _gemini_completion(
         self,
@@ -135,6 +153,87 @@ class LLMService:
         except Exception as e:
             logger.error(f"[LLM-Gemini] Erro ({model}): {e}")
             raise
+
+    async def _registrar_consumo(
+        self,
+        agente: str,
+        tier: str,
+        model: str,
+        tokens_prompt: int,
+        tokens_saida: int,
+        custo_usd: float,
+    ) -> None:
+        """Persiste o consumo no banco e dispara alerta Telegram se necessário."""
+        try:
+            from app.core.database import async_session
+            from app.models.consumo_api import ConsumoApi
+            from sqlalchemy import func, select
+
+            cotacao = Decimal(str(settings.COTACAO_DOLAR))
+            custo_brl = Decimal(str(custo_usd)) * cotacao
+
+            registro = ConsumoApi(
+                id=uuid.uuid4(),
+                agente=agente,
+                modelo=model,
+                tier=tier,
+                tokens_prompt=tokens_prompt,
+                tokens_saida=tokens_saida,
+                custo_usd=Decimal(str(custo_usd)),
+                custo_brl=custo_brl,
+                cotacao_dolar=cotacao,
+            )
+
+            async with async_session() as db:
+                db.add(registro)
+                await db.flush()
+
+                # Checar se cruzou o threshold de alerta (mês corrente)
+                from datetime import datetime
+                inicio_mes = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                total_result = await db.execute(
+                    select(func.sum(ConsumoApi.custo_brl)).where(
+                        ConsumoApi.timestamp >= inicio_mes
+                    )
+                )
+                total_mes = float(total_result.scalar() or 0)
+                await db.commit()
+
+            # Alerta Telegram se ultrapassou o limite (só dispara na primeira vez que cruza)
+            threshold = settings.BUDGET_ALERT_BRL
+            total_antes = total_mes - float(custo_brl)
+            if total_antes < threshold <= total_mes:
+                await self._enviar_alerta_orcamento(total_mes)
+
+        except Exception as e:
+            logger.warning(f"[LLM-Consumo] Falha ao registrar consumo (não crítico): {e}")
+
+    async def _enviar_alerta_orcamento(self, total_mes: float) -> None:
+        """Envia alerta Telegram quando o gasto mensal atinge BUDGET_ALERT_BRL."""
+        try:
+            import httpx
+            if not settings.TELEGRAM_BOT_TOKEN or not settings.TELEGRAM_ALLOWED_USER_IDS:
+                return
+
+            user_ids = [uid.strip() for uid in settings.TELEGRAM_ALLOWED_USER_IDS.split(",") if uid.strip()]
+            budget = settings.BUDGET_BRL
+            pct = (total_mes / budget) * 100
+
+            texto = (
+                f"⚠️ *Alerta de Orçamento — Escrivão AI*\n\n"
+                f"Consumo mensal de API atingiu *R$ {total_mes:.2f}* "
+                f"({pct:.0f}% do limite de R$ {budget:.0f}).\n\n"
+                f"Acesse o dashboard em `/consumo/saldo` para detalhes."
+            )
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                for uid in user_ids:
+                    await client.post(
+                        f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage",
+                        json={"chat_id": uid, "text": texto, "parse_mode": "Markdown"},
+                    )
+        except Exception as e:
+            logger.warning(f"[LLM-Alerta] Falha ao enviar alerta Telegram: {e}")
 
     def _estimar_custo(self, model: str, tokens_in: int, tokens_out: int) -> float:
         """Estimativa de custo (USD) baseada em preços por 1M tokens."""

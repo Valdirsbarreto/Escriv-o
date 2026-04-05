@@ -44,6 +44,7 @@ class ExtractorService:
                 tier="economico",
                 temperature=0.0,  # Queremos precisão/determinismo
                 max_tokens=50,
+                agente="Classificacao",
             )
             categoria = result["content"].strip().lower()
             return categoria
@@ -69,7 +70,8 @@ class ExtractorService:
                 tier="standard",
                 temperature=0.1,  # Baixa temp para estruturação confiável
                 max_tokens=3000,
-                json_mode=True,   # Força a resposta em formato JSON JSON object
+                json_mode=True,
+                agente="NER",
             )
             
             content = result["content"].strip()

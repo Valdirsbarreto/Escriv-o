@@ -272,6 +272,7 @@ class CopilotoService:
                 tier="standard",
                 temperature=0.3,
                 max_tokens=3000,
+                agente="Copiloto",
             )
         except Exception as e:
             logger.error(f"[COPILOTO] LLM indisponível: {e}")
@@ -342,6 +343,7 @@ class CopilotoService:
             ],
             tier="economico",
             temperature=0.1,
+            agente="AuditoriaFactual",
             max_tokens=1000,
             json_mode=True,
         )

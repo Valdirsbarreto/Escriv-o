@@ -62,6 +62,7 @@ class AgenteExtrato:
                 temperature=0.1,
                 max_tokens=4000,
                 json_mode=True,
+                agente="AgenteExtrato",
             )
 
             content = result["content"].strip()
