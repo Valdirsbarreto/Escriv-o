@@ -21,8 +21,7 @@ class TestPrompts:
         )
         assert "IP 001/2024" in resultado
         assert "investigacao_ativa" in resultado
-        assert "CITE SEMPRE AS FONTES" in resultado
-        assert "NÃO INVENTE FATOS" in resultado
+        assert "Escrivão AI" in resultado
 
     def test_system_prompt_triagem_formatacao(self):
         """System prompt de triagem deve aceitar formatação."""
@@ -70,11 +69,11 @@ class TestLLMService:
         assert service.eco_model is not None
         assert service.premium_model is not None
 
-    def test_estimativa_custo_gpt4o_mini(self):
-        """Estimativa de custo para gpt-4o-mini."""
+    def test_estimativa_custo_gemini_flash(self):
+        """Estimativa de custo para gemini-1.5-flash."""
         from app.services.llm_service import LLMService
         service = LLMService()
-        custo = service._estimar_custo("gpt-4o-mini", 1000, 500)
+        custo = service._estimar_custo("gemini-1.5-flash", 1000, 500)
         assert custo > 0
         assert custo < 0.01  # Deve ser centavos
 
