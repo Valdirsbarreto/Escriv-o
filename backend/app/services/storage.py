@@ -84,21 +84,20 @@ class StorageService:
         if settings.SUPABASE_URL and settings.SUPABASE_SERVICE_KEY:
             try:
                 import httpx
-                # Usa o bucket nativo do Supabase em vez do fallback MinIO (self.bucket)
-                supabase_bucket = settings.SUPABASE_STORAGE_BUCKET
+                # Usa o bucket de onde o arquivo foi fisicamente salvo (escalado pelo boto3 fallback)
+                supabase_bucket = self.bucket
                 
                 # Remove o prefixo do bucket da key se ele tiver sido salvo no banco com path completo
                 actual_key = key
                 if actual_key.startswith(f"{supabase_bucket}/"):
                     actual_key = actual_key[len(supabase_bucket)+1:]
-                elif actual_key.startswith(f"{self.bucket}/"):
-                    actual_key = actual_key[len(self.bucket)+1:]
 
                 url = f"{settings.SUPABASE_URL}/storage/v1/object/sign/{supabase_bucket}/{actual_key}"
                 resp = httpx.post(
                     url,
                     headers={
                         "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                        "apikey": settings.SUPABASE_SERVICE_KEY,
                         "Content-Type": "application/json",
                     },
                     json={"expiresIn": expires_in},
