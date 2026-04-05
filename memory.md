@@ -72,22 +72,22 @@ Commits: `cff2c44`, `df09856`, `6995094`, `5b4c67e`, `dd8b7fe`, `dd8e9a9`, `d043
 - **Axios timeout** (`dd8e9a9`): Frontend ficava em spinner eterno sem timeout. Adicionado 15s para API e 60s para upload.
 - **Número TEMP** (`d0430c3`): Orquestrador criava inquéritos com `TEMP-XXXXXX` por falha na extração via LLM. Adicionada extração por regex do filename antes de chamar o LLM (ex: `033-07699-2016.pdf` → número `033-07699-2016`).
 
-### ✅ Sessão de Estabilização — 04/04/2026 (`d555260`)
+### ✅ Sessão de Estabilização e Deploy — 04/04/2026 (`d555260` -> `31c6fee`)
 - **Dependência LLM fixada**: `google-genai` instalada no venv local.
-- **Migração de Embeddings**: `sentence-transformers` removido; migrado para **Gemini API Embeddings** (768-dim) para build ultra-rápido (< 2min) e economia de ~2GB RAM.
-- **Correção 404 Gemini**: O modelo `gemini-2.0-flash-001` estava depreciado para novos usuários; atualizado para `gemini-1.5-flash` em todos os serviços.
-- **Fix do Deploy Railway**: O comando de start no `nixpacks.toml` não expandia a variável `$PORT` corretamente; fixado para usar `sh -c`.
+- **Migração de Embeddings**: `sentence-transformers` removido; ambiente agora refatorado para usar **Gemini API Embeddings** (`text-multilingual-embedding-002`) para build ultra-rápido (< 30s) e liberar ~2GB de RAM.
+- **Correção da Pipeline OSINT / Extratores**: O modelo `gemini-2.0-flash-001` estava depreciado; atualizado estruturalmente para `gemini-flash-latest`. Modificações na dedplicação (`_upsert_pessoa`, `_upsert_empresa`) e funções utilitárias do Qdrant.
+- **Visualização de PDFs via Signed URL**: Suberido o uso nativo do endpoint REST `/storage/v1/object/sign/` do Supabase invés do Boto3 presigned default que disparava "Missing Signature"; e corrigido conflito de prefixo/nome do bucket apontado pela base de dados.
+- **Criado o Documento**: `Documentos/arquitetura_agentes_llm.md` detalhando a infraestrutura completa de LLMs e Tarefas.
+- **Fix Crítico do Deploy Railway**: Remover o `alembic upgrade head` do processo de start no container; a demora de timeout do banco de dados excedia a janela de saúde de 100s, fazendo a Railway matar a imagem. Foi repassado apenas `celery` em background e `exec uvicorn` como PID 1.
 - **Correção de números TEMP**: Criado script `backend/scripts/fix_temp_numbers.py` para registros legados.
-- **Testes validados**: `test_auditoria.py`, `test_copiloto.py` e `test_state_machine.py` passando.
 
 ---
 
-## 3. Estado Atual (20/03/2026)
+## 3. Estado Atual (05/04/2026)
 
-**Sistema em produção funcionando:**
-- ✅ Pipeline de ingestão completo (upload → storage → chunks → embeddings → Qdrant → NER)
+**Sistema em produção funcionando e super-leve:**
+- ✅ Pipeline de ingestão otimizado (com deduplicação de entidades baseada em regras prioritárias de CPF e CNPJ) e Reclassificação Integrada.
 - ✅ Inquéritos aparecem no Dashboard após ingestão
-- ✅ Página de detalhes carregando documentos com status de indexação
 - ✅ 4/4 documentos indexados em teste real com IP 033-07699-2026
 - ✅ Número do IP Corrigido: Script de manutenção disponível
 - ✅ Copiloto testado localmente com mocks (passed)
@@ -97,9 +97,8 @@ Commits: `cff2c44`, `df09856`, `6995094`, `5b4c67e`, `dd8b7fe`, `dd8e9a9`, `d043
 ## 4. Próximos Passos
 
 ### ⏳ Imediato
-- **Testar o Copiloto** em produção com um inquérito indexado
-- **Separar Celery em serviço próprio** na Railway (P2 — estabilidade)
-- **Substituir sentence-transformers** por API de embeddings (OpenAI/Gemini) para eliminar custo de memória
+- **Testar o Copiloto** em produção com a nova arquitetura do Gemini na base recriada com Qdrant `text-multilingual-embedding-002`
+- **Separar Celery em serviço próprio** na Railway (P2 — estabilidade) se necessário, embora não esteja mais travando a inicialização
 
 ### Sprint 6
 - **Agentes Especializados e OSINT**: Tela de triagem OSINT para enriquecimento de dados de pessoas
