@@ -107,10 +107,14 @@ class StorageService:
                     data = resp.json()
                     signed_path = data.get("signedURL") or data.get("signedUrl") or ""
                     if signed_path:
-                        # signedURL já é o path relativo; montar URL completa
+                        # signedURL já é o path relativo; montar URL completa com /storage/v1
                         if signed_path.startswith("http"):
                             return signed_path
-                        return f"{settings.SUPABASE_URL}{signed_path}"
+                        # Garante que /storage/v1 seja inserido antes de /object/...
+                        base_url = settings.SUPABASE_URL.rstrip('/')
+                        if not signed_path.startswith('/'):
+                            signed_path = '/' + signed_path
+                        return f"{base_url}/storage/v1{signed_path}"
                 logger.warning(f"[STORAGE] Supabase signed URL falhou: {resp.status_code} {resp.text[:200]}")
             except Exception as e:
                 logger.warning(f"[STORAGE] Erro ao gerar Supabase signed URL: {e}")
