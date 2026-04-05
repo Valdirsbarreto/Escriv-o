@@ -846,9 +846,17 @@ export default function InqueritoDetalhePage() {
                         <span className="text-xs text-blue-400/70">{frag.tipo_peca}</span>
                       )}
                     </div>
-                    <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
-                      {frag.texto || <span className="text-zinc-600 italic">Texto não disponível</span>}
-                    </p>
+                    <div className="text-sm text-zinc-300 leading-relaxed selection:bg-blue-500/30">
+                      {frag.texto ? (
+                        frag.texto.split(/(?:\r?\n\s*){2,}/).map((para: string, j: number) => (
+                          <p key={j} className="mb-3 text-justify">
+                            {para.replace(/\r?\n/g, ' ')}
+                          </p>
+                        ))
+                      ) : (
+                        <span className="text-zinc-600 italic">Texto não disponível</span>
+                      )}
+                    </div>
                   </div>
                 ))
               )}
@@ -901,9 +909,13 @@ export default function InqueritoDetalhePage() {
                   <Loader2 size={24} className="animate-spin mr-2"/> Carregando...
                 </div>
               ) : docViewer.conteudo?.texto_extraido ? (
-                <pre className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed font-sans">
-                  {docViewer.conteudo.texto_extraido}
-                </pre>
+                <div className="text-sm text-zinc-300 leading-relaxed font-sans selection:bg-blue-500/30">
+                  {docViewer.conteudo.texto_extraido.split(/(?:\r?\n\s*){2,}/).map((para: string, i: number) => (
+                    <p key={i} className="mb-4 text-justify">
+                      {para.replace(/\r?\n/g, ' ')}
+                    </p>
+                  ))}
+                </div>
               ) : (
                 <div className="text-center py-16 text-zinc-500">
                   <FileText size={32} className="mx-auto mb-3 opacity-30"/>
