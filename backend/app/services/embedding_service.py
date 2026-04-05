@@ -15,7 +15,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "text-multilingual-embedding-002"
+DEFAULT_MODEL = "text-embedding-004"
 DEFAULT_VECTOR_SIZE = 768
 
 
