@@ -23,11 +23,11 @@ from app.models.resumo_cache import ResumoCache
 
 logger = logging.getLogger(__name__)
 
-# Limite de texto para cada nível antes de enviar ao LLM
-MAX_CHARS_PAGINA = 5_000
-MAX_CHARS_DOCUMENTO = 25_000
-MAX_CHARS_VOLUME = 20_000   # texto composto de resumos de docs
-MAX_CHARS_CASO = 15_000     # texto composto de resumos de volumes
+# Limites de texto por nível — ampliados para aproveitar janela de 1M tokens do gemini-1.5-flash-8b
+MAX_CHARS_PAGINA    =  5_000
+MAX_CHARS_DOCUMENTO = 50_000   # era 25_000
+MAX_CHARS_VOLUME    = 40_000   # era 20_000 — composto de resumos de docs
+MAX_CHARS_CASO      = 30_000   # era 15_000 — composto de resumos de volumes
 
 
 class SummaryService:

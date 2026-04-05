@@ -40,22 +40,26 @@ class Settings(BaseSettings):
     S3_BUCKET_NAME: str = "escrivao-documentos"
 
     # ── LLM Camada Econômica ───────────────────────────────
-    LLM_ECONOMICO_PROVIDER: str = "openai"
-    LLM_ECONOMICO_MODEL: str = "gpt-4.1-nano"
-    LLM_ECONOMICO_BASE_URL: str = "https://api.openai.com/v1"
-    LLM_ECONOMICO_API_KEY: Optional[str] = None
+    LLM_ECONOMICO_PROVIDER: str = "google"
+    LLM_ECONOMICO_MODEL: str = "gemini-1.5-flash-8b"
+    LLM_ECONOMICO_BASE_URL: str = "https://generativelanguage.googleapis.com"
+    LLM_ECONOMICO_API_KEY: Optional[str] = None  # Deprecated — todos os tiers usam GEMINI_API_KEY
+    LLM_ECONOMICO_TEMPERATURE: float = 0.1  # Foco em consistência para NER/classificação
 
-    # ── LLM Camada Standard ────────────────────────────────
+    # ── LLM Camada Standard / Vision ──────────────────────
     LLM_STANDARD_PROVIDER: str = "google"
-    LLM_STANDARD_MODEL: str = "gemini-2.0-flash"
+    LLM_STANDARD_MODEL: str = "gemini-1.5-flash"
     LLM_STANDARD_BASE_URL: str = "https://generativelanguage.googleapis.com"
-    LLM_STANDARD_API_KEY: Optional[str] = None
+    LLM_STANDARD_API_KEY: Optional[str] = None  # Deprecated — todos os tiers usam GEMINI_API_KEY
 
     # ── LLM Camada Premium ─────────────────────────────────
     LLM_PREMIUM_PROVIDER: str = "google"
-    LLM_PREMIUM_MODEL: str = "gemini-2.0-flash"
+    LLM_PREMIUM_MODEL: str = "gemini-1.5-pro"
     LLM_PREMIUM_BASE_URL: str = "https://generativelanguage.googleapis.com"
-    LLM_PREMIUM_API_KEY: Optional[str] = None
+    LLM_PREMIUM_API_KEY: Optional[str] = None  # Deprecated — todos os tiers usam GEMINI_API_KEY
+
+    # ── OpenAI (Deprecated — mantido para rollback de emergência) ──
+    OPENAI_API_KEY: Optional[str] = None
 
     # ── Gemini (Google) ────────────────────────────────────
     GEMINI_API_KEY: Optional[str] = None

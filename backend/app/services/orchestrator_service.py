@@ -33,8 +33,8 @@ class OrchestratorService:
         """
         Analisa o texto dos primeiros documentos para extrair metadados do inquérito e personagens.
         """
-        # Limitamos o texto para os primeiros 40k caracteres ( Gemini suporta muito mais, mas para extração focada basta)
-        texto_curto = texto_extraido[:40000]
+        # gemini-1.5-flash (standard) suporta 1M tokens — ampliado de 40k para 500k chars (~125k tokens)
+        texto_curto = texto_extraido[:500_000]
 
         prompt = SYSTEM_PROMPT_ORQUESTRADOR.format(texto=texto_curto)
 
