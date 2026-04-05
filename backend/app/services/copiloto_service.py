@@ -49,7 +49,7 @@ class CopilotoService:
         estado_atual: str = "",
         total_paginas: int = 0,
         total_documentos: int = 0,
-        max_chunks: int = 8,
+        max_chunks: int = 15,
         auditar: bool = True,
         db=None,  # AsyncSession opcional para buscar resumo do caso
     ) -> Dict[str, Any]:
@@ -102,7 +102,7 @@ class CopilotoService:
         # Busca textual complementar (detecta nomes/termos não surfaçados pelo vetor)
         if db is not None:
             try:
-                text_hits = await self._busca_hibrida_texto(db, query, inquerito_id, limit=5)
+                text_hits = await self._busca_hibrida_texto(db, query, inquerito_id, limit=10)
                 if text_hits:
                     # Deduplica: remove chunks que já vieram do Qdrant (por qdrant_point_id)
                     ids_qdrant = {
@@ -341,41 +341,71 @@ class CopilotoService:
         db,
         query: str,
         inquerito_id: str,
-        limit: int = 5,
+        limit: int = 10,
     ) -> list:
         """
         Busca full-text nos chunks armazenados no PostgreSQL.
-        Extrai palavras capitalizadas (prováveis nomes próprios) da query e faz ILIKE.
+        Extrai palavras da query e faz ILIKE (com normalização de acentos via unaccent do PostgreSQL).
         Complementa o Qdrant para queries com nomes específicos não surfaçados pelo vetor.
         """
         import re
-        from sqlalchemy import select as sa_select, or_
+        import unicodedata
+        from sqlalchemy import select as sa_select, or_, func
         from app.models.chunk import Chunk
         from app.models.documento import Documento
 
-        # Extrair palavras com ≥3 chars para busca (prioriza nomes próprios maiúsculos)
-        palavras = re.findall(r'\b[A-ZÀ-Ú][a-zà-ú]{2,}\b', query)
-        if not palavras:
-            # fallback: qualquer palavra com ≥4 chars
-            palavras = [w for w in re.findall(r'\b\w{4,}\b', query) if not w.lower() in
-                        {'para', 'como', 'qual', 'quem', 'onde', 'quando', 'algum', 'existe',
-                         'consta', 'autos', 'nome', 'chamado', 'alguma', 'pessoa'}]
+        _STOPWORDS = {
+            'para', 'como', 'qual', 'quem', 'onde', 'quando', 'algum', 'existe',
+            'consta', 'autos', 'nome', 'chamado', 'alguma', 'pessoa', 'disse',
+            'suas', 'seus', 'este', 'esta', 'esse', 'essa', 'pelo', 'pela',
+            'sobre', 'falar', 'fala', 'falou', 'dizer', 'fazer',
+        }
+
+        def _strip_accents(s: str) -> str:
+            return ''.join(
+                c for c in unicodedata.normalize('NFD', s)
+                if unicodedata.category(c) != 'Mn'
+            )
+
+        # Extrair nomes próprios capitalizados primeiro
+        palavras = re.findall(r'\b[A-ZÀ-Úa-zà-ú][a-zà-ú]{2,}\b', query)
+        # Filtrar stopwords e palavras curtas
+        palavras = [w for w in palavras if _strip_accents(w.lower()) not in _STOPWORDS and len(w) >= 4]
 
         if not palavras:
             return []
 
-        # Montar filtros ILIKE para cada palavra
-        filtros = [Chunk.texto.ilike(f"%{p}%") for p in palavras[:4]]
+        # Usar unaccent do PostgreSQL para match robusto (ignora acentos em ambos os lados)
+        # Ex: query "flavio" → bate com "Flávio" no banco
+        palavras_norm = [_strip_accents(p.lower()) for p in palavras[:5]]
+        filtros_unaccent = [
+            func.unaccent(func.lower(Chunk.texto)).ilike(f"%{pn}%")
+            for pn in palavras_norm
+        ]
+        filtros_plain = [Chunk.texto.ilike(f"%{p}%") for p in palavras[:5]]
 
-        result = await db.execute(
-            sa_select(Chunk)
-            .where(
-                Chunk.inquerito_id == uuid.UUID(inquerito_id),
-                or_(*filtros),
+        try:
+            result = await db.execute(
+                sa_select(Chunk)
+                .where(
+                    Chunk.inquerito_id == uuid.UUID(inquerito_id),
+                    or_(*filtros_unaccent),
+                )
+                .order_by(Chunk.pagina_inicial)
+                .limit(limit)
             )
-            .order_by(Chunk.pagina_inicial)
-            .limit(limit)
-        )
+        except Exception:
+            # fallback sem unaccent caso extensão não esteja instalada
+            logger.warning("[COPILOTO] unaccent não disponível, usando ILIKE simples")
+            result = await db.execute(
+                sa_select(Chunk)
+                .where(
+                    Chunk.inquerito_id == uuid.UUID(inquerito_id),
+                    or_(*filtros_plain),
+                )
+                .order_by(Chunk.pagina_inicial)
+                .limit(limit)
+            )
         chunks = result.scalars().all()
 
         # Buscar nomes dos documentos
