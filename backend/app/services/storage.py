@@ -84,9 +84,17 @@ class StorageService:
         if settings.SUPABASE_URL and settings.SUPABASE_SERVICE_KEY:
             try:
                 import httpx
-                # Remove prefixo "inqueritos/" do key se o bucket já é "escrivao-documentos"
-                # O path no Supabase é relativo ao bucket
-                url = f"{settings.SUPABASE_URL}/storage/v1/object/sign/{self.bucket}/{key}"
+                # Usa o bucket nativo do Supabase em vez do fallback MinIO (self.bucket)
+                supabase_bucket = settings.SUPABASE_STORAGE_BUCKET
+                
+                # Remove o prefixo do bucket da key se ele tiver sido salvo no banco com path completo
+                actual_key = key
+                if actual_key.startswith(f"{supabase_bucket}/"):
+                    actual_key = actual_key[len(supabase_bucket)+1:]
+                elif actual_key.startswith(f"{self.bucket}/"):
+                    actual_key = actual_key[len(self.bucket)+1:]
+
+                url = f"{settings.SUPABASE_URL}/storage/v1/object/sign/{supabase_bucket}/{actual_key}"
                 resp = httpx.post(
                     url,
                     headers={
