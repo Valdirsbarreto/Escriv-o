@@ -386,6 +386,13 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
 
                 doc.tipo_peca = categoria
                 logger.info(f"[INGESTÃO] Documento classificado como: {categoria}")
+
+                # Enriquecer payload Qdrant com tipo_peca (para busca filtrada por tipo)
+                try:
+                    from app.services.qdrant_service import QdrantService as _QS
+                    _QS().set_payload_by_documento(documento_id, {"tipo_peca": categoria})
+                except Exception as _qe:
+                    logger.warning(f"[INGESTÃO] Falha ao atualizar tipo_peca no Qdrant: {_qe}")
                 
                 # Upsert de entidades (deduplicação por CPF > nome normalizado)
                 inquerito_uuid = uuid.UUID(inquerito_id)

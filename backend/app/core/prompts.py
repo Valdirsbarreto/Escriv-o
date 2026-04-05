@@ -94,29 +94,87 @@ TEMPLATE_FONTES_RESPOSTA = """
 {fontes}
 """
 
-SYSTEM_PROMPT_CLASSIFICADOR_PECA = """Você é um especialista em análise de processos judiciais e inquéritos policiais brasileiros.
-Sua tarefa é ler um trecho inicial de um documento (PDF) e classificá-classificar de qual TIPO DE PEÇA se trata.
+SYSTEM_PROMPT_CLASSIFICADOR_PECA = """Você é um especialista em análise de inquéritos policiais brasileiros (CPP arts. 4º a 23).
+Sua tarefa é ler um trecho inicial de um documento e identificar com precisão qual TIPO DE PEÇA PROCESSUAL se trata.
 
 Escolha APENAS UMA das categorias abaixo (a mais específica aplicável):
-- boletim_ocorrencia
-- portaria
-- termo_declaracao (oitivas, depoimentos, interrogatórios)
-- relatorio (policial, investigativo)
-- auto_apreensao
-- laudo_pericial
-- despacho
-- ofício
-- mandado (busca, prisão)
-- peticao
-- decisao_judicial
-- extrato_bancario
-- outro
 
-Responda APENAS com a categoria exata escolhida (em minúsculas), ou "outro" se não for reconhecido. Sem qualquer outro texto.
+PEÇAS DE INSTAURAÇÃO:
+- boletim_ocorrencia         (BO, notícia de fato/crime)
+- auto_prisao_flagrante      (APF — peça inaugural em flagrante)
+- portaria                   (instauração do inquérito pelo delegado)
+- requerimento_ofendido      (representação, pedido de abertura do IP)
+
+PEÇAS DE OITIVA E DECLARAÇÕES:
+- termo_declaracao_vitima    (declarações do ofendido/vítima)
+- termo_oitiva_testemunha    (oitiva de testemunhas)
+- termo_interrogatorio       (interrogatório ou declarações do investigado/indiciado)
+- termo_acareacao            (acareação entre declarantes)
+
+PEÇAS PERICIAIS E DE PROVA MATERIAL:
+- laudo_pericial             (laudo geral: corpo de delito, necropsia, balística, DNA, informática, local de crime etc.)
+- auto_apreensao             (apreensão de objetos, armas, drogas, documentos)
+- registro_fotografico       (fotos ou vídeos do local do fato ou de objetos)
+
+PEÇAS DE DILIGÊNCIAS E REQUISIÇÕES:
+- oficio                     (ofício ou requisição a órgão público: Detran, Receita, operadoras, bancos etc.)
+- quebra_sigilo              (telefônico, bancário, fiscal ou telemático — com autorização judicial)
+- mandado_busca_apreensao    (mandado judicial de busca e apreensão)
+- mandado_intimacao          (intimação para depoimento ou diligência)
+- folha_antecedentes         (FAC — folha de antecedentes criminais, certidões)
+- extrato_bancario           (extrato, movimentação financeira)
+
+PEÇAS FINAIS E DE ENCERRAMENTO:
+- relatorio_final            (relatório final do delegado, relatório de conclusão)
+- termo_indiciamento         (indiciamento formal do investigado)
+- despacho                   (despacho interno do delegado ou escrivão, encaminhamento ao MP, pedido de arquivamento)
+- pedido_prorrogacao         (prorrogação de prazo do IP)
+
+OUTRAS PEÇAS:
+- peticao                    (petições de advogados: vista, cópias, diligências)
+- decisao_judicial           (decisão ou despacho judicial)
+- certidao                   (certidão de juntada, desentranhamento etc.)
+- termo_compromisso          (termo de responsabilidade ou compromisso)
+- relatorio                  (relatório investigativo intermediário, não é o relatório final)
+- outro                      (use somente se nenhuma categoria acima se aplicar)
+
+Responda APENAS com a categoria exata escolhida (em minúsculas, sem espaços, exatamente como listada acima), ou "outro" se não for reconhecido. Sem qualquer outro texto.
 
 Documento para analisar:
 {texto}
 """
+
+# Mapa legível para exibição no frontend
+TIPO_PECA_LABEL: dict = {
+    "boletim_ocorrencia":        "Boletim de Ocorrência",
+    "auto_prisao_flagrante":     "Auto de Prisão em Flagrante",
+    "portaria":                  "Portaria",
+    "requerimento_ofendido":     "Requerimento do Ofendido",
+    "termo_declaracao_vitima":   "Declarações da Vítima",
+    "termo_oitiva_testemunha":   "Oitiva de Testemunha",
+    "termo_interrogatorio":      "Interrogatório",
+    "termo_acareacao":           "Acareação",
+    "laudo_pericial":            "Laudo Pericial",
+    "auto_apreensao":            "Auto de Apreensão",
+    "registro_fotografico":      "Registro Fotográfico",
+    "oficio":                    "Ofício / Requisição",
+    "quebra_sigilo":             "Quebra de Sigilo",
+    "mandado_busca_apreensao":   "Mandado de Busca e Apreensão",
+    "mandado_intimacao":         "Mandado de Intimação",
+    "folha_antecedentes":        "Folha de Antecedentes",
+    "extrato_bancario":          "Extrato Bancário",
+    "relatorio_final":           "Relatório Final",
+    "termo_indiciamento":        "Termo de Indiciamento",
+    "despacho":                  "Despacho",
+    "pedido_prorrogacao":        "Pedido de Prorrogação",
+    "peticao":                   "Petição",
+    "decisao_judicial":          "Decisão Judicial",
+    "certidao":                  "Certidão",
+    "termo_compromisso":         "Termo de Compromisso",
+    "relatorio":                 "Relatório Investigativo",
+    "sintese_investigativa":     "Síntese Investigativa",
+    "outro":                     "Outro",
+}
 
 SYSTEM_PROMPT_EXTRACAO_ENTIDADES = """Você é um assistente especializado em Reconhecimento de Entidades Nomeadas (NER) no contexto jurídico-policial brasileiro.
 Leia o texto abaixo e extraia TODAS as entidades relevantes encontradas.

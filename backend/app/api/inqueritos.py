@@ -529,6 +529,37 @@ async def conteudo_documento(
     }
 
 
+@router.get("/{inquerito_id}/documentos/{documento_id}/citacoes")
+async def citacoes_documento(
+    inquerito_id: uuid.UUID,
+    documento_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Retorna os fragmentos indexados no Qdrant para um documento.
+    Cada fragmento é um trecho do texto original com referência de página.
+    Usado pelo botão 'Ver Citações' no frontend.
+    """
+    doc = await db.get(Documento, documento_id)
+    if not doc or doc.inquerito_id != inquerito_id:
+        raise HTTPException(status_code=404, detail="Documento não encontrado")
+
+    try:
+        from app.services.qdrant_service import QdrantService
+        qdrant = QdrantService()
+        chunks = qdrant.scroll_by_documento(str(documento_id))
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Qdrant indisponível: {e}")
+
+    return {
+        "documento_id": str(documento_id),
+        "nome_arquivo": doc.nome_arquivo,
+        "tipo_peca": doc.tipo_peca,
+        "total_fragmentos": len(chunks),
+        "fragmentos": chunks,
+    }
+
+
 @router.patch("/{inquerito_id}/numero")
 async def corrigir_numero(
     inquerito_id: uuid.UUID,

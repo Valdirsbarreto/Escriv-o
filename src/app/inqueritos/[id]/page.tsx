@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check, CalendarPlus, Clock, MapPin, ExternalLink } from "lucide-react";
+import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check, CalendarPlus, Clock, MapPin, ExternalLink, BookOpen, Quote, ChevronDown, ChevronRight } from "lucide-react";
 import { IntimacaoUploadModal } from "@/components/IntimacaoUploadModal";
 
 // ── Etapas do pipeline ────────────────────────────────────────────────────────
@@ -225,6 +225,8 @@ export default function InqueritoDetalhePage() {
   const [intimacoes, setIntimacoes] = useState<any[]>([]);
   const [showIntimacaoModal, setShowIntimacaoModal] = useState(false);
   const [docViewer, setDocViewer] = useState<{ open: boolean; doc: any; conteudo: any | null; loading: boolean }>({ open: false, doc: null, conteudo: null, loading: false });
+  const [citacoes, setCitacoes] = useState<{ open: boolean; doc: any | null; fragmentos: any[]; loading: boolean }>({ open: false, doc: null, fragmentos: [], loading: false });
+  const [gruposAbertos, setGruposAbertos] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sintesePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const searchParams = useSearchParams();
@@ -347,6 +349,17 @@ export default function InqueritoDetalhePage() {
       setDocViewer(prev => ({ ...prev, conteudo: res.data, loading: false }));
     } catch {
       setDocViewer(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  const handleVerCitacoes = async (doc: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCitacoes({ open: true, doc, fragmentos: [], loading: true });
+    try {
+      const res = await api.get(`/inqueritos/${inqId}/documentos/${doc.id}/citacoes`);
+      setCitacoes(prev => ({ ...prev, fragmentos: res.data.fragmentos || [], loading: false }));
+    } catch {
+      setCitacoes(prev => ({ ...prev, loading: false }));
     }
   };
 
@@ -546,7 +559,7 @@ export default function InqueritoDetalhePage() {
             </div>
           </div>
           
-          <ScrollArea className="h-[500px] w-full pr-4">
+          <ScrollArea className="h-[600px] w-full pr-4">
             <div className="space-y-3">
               {documentos.length === 0 ? (
                 <div className="py-12 text-center text-zinc-600 border border-zinc-800 border-dashed rounded-lg bg-zinc-900/40">
@@ -554,51 +567,129 @@ export default function InqueritoDetalhePage() {
                   <p>Inquérito em branco.</p>
                   <p className="text-sm">Faça o upload do inquérito físico em PDF para a IA indexar.</p>
                 </div>
-              ) : (
-                [...documentos]
-                  .sort((a, b) => {
-                    if (a.tipo_peca === "sintese_investigativa") return -1;
-                    if (b.tipo_peca === "sintese_investigativa") return 1;
-                    return 0;
-                  })
-                  .map((doc) => {
-                    const isSintetico = doc.status_processamento === "sintetico";
-                    return (
-                      <div key={doc.id} onClick={() => handleAbrirDoc(doc)} className={`flex justify-between items-center p-4 rounded-lg border transition-colors cursor-pointer ${isSintetico ? "bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40 hover:bg-blue-500/10" : "bg-zinc-900 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/60"}`}>
-                        <div className="flex items-center gap-4">
-                          <div className={`p-2 rounded border ${isSintetico ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-zinc-950 text-blue-400 border-zinc-800"}`}>
-                            {isSintetico ? <Sparkles size={20}/> : <FileText size={20}/>}
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-zinc-200 truncate max-w-sm">{doc.nome_arquivo}</p>
-                            <p className="text-xs text-zinc-500 mt-0.5">
-                              {isSintetico ? "Gerado automaticamente pela IA" : `Criado em ${new Date(doc.created_at).toLocaleDateString()}`}
-                            </p>
-                          </div>
+              ) : (() => {
+                const TIPO_LABEL: Record<string, string> = {
+                  boletim_ocorrencia: "Boletim de Ocorrência",
+                  auto_prisao_flagrante: "Auto de Prisão em Flagrante",
+                  portaria: "Portaria",
+                  requerimento_ofendido: "Requerimento do Ofendido",
+                  termo_declaracao_vitima: "Declarações da Vítima",
+                  termo_oitiva_testemunha: "Oitiva de Testemunha",
+                  termo_interrogatorio: "Interrogatório",
+                  termo_acareacao: "Acareação",
+                  laudo_pericial: "Laudo Pericial",
+                  auto_apreensao: "Auto de Apreensão",
+                  registro_fotografico: "Registro Fotográfico",
+                  oficio: "Ofício / Requisição",
+                  quebra_sigilo: "Quebra de Sigilo",
+                  mandado_busca_apreensao: "Mandado de Busca e Apreensão",
+                  mandado_intimacao: "Mandado de Intimação",
+                  folha_antecedentes: "Folha de Antecedentes",
+                  extrato_bancario: "Extrato Bancário",
+                  relatorio_final: "Relatório Final",
+                  termo_indiciamento: "Termo de Indiciamento",
+                  despacho: "Despacho",
+                  pedido_prorrogacao: "Pedido de Prorrogação",
+                  peticao: "Petição",
+                  decisao_judicial: "Decisão Judicial",
+                  certidao: "Certidão",
+                  termo_compromisso: "Termo de Compromisso",
+                  relatorio: "Relatório Investigativo",
+                  sintese_investigativa: "Síntese Investigativa",
+                  outro: "Outro",
+                };
+
+                const sintese = documentos.find(d => d.tipo_peca === "sintese_investigativa");
+                const demais = documentos.filter(d => d.tipo_peca !== "sintese_investigativa");
+
+                // Agrupar por tipo_peca
+                const grupos: Record<string, any[]> = {};
+                demais.forEach(doc => {
+                  const tipo = doc.tipo_peca || "outro";
+                  if (!grupos[tipo]) grupos[tipo] = [];
+                  grupos[tipo].push(doc);
+                });
+
+                const renderDocCard = (doc: any) => {
+                  const isSintetico = doc.status_processamento === "sintetico";
+                  return (
+                    <div key={doc.id} onClick={() => handleAbrirDoc(doc)}
+                      className={`flex justify-between items-center p-3 rounded-lg border transition-colors cursor-pointer ${isSintetico ? "bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40" : "bg-zinc-900/60 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/60"}`}>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`p-1.5 rounded border shrink-0 ${isSintetico ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-zinc-950 text-blue-400 border-zinc-800"}`}>
+                          {isSintetico ? <Sparkles size={16}/> : <FileText size={16}/>}
                         </div>
-                        <div>
-                          {isSintetico ? (
-                            <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 px-2 py-0.5 text-xs font-normal">
-                              <Sparkles size={12} className="mr-1 inline"/> Análise AI
-                            </Badge>
-                          ) : doc.status_processamento === "concluido" ? (
-                            <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/20 px-2 py-0.5 text-xs font-normal">
-                              <CheckCircle2 size={12} className="mr-1 inline"/> Indexado
-                            </Badge>
-                          ) : doc.status_processamento === "processando" ? (
-                            <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30 px-2 py-0.5 text-xs font-normal">
-                              Lendo IA...
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-zinc-800 text-zinc-400 border-zinc-700 px-2 py-0.5 text-xs font-normal">
-                              {doc.status_processamento}
-                            </Badge>
-                          )}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-zinc-200 truncate max-w-xs">{doc.nome_arquivo}</p>
+                          <p className="text-xs text-zinc-500 mt-0.5">
+                            {isSintetico ? "Gerado pela IA" : `${new Date(doc.created_at).toLocaleDateString("pt-BR")}`}
+                          </p>
                         </div>
                       </div>
-                    );
-                  })
-              )}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {doc.status_processamento === "concluido" && (
+                          <button
+                            onClick={(e) => handleVerCitacoes(doc, e)}
+                            className="text-xs text-zinc-400 hover:text-blue-400 flex items-center gap-1 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors"
+                          >
+                            <Quote size={11}/> Citações
+                          </button>
+                        )}
+                        {isSintetico ? (
+                          <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-xs">
+                            <Sparkles size={10} className="mr-1 inline"/> IA
+                          </Badge>
+                        ) : doc.status_processamento === "concluido" ? (
+                          <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/20 text-xs">
+                            <CheckCircle2 size={10} className="mr-1 inline"/> Indexado
+                          </Badge>
+                        ) : doc.status_processamento === "processando" ? (
+                          <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30 text-xs">
+                            Lendo IA...
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="bg-zinc-800 text-zinc-400 border-zinc-700 text-xs">
+                            {doc.status_processamento}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  );
+                };
+
+                return (
+                  <>
+                    {/* Síntese sempre no topo */}
+                    {sintese && renderDocCard(sintese)}
+
+                    {/* Grupos por tipo de peça */}
+                    {Object.entries(grupos).map(([tipo, docs]) => {
+                      const label = TIPO_LABEL[tipo] || tipo;
+                      const aberto = gruposAbertos[tipo] !== false; // aberto por padrão
+                      return (
+                        <div key={tipo} className="border border-zinc-800 rounded-lg overflow-hidden">
+                          <button
+                            onClick={() => setGruposAbertos(prev => ({ ...prev, [tipo]: !aberto }))}
+                            className="w-full flex items-center justify-between px-3 py-2 bg-zinc-900 hover:bg-zinc-800/60 transition-colors text-left"
+                          >
+                            <div className="flex items-center gap-2">
+                              <BookOpen size={14} className="text-zinc-500"/>
+                              <span className="text-sm font-medium text-zinc-300">{label}</span>
+                              <span className="text-xs text-zinc-600 bg-zinc-800 px-1.5 py-0.5 rounded-full">{docs.length}</span>
+                            </div>
+                            {aberto ? <ChevronDown size={14} className="text-zinc-500"/> : <ChevronRight size={14} className="text-zinc-500"/>}
+                          </button>
+                          {aberto && (
+                            <div className="divide-y divide-zinc-800/60 px-2 py-1 space-y-1">
+                              {docs.map(renderDocCard)}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </>
+                );
+              })()}
             </div>
           </ScrollArea>
         </div>
@@ -689,6 +780,62 @@ export default function InqueritoDetalhePage() {
             setTimeout(fetchDados, 2000);
           }}
         />
+      )}
+
+      {/* Modal de citações / fragmentos Qdrant */}
+      {citacoes.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setCitacoes(v => ({ ...v, open: false }))}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <Quote size={16} className="text-blue-400 shrink-0"/>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-zinc-100 truncate">{citacoes.doc?.nome_arquivo}</p>
+                  <p className="text-xs text-zinc-500">Fragmentos indexados no Qdrant</p>
+                </div>
+              </div>
+              <button onClick={() => setCitacoes(v => ({ ...v, open: false }))} className="text-zinc-500 hover:text-zinc-300 p-1 transition-colors ml-4 shrink-0">
+                <X size={18}/>
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-4 py-4 space-y-3">
+              {citacoes.loading ? (
+                <div className="flex items-center justify-center py-16 text-zinc-500">
+                  <Loader2 size={24} className="animate-spin mr-2"/> Carregando fragmentos...
+                </div>
+              ) : citacoes.fragmentos.length === 0 ? (
+                <div className="text-center py-16 text-zinc-500">
+                  <Quote size={32} className="mx-auto mb-3 opacity-30"/>
+                  <p>Nenhum fragmento indexado para este documento.</p>
+                  <p className="text-xs mt-1 text-zinc-600">O documento pode ainda estar em processamento.</p>
+                </div>
+              ) : (
+                citacoes.fragmentos.map((frag: any, i: number) => (
+                  <div key={frag.chunk_id || i} className="bg-zinc-800/60 border border-zinc-700/60 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      {frag.pagina_inicial != null && (
+                        <span className="text-xs text-zinc-500 bg-zinc-900 border border-zinc-700 px-2 py-0.5 rounded-full">
+                          fls. {frag.pagina_inicial}{frag.pagina_final && frag.pagina_final !== frag.pagina_inicial ? `–${frag.pagina_final}` : ""}
+                        </span>
+                      )}
+                      {frag.tipo_peca && (
+                        <span className="text-xs text-blue-400/70">{frag.tipo_peca}</span>
+                      )}
+                    </div>
+                    <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
+                      {frag.texto || <span className="text-zinc-600 italic">Texto não disponível</span>}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+            {!citacoes.loading && citacoes.fragmentos.length > 0 && (
+              <div className="px-6 py-3 border-t border-zinc-800 text-xs text-zinc-600 shrink-0">
+                {citacoes.fragmentos.length} fragmento(s)
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Modal de visualização de documento */}

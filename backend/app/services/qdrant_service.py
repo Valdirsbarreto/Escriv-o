@@ -192,6 +192,59 @@ class QdrantService:
         )
         logger.info(f"[QDRANT] Pontos removidos para inquérito {inquerito_id}")
 
+    def set_payload_by_documento(self, documento_id: str, payload_update: Dict[str, Any]) -> None:
+        """Atualiza campos do payload em todos os chunks de um documento."""
+        try:
+            self.client.set_payload(
+                collection_name=self.collection_name,
+                payload=payload_update,
+                points=Filter(
+                    must=[
+                        FieldCondition(
+                            key="documento_id",
+                            match=MatchValue(value=documento_id),
+                        )
+                    ]
+                ),
+            )
+            logger.info(f"[QDRANT] Payload atualizado para documento {documento_id}: {list(payload_update.keys())}")
+        except Exception as e:
+            logger.warning(f"[QDRANT] Falha ao atualizar payload do documento {documento_id}: {e}")
+
+    def scroll_by_documento(self, documento_id: str, limit: int = 200) -> List[Dict[str, Any]]:
+        """Retorna todos os chunks de um documento, ordenados por página."""
+        try:
+            results, _ = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key="documento_id",
+                            match=MatchValue(value=documento_id),
+                        )
+                    ]
+                ),
+                limit=limit,
+                with_payload=True,
+                with_vectors=False,
+            )
+            chunks = [
+                {
+                    "chunk_id": str(r.id),
+                    "pagina_inicial": r.payload.get("pagina_inicial"),
+                    "pagina_final": r.payload.get("pagina_final"),
+                    "tipo_peca": r.payload.get("tipo_peca", ""),
+                    "texto": r.payload.get("texto_preview", ""),
+                }
+                for r in results
+            ]
+            # Ordenar por página
+            chunks.sort(key=lambda x: x["pagina_inicial"] or 0)
+            return chunks
+        except Exception as e:
+            logger.warning(f"[QDRANT] Falha ao buscar chunks do documento {documento_id}: {e}")
+            return []
+
     def get_collection_info(self) -> Dict[str, Any]:
         """Retorna informações da coleção."""
         try:
