@@ -1,15 +1,18 @@
 """
-Escrivão AI — Serviço de Armazenamento (S3/MinIO)
-Upload e download de arquivos usando boto3.
+Escrivão AI — Serviço de Armazenamento (S3/MinIO + Supabase Storage)
+Upload e download de arquivos usando boto3. Signed URLs via Supabase REST quando disponível.
 """
 
 import io
+import logging
 from typing import Optional
 
 import boto3
 from botocore.exceptions import ClientError
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class StorageService:
@@ -70,3 +73,48 @@ class StorageService:
             return True
         except ClientError:
             return False
+
+    def generate_download_url(self, key: str, expires_in: int = 3600) -> Optional[str]:
+        """
+        Gera URL de download temporária.
+        Usa a API REST do Supabase quando SUPABASE_URL estiver configurado (produção),
+        caso contrário usa presigned URL do boto3 (MinIO/dev).
+        """
+        # Supabase Storage REST API (produção)
+        if settings.SUPABASE_URL and settings.SUPABASE_SERVICE_KEY:
+            try:
+                import httpx
+                # Remove prefixo "inqueritos/" do key se o bucket já é "escrivao-documentos"
+                # O path no Supabase é relativo ao bucket
+                url = f"{settings.SUPABASE_URL}/storage/v1/object/sign/{self.bucket}/{key}"
+                resp = httpx.post(
+                    url,
+                    headers={
+                        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json={"expiresIn": expires_in},
+                    timeout=10,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    signed_path = data.get("signedURL") or data.get("signedUrl") or ""
+                    if signed_path:
+                        # signedURL já é o path relativo; montar URL completa
+                        if signed_path.startswith("http"):
+                            return signed_path
+                        return f"{settings.SUPABASE_URL}{signed_path}"
+                logger.warning(f"[STORAGE] Supabase signed URL falhou: {resp.status_code} {resp.text[:200]}")
+            except Exception as e:
+                logger.warning(f"[STORAGE] Erro ao gerar Supabase signed URL: {e}")
+
+        # Fallback: boto3 presigned URL (MinIO / dev)
+        try:
+            return self.client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": self.bucket, "Key": key},
+                ExpiresIn=expires_in,
+            )
+        except Exception as e:
+            logger.warning(f"[STORAGE] Erro ao gerar presigned URL boto3: {e}")
+            return None

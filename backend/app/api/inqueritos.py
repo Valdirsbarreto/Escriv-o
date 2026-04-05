@@ -537,11 +537,7 @@ async def conteudo_documento(
         try:
             from app.services.storage import StorageService
             storage = StorageService()
-            download_url = storage.client.generate_presigned_url(
-                "get_object",
-                Params={"Bucket": storage.bucket, "Key": doc.storage_path},
-                ExpiresIn=3600,
-            )
+            download_url = storage.generate_download_url(doc.storage_path)
         except Exception:
             pass
 

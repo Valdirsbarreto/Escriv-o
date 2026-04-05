@@ -16,6 +16,19 @@ class PDFExtractorService:
     """Extrai texto de arquivos PDF com OCR seletivo."""
 
     MIN_TEXT_LENGTH = 50  # Abaixo disso, considerar OCR
+    MIN_LETTER_RATIO = 0.40  # Abaixo de 40% de letras → texto corrompido → OCR
+
+    @staticmethod
+    def _texto_legivel(texto: str) -> bool:
+        """
+        Verifica se o texto nativo é legível.
+        Textos de PDFs mal-codificados têm alta proporção de não-letras (símbolos, dígitos isolados).
+        """
+        if not texto:
+            return False
+        letras = sum(1 for c in texto if c.isalpha())
+        ratio = letras / len(texto)
+        return ratio >= PDFExtractorService.MIN_LETTER_RATIO
 
     def extract_text(self, content: bytes) -> Dict:
         """
@@ -37,7 +50,8 @@ class PDFExtractorService:
         for i, page in enumerate(reader.pages, start=1):
             texto = page.extract_text() or ""
             texto = texto.strip()
-            precisa_ocr = len(texto) < self.MIN_TEXT_LENGTH
+            # Precisa OCR se: muito curto OU texto corrompido (baixo ratio de letras)
+            precisa_ocr = len(texto) < self.MIN_TEXT_LENGTH or not self._texto_legivel(texto)
 
             paginas.append({
                 "numero": i,
