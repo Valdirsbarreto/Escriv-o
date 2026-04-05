@@ -480,6 +480,33 @@ async def reprocessar_documentos_travados(
     return {"reprocessados": count, "mensagem": f"{count} documento(s) reenfileirado(s) para processamento."}
 
 
+@router.post("/{inquerito_id}/reclassificar", status_code=200)
+async def reclassificar_documentos(
+    inquerito_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Reclassifica documentos concluídos sem tipo_peca (ou todos), sem re-extrair o PDF."""
+    result = await db.execute(
+        select(Documento)
+        .where(Documento.inquerito_id == inquerito_id)
+        .where(Documento.status_processamento == "concluido")
+        .where(Documento.tipo_peca.is_(None))
+    )
+    sem_tipo = result.scalars().all()
+
+    if not sem_tipo:
+        return {"reclassificados": 0, "mensagem": "Todos os documentos já possuem tipo_peca."}
+
+    from app.workers.ingestion import reclassificar_documento
+
+    count = 0
+    for doc in sem_tipo:
+        reclassificar_documento.delay(str(doc.id), str(inquerito_id))
+        count += 1
+
+    return {"reclassificados": count, "mensagem": f"{count} documento(s) enviados para reclassificação."}
+
+
 @router.get("/{inquerito_id}/documentos", response_model=list[DocumentoResponse])
 async def listar_documentos(
     inquerito_id: uuid.UUID,

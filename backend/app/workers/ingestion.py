@@ -532,3 +532,52 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
         except Exception:
             pass
         raise self.retry(exc=e)
+
+
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=10)
+def reclassificar_documento(self, documento_id: str, inquerito_id: str):
+    """
+    Reclassifica um documento já indexado usando o texto salvo no banco.
+    Atualiza tipo_peca no Postgres e nos payloads Qdrant — sem re-extrair PDF.
+    """
+    import asyncio
+    from app.models.documento import Documento
+
+    logger.info(f"[RECLASSIF] Iniciando reclassificação doc={documento_id}")
+    try:
+        with Session(sync_engine) as db:
+            doc = db.execute(
+                select(Documento).where(Documento.id == uuid.UUID(documento_id))
+            ).scalar_one_or_none()
+
+            if not doc or not doc.texto_extraido:
+                logger.warning(f"[RECLASSIF] Documento {documento_id} não encontrado ou sem texto")
+                return {"status": "ignorado", "motivo": "sem_texto"}
+
+            texto_analise = doc.texto_extraido[:6000]
+
+            from app.services.extractor_service import ExtractorService
+            extractor = ExtractorService()
+
+            loop = asyncio.new_event_loop()
+            try:
+                categoria = loop.run_until_complete(extractor.classificar_documento(texto_analise))
+            finally:
+                loop.close()
+
+            doc.tipo_peca = categoria
+            db.commit()
+            logger.info(f"[RECLASSIF] doc={documento_id} → {categoria}")
+
+            # Propagar para chunks Qdrant
+            try:
+                from app.services.qdrant_service import QdrantService
+                QdrantService().set_payload_by_documento(documento_id, {"tipo_peca": categoria})
+            except Exception as qe:
+                logger.warning(f"[RECLASSIF] Falha ao atualizar Qdrant: {qe}")
+
+            return {"status": "ok", "documento_id": documento_id, "tipo_peca": categoria}
+
+    except Exception as e:
+        logger.error(f"[RECLASSIF] Erro: {e}")
+        raise self.retry(exc=e)

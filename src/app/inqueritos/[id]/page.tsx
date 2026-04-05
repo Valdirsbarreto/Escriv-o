@@ -227,6 +227,7 @@ export default function InqueritoDetalhePage() {
   const [docViewer, setDocViewer] = useState<{ open: boolean; doc: any; conteudo: any | null; loading: boolean }>({ open: false, doc: null, conteudo: null, loading: false });
   const [citacoes, setCitacoes] = useState<{ open: boolean; doc: any | null; fragmentos: any[]; loading: boolean }>({ open: false, doc: null, fragmentos: [], loading: false });
   const [gruposAbertos, setGruposAbertos] = useState<Record<string, boolean>>({});
+  const [reclassificando, setReclassificando] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sintesePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const searchParams = useSearchParams();
@@ -360,6 +361,19 @@ export default function InqueritoDetalhePage() {
       setCitacoes(prev => ({ ...prev, fragmentos: res.data.fragmentos || [], loading: false }));
     } catch {
       setCitacoes(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  const handleReclassificar = async () => {
+    setReclassificando(true);
+    try {
+      const res = await api.post(`/inqueritos/${inqId}/reclassificar`);
+      alert(res.data.mensagem);
+      if (res.data.reclassificados > 0) setTimeout(fetchDados, 8000);
+    } catch {
+      alert("Erro ao solicitar reclassificação.");
+    } finally {
+      setReclassificando(false);
     }
   };
 
@@ -535,6 +549,16 @@ export default function InqueritoDetalhePage() {
             </h2>
             <div className="flex items-center gap-3">
               <span className="text-sm text-zinc-500">{documentos.length} peças anexadas</span>
+              {documentos.some(d => d.status_processamento === "concluido" && !d.tipo_peca) && (
+                <button
+                  onClick={handleReclassificar}
+                  disabled={reclassificando}
+                  className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors disabled:opacity-50"
+                >
+                  <FileType2 size={12} className={reclassificando ? "animate-pulse" : ""}/>
+                  {reclassificando ? "Classificando..." : "Classificar peças"}
+                </button>
+              )}
               {documentos.some(d => d.status_processamento === "processando" || d.status_processamento === "erro") && (
                 <button
                   onClick={handleReprocessar}
