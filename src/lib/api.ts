@@ -107,6 +107,27 @@ export const osintLote = async (
   return response.data;
 };
 
+// APIs Consumo / Orçamento LLM
+export const getConsumoSaldo = async () => {
+  const response = await api.get("/consumo/saldo");
+  return response.data;
+};
+
+export const getConsumoRanking = async () => {
+  const response = await api.get("/consumo/ranking");
+  return response.data;
+};
+
+export const getConsumoHistorico = async (dias = 30) => {
+  const response = await api.get(`/consumo/historico?dias=${dias}`);
+  return response.data;
+};
+
+export const getConsumoModelos = async () => {
+  const response = await api.get("/consumo/modelos");
+  return response.data;
+};
+
 export const osintConsultaAvulsa = async (params: {
   cpf?: string;
   cnpj?: string;

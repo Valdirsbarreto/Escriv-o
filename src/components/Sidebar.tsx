@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FolderOpen, LayoutDashboard, Settings, UserSearch, FileText, Bot, UploadCloud, CalendarDays } from "lucide-react";
+import { FolderOpen, LayoutDashboard, UserSearch, FileText, Bot, UploadCloud, CalendarDays, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { usePathname } from "next/navigation";
@@ -55,7 +55,7 @@ export function Sidebar() {
           </div>
           <kbd className="text-[10px] uppercase bg-blue-950 px-1.5 py-0.5 rounded text-blue-300">Ctrl+Space</kbd>
         </button>
-        <NavItem href="#" icon={<Settings size={18} />} label="Configurações" />
+        <NavItem href="/admin" icon={<ShieldAlert size={18} />} label="Administrativo" active={pathname === "/admin"} />
       </div>
     </div>
   );
