@@ -81,7 +81,7 @@ class CopilotoService:
         """
         t_total = time.time()
 
-        # ── 1. Busca RAG ──────────────────────────────────
+        # ── 1. Busca RAG híbrida (vetor + full-text) ──────
         logger.info(f"[COPILOTO] Buscando contexto para: {query[:80]}...")
 
         query_vector = await self.embedding_service.agenerate(query)
@@ -98,6 +98,22 @@ class CopilotoService:
                 )
             except Exception as e:
                 logger.warning(f"[COPILOTO] Qdrant indisponível: {e} — respondendo sem RAG")
+
+        # Busca textual complementar (detecta nomes/termos não surfaçados pelo vetor)
+        if db is not None:
+            try:
+                text_hits = await self._busca_hibrida_texto(db, query, inquerito_id, limit=5)
+                if text_hits:
+                    # Deduplica: remove chunks que já vieram do Qdrant (por qdrant_point_id)
+                    ids_qdrant = {
+                        r.get("payload", {}).get("chunk_id", "")
+                        for r in resultados
+                    }
+                    novos = [h for h in text_hits if h["payload"].get("chunk_id", "") not in ids_qdrant]
+                    resultados = resultados + novos
+                    logger.info(f"[COPILOTO] Busca híbrida: +{len(novos)} chunks de texto")
+            except Exception as e:
+                logger.warning(f"[COPILOTO] Busca híbrida falhou: {e}")
 
         # ── 2. Montar contexto ────────────────────────────
         contexto_partes = []
@@ -264,12 +280,12 @@ class CopilotoService:
         messages.append({"role": "user", "content": query})
 
         # ── 4. Chamar LLM ────────────────────────────────
-        logger.info("[COPILOTO] Enviando para LLM (standard)")
+        logger.info("[COPILOTO] Enviando para LLM (premium)")
 
         try:
             llm_result = await self.llm_service.chat_completion(
                 messages=messages,
-                tier="standard",
+                tier="premium",
                 temperature=0.3,
                 max_tokens=3000,
                 agente="Copiloto",
@@ -319,6 +335,74 @@ class CopilotoService:
             "custo_estimado": llm_result["custo_estimado"],
             "tempo_total_ms": tempo_total,
         }
+
+    async def _busca_hibrida_texto(
+        self,
+        db,
+        query: str,
+        inquerito_id: str,
+        limit: int = 5,
+    ) -> list:
+        """
+        Busca full-text nos chunks armazenados no PostgreSQL.
+        Extrai palavras capitalizadas (prováveis nomes próprios) da query e faz ILIKE.
+        Complementa o Qdrant para queries com nomes específicos não surfaçados pelo vetor.
+        """
+        import re
+        from sqlalchemy import select as sa_select, or_
+        from app.models.chunk import Chunk
+        from app.models.documento import Documento
+
+        # Extrair palavras com ≥3 chars para busca (prioriza nomes próprios maiúsculos)
+        palavras = re.findall(r'\b[A-ZÀ-Ú][a-zà-ú]{2,}\b', query)
+        if not palavras:
+            # fallback: qualquer palavra com ≥4 chars
+            palavras = [w for w in re.findall(r'\b\w{4,}\b', query) if not w.lower() in
+                        {'para', 'como', 'qual', 'quem', 'onde', 'quando', 'algum', 'existe',
+                         'consta', 'autos', 'nome', 'chamado', 'alguma', 'pessoa'}]
+
+        if not palavras:
+            return []
+
+        # Montar filtros ILIKE para cada palavra
+        filtros = [Chunk.texto.ilike(f"%{p}%") for p in palavras[:4]]
+
+        result = await db.execute(
+            sa_select(Chunk)
+            .where(
+                Chunk.inquerito_id == uuid.UUID(inquerito_id),
+                or_(*filtros),
+            )
+            .order_by(Chunk.pagina_inicial)
+            .limit(limit)
+        )
+        chunks = result.scalars().all()
+
+        # Buscar nomes dos documentos
+        doc_ids = list({str(c.documento_id) for c in chunks})
+        doc_nomes = {}
+        if doc_ids:
+            docs_result = await db.execute(
+                sa_select(Documento).where(Documento.id.in_([uuid.UUID(d) for d in doc_ids]))
+            )
+            for doc in docs_result.scalars().all():
+                doc_nomes[str(doc.id)] = doc.nome_arquivo or str(doc.id)
+
+        return [
+            {
+                "score": 0.75,  # score fixo para resultados textuais
+                "payload": {
+                    "chunk_id": str(c.id),
+                    "texto_preview": c.texto[:2000],
+                    "documento_id": doc_nomes.get(str(c.documento_id), str(c.documento_id)),
+                    "pagina_inicial": c.pagina_inicial,
+                    "pagina_final": c.pagina_final,
+                    "tipo_documento": c.tipo_documento or "não classificado",
+                    "fonte": "busca_textual",
+                },
+            }
+            for c in chunks
+        ]
 
     async def _auditar_resposta(
         self,
