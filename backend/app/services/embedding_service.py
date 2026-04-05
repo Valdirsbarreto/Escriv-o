@@ -3,13 +3,17 @@ Escrivão AI — Serviço de Embeddings
 Geração de embeddings via API do Google Gemini (text-embedding-004).
 Substituiu o sentence-transformers local para economizar RAM e reduzir tempo de build.
 Dimensões: 768.
+
+NOTA: aio.models.embed_content do SDK google-genai 1.x tem bug de roteamento que
+ignora http_options do client e causa 404. O método agenerate() usa asyncio.to_thread
+com o SDK síncrono como workaround — padrão aprovado conforme feedback do projeto.
 """
 
+import asyncio
 import logging
-from typing import List, Optional
+from typing import List
 
 from google import genai
-from google.genai import types as genai_types
 
 from app.core.config import settings
 
@@ -26,10 +30,7 @@ class EmbeddingService:
         self.model_name = model_name
         self.vector_size = DEFAULT_VECTOR_SIZE
         self._client = (
-            genai.Client(
-                api_key=settings.GEMINI_API_KEY,
-                http_options=genai_types.HttpOptions(api_version="v1"),
-            )
+            genai.Client(api_key=settings.GEMINI_API_KEY)
             if settings.GEMINI_API_KEY
             else None
         )
@@ -54,7 +55,11 @@ class EmbeddingService:
             return [0.0] * self.vector_size
 
     async def agenerate(self, text: str) -> List[float]:
-        """Gera embedding de forma async — use em endpoints FastAPI."""
+        """Gera embedding de forma async — use em endpoints FastAPI.
+
+        Usa asyncio.to_thread com SDK síncrono para evitar bug de roteamento
+        do aio.models.embed_content que ignora http_options e retorna 404.
+        """
         if not self._client:
             raise RuntimeError("GEMINI_API_KEY não configurada")
 
@@ -63,11 +68,7 @@ class EmbeddingService:
             return [0.0] * self.vector_size
 
         try:
-            result = await self._client.aio.models.embed_content(
-                model=self.model_name,
-                contents=text[:8000],
-            )
-            return result.embeddings[0].values
+            return await asyncio.to_thread(self.generate, text)
         except Exception as e:
             logger.error(f"[EMBEDDINGS] Erro ao gerar embedding async: {e}")
             return [0.0] * self.vector_size
