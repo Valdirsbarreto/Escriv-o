@@ -4,16 +4,16 @@ Geração de embeddings via API do Google Gemini (text-embedding-004).
 Substituiu o sentence-transformers local para economizar RAM e reduzir tempo de build.
 Dimensões: 768.
 
-NOTA: aio.models.embed_content do SDK google-genai 1.x tem bug de roteamento que
-ignora http_options do client e causa 404. O método agenerate() usa asyncio.to_thread
-com o SDK síncrono como workaround — padrão aprovado conforme feedback do projeto.
+NOTA: O SDK google-genai 1.x (sync e async) usa v1beta por padrão e causa 404 para
+text-embedding-004. Fix definitivo: chamar a REST API diretamente via httpx na v1,
+sem passar pelo SDK. Nunca usar self._client.models.embed_content nem aio.models.
 """
 
 import asyncio
 import logging
 from typing import List
 
-from google import genai
+import httpx
 
 from app.core.config import settings
 
@@ -21,54 +21,53 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "text-embedding-004"
 DEFAULT_VECTOR_SIZE = 768
+_EMBED_URL = "https://generativelanguage.googleapis.com/v1/models/{model}:embedContent"
+_BATCH_URL = "https://generativelanguage.googleapis.com/v1/models/{model}:batchEmbedContents"
 
 
 class EmbeddingService:
-    """Gera embeddings vetoriais via API do Google."""
+    """Gera embeddings vetoriais via REST API do Google (v1 direto, sem SDK)."""
 
     def __init__(self, model_name: str = DEFAULT_MODEL):
         self.model_name = model_name
         self.vector_size = DEFAULT_VECTOR_SIZE
-        self._client = (
-            genai.Client(api_key=settings.GEMINI_API_KEY)
-            if settings.GEMINI_API_KEY
-            else None
-        )
+        self._api_key = settings.GEMINI_API_KEY
 
     def generate(self, text: str) -> List[float]:
-        """Gera embedding para um único texto (chamada síncrona — use em workers/threads)."""
-        if not self._client:
+        """Gera embedding para um único texto (síncrono — use em workers/threads)."""
+        if not self._api_key:
             raise RuntimeError("GEMINI_API_KEY não configurada")
 
         text = str(text).replace("\x00", "").strip()
         if not text:
             return [0.0] * self.vector_size
 
+        url = _EMBED_URL.format(model=self.model_name)
+        payload = {"content": {"parts": [{"text": text[:8000]}]}}
         try:
-            result = self._client.models.embed_content(
-                model=self.model_name,
-                contents=text[:8000],
-            )
-            return result.embeddings[0].values
+            resp = httpx.post(url, params={"key": self._api_key}, json=payload, timeout=30)
+            resp.raise_for_status()
+            return resp.json()["embedding"]["values"]
         except Exception as e:
             logger.error(f"[EMBEDDINGS] Erro ao gerar embedding: {e}")
             return [0.0] * self.vector_size
 
     async def agenerate(self, text: str) -> List[float]:
-        """Gera embedding de forma async — use em endpoints FastAPI.
-
-        Usa asyncio.to_thread com SDK síncrono para evitar bug de roteamento
-        do aio.models.embed_content que ignora http_options e retorna 404.
-        """
-        if not self._client:
+        """Gera embedding de forma async — use em endpoints FastAPI."""
+        if not self._api_key:
             raise RuntimeError("GEMINI_API_KEY não configurada")
 
         text = str(text).replace("\x00", "").strip()
         if not text:
             return [0.0] * self.vector_size
 
+        url = _EMBED_URL.format(model=self.model_name)
+        payload = {"content": {"parts": [{"text": text[:8000]}]}}
         try:
-            return await asyncio.to_thread(self.generate, text)
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.post(url, params={"key": self._api_key}, json=payload)
+                resp.raise_for_status()
+                return resp.json()["embedding"]["values"]
         except Exception as e:
             logger.error(f"[EMBEDDINGS] Erro ao gerar embedding async: {e}")
             return [0.0] * self.vector_size
@@ -79,24 +78,25 @@ class EmbeddingService:
         batch_size: int = 64,
         show_progress: bool = False,
     ) -> List[List[float]]:
-        """
-        Gera embeddings em lote via API.
-        """
-        if not self._client:
+        """Gera embeddings em lote via batchEmbedContents (REST v1 direto)."""
+        if not self._api_key:
             raise RuntimeError("GEMINI_API_KEY não configurada")
 
-        all_embeddings = []
-        
+        all_embeddings: List[List[float]] = []
+        url = _BATCH_URL.format(model=self.model_name)
+
         for i in range(0, len(texts), batch_size):
-            batch = [str(t).replace("\x00", "").strip() for t in texts[i:i + batch_size]]
-            batch = [t if t else " " for t in batch]
-            
+            batch = [str(t).replace("\x00", "").strip() or " " for t in texts[i:i + batch_size]]
+            payload = {
+                "requests": [
+                    {"model": f"models/{self.model_name}", "content": {"parts": [{"text": t[:8000]}]}}
+                    for t in batch
+                ]
+            }
             try:
-                result = self._client.models.embed_content(
-                    model=self.model_name,
-                    contents=batch,
-                )
-                batch_vecs = [e.values for e in result.embeddings]
+                resp = httpx.post(url, params={"key": self._api_key}, json=payload, timeout=60)
+                resp.raise_for_status()
+                batch_vecs = [e["values"] for e in resp.json()["embeddings"]]
                 all_embeddings.extend(batch_vecs)
             except Exception as e:
                 logger.error(f"[EMBEDDINGS] Erro no batch {i}: {e}")
