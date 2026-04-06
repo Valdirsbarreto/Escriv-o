@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Send, Bot, User, Save } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { sendMessage, createSessao, createDocGerado, updateDocGerado, getDocsGerados } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -21,7 +21,8 @@ function detectarTipo(text: string): string {
 
 function pediriaDocumento(texto: string): boolean {
   const lower = texto.toLowerCase();
-  const verbos = ["crie", "cria", "gere", "gera", "escreva", "escreve", "elabore", "elabora", "redija", "redigir", "faça", "faz", "monte", "salve", "salva"];
+  // Apenas verbos de CRIAÇÃO — "salve/salva" removidos pois aparecem no texto do botão UI
+  const verbos = ["crie", "cria", "gere", "gera", "escreva", "escreve", "elabore", "elabora", "redija", "redigir", "faça", "faz", "monte"];
   const objetos = ["roteiro", "oitiva", "ofício", "oficio", "relatório", "relatorio", "documento", "minuta", "cautelar", "mandado", "requisição", "requisicao", "perguntas"];
   return verbos.some(v => lower.includes(v)) && objetos.some(o => lower.includes(o));
 }
@@ -52,6 +53,7 @@ export function CopilotoDrawer() {
   const [existingDocs, setExistingDocs] = useState<any[]>([]);
   // confirmReplace: { index, text, titulo, tipo, existingDoc } — aguarda confirmação do usuário
   const [confirmReplace, setConfirmReplace] = useState<{ index: number; text: string; titulo: string; tipo: string; existingDoc: any } | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   // Busca docs existentes para oferecer substituição
   useEffect(() => {
@@ -59,6 +61,11 @@ export function CopilotoDrawer() {
       getDocsGerados(inqueritoAtivoId).then(r => setExistingDocs(r.data || [])).catch(() => {});
     }
   }, [inqueritoAtivoId]);
+
+  // Auto-scroll para a última mensagem
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
 
   const handleSend = async () => {
     if (!input.trim() || !inqueritoAtivoId) return;
@@ -140,7 +147,10 @@ export function CopilotoDrawer() {
   if (!isCopilotoOpen) return null;
 
   return (
-    <aside className="w-[420px] shrink-0 bg-zinc-950 border-l border-zinc-800 flex flex-col max-h-screen sticky top-0">
+    <aside
+      className="w-[420px] shrink-0 bg-zinc-950 border-l border-zinc-800 flex flex-col max-h-screen sticky top-0"
+      onWheel={(e) => e.stopPropagation()}
+    >
         <div className="p-6 border-b border-zinc-800 flex items-start justify-between">
           <div>
             <h2 className="flex items-center gap-2 text-zinc-100 font-semibold">
@@ -156,7 +166,7 @@ export function CopilotoDrawer() {
           </button>
         </div>
 
-        <ScrollArea className="flex-1 p-6">
+        <ScrollArea className="flex-1 p-6 overscroll-contain">
           <div className="flex flex-col gap-4 pb-4">
             {messages.map((msg, i) => (
               <div key={i} className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
@@ -235,6 +245,7 @@ export function CopilotoDrawer() {
                 </div>
               </div>
             )}
+            <div ref={bottomRef} />
           </div>
         </ScrollArea>
 
