@@ -226,6 +226,31 @@ class CopilotoService:
             except Exception as e:
                 logger.warning(f"[COPILOTO] Falha ao buscar contatos/cronologia: {e}")
 
+        # Injetar documentos gerados pela IA (roteiros, ofícios, etc.)
+        if db is not None:
+            try:
+                from sqlalchemy import select as sa_select  # noqa: F811
+                from app.models.documento_gerado import DocumentoGerado
+
+                docs_result = await db.execute(
+                    sa_select(DocumentoGerado)
+                    .where(DocumentoGerado.inquerito_id == uuid.UUID(inquerito_id))
+                    .order_by(DocumentoGerado.created_at.desc())
+                    .limit(10)
+                )
+                docs_gerados = docs_result.scalars().all()
+
+                if docs_gerados:
+                    bloco_docs = ["### Documentos Gerados pela IA (roteiros, ofícios, minutas)\n"]
+                    for dg in docs_gerados:
+                        data = dg.created_at.strftime("%d/%m/%Y") if dg.created_at else ""
+                        bloco_docs.append(f"**[{dg.tipo.upper()}] {dg.titulo}** ({data})\n{dg.conteudo[:3000]}")
+                        bloco_docs.append("---")
+                    contexto_partes.insert(0, "\n".join(bloco_docs))
+                    logger.info(f"[COPILOTO] {len(docs_gerados)} doc(s) gerado(s) injetado(s) no contexto")
+            except Exception as e:
+                logger.warning(f"[COPILOTO] Falha ao buscar docs gerados: {e}")
+
         for i, r in enumerate(resultados, 1):
             payload = r.get("payload", {})
             texto_preview = payload.get("texto_preview", "")

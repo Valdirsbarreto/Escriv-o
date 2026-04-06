@@ -211,7 +211,7 @@ export default function InqueritoDetalhePage() {
   const params = useParams();
   const router = useRouter();
   const inqId = params.id as string;
-  const { setInqueritoAtivoId, setCopilotoOpen } = useAppStore();
+  const { setInqueritoAtivoId, setCopilotoOpen, docsGeradosVersion } = useAppStore();
 
   const [inquerito, setInq] = useState<any>(null);
   const [documentos, setDocumentos] = useState<any[]>([]);
@@ -294,6 +294,13 @@ export default function InqueritoDetalhePage() {
       if (sintesePollingRef.current) clearInterval(sintesePollingRef.current);
     };
   }, [inqId]);
+
+  // Re-busca docs gerados quando o copiloto salva um novo documento
+  useEffect(() => {
+    if (inqId && docsGeradosVersion > 0) {
+      fetchDocsGerados();
+    }
+  }, [docsGeradosVersion]);
 
   const handleDelete = async () => {
     setDeleting(true);

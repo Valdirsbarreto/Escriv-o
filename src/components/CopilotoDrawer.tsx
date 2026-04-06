@@ -41,7 +41,7 @@ function detectarTitulo(text: string): string {
 }
 
 export function CopilotoDrawer() {
-  const { isCopilotoOpen, setCopilotoOpen, inqueritoAtivoId, sessaoChatId, setSessaoChatId } = useAppStore();
+  const { isCopilotoOpen, setCopilotoOpen, inqueritoAtivoId, sessaoChatId, setSessaoChatId, bumpDocsGerados } = useAppStore();
   const [messages, setMessages] = useState<{ role: "user" | "bot"; text: string }[]>([
     { role: "bot", text: "Olá! Sou o Escrivão AI. Como posso ajudar com a investigação hoje?" }
   ]);
@@ -79,6 +79,7 @@ export function CopilotoDrawer() {
           const tipo = detectarTipo(botText);
           await createDocGerado(inqueritoAtivoId, { titulo, tipo, conteudo: botText });
           setSavedMsgs((prev) => new Set(prev).add(newIndex));
+          bumpDocsGerados();
         } catch (saveErr) {
           console.error("Erro ao auto-salvar documento:", saveErr);
         }
@@ -100,6 +101,7 @@ export function CopilotoDrawer() {
       const tipo = detectarTipo(text);
       await createDocGerado(inqueritoAtivoId, { titulo, tipo, conteudo: text });
       setSavedMsgs((prev) => new Set(prev).add(index));
+      bumpDocsGerados();
     } catch (error) {
       console.error("Erro ao salvar documento:", error);
       alert("Erro ao salvar documento no inquérito.");
