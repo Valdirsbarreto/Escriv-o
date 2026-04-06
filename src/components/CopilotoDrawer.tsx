@@ -4,9 +4,9 @@ import { useAppStore } from "@/store/app";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Send, Bot, User, Save } from "lucide-react";
+import { Send, Bot, User, Save, Paperclip, X, FileText, Image } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { sendMessage, createSessao, createDocGerado, updateDocGerado, getDocsGerados } from "@/lib/api";
+import { sendMessage, sendMessageComAnexo, createSessao, createDocGerado, updateDocGerado, getDocsGerados } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -48,6 +48,8 @@ export function CopilotoDrawer() {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [anexo, setAnexo] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [savedMsgs, setSavedMsgs] = useState<Set<number>>(new Set());
   const [savingMsg, setSavingMsg] = useState<number | null>(null);
   const [existingDocs, setExistingDocs] = useState<any[]>([]);
@@ -68,11 +70,18 @@ export function CopilotoDrawer() {
   }, [messages, loading]);
 
   const handleSend = async () => {
-    if (!input.trim() || !inqueritoAtivoId) return;
+    if ((!input.trim() && !anexo) || !inqueritoAtivoId) return;
 
-    const userText = input;
+    const userText = input.trim() || (anexo ? `Analise o arquivo: ${anexo.name}` : "");
+    const arquivoAnexado = anexo;
     setInput("");
-    setMessages((prev) => [...prev, { role: "user", text: userText }]);
+    setAnexo(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    const userLabel = arquivoAnexado
+      ? `📎 ${arquivoAnexado.name}\n${userText}`
+      : userText;
+    setMessages((prev) => [...prev, { role: "user", text: userLabel }]);
     setLoading(true);
 
     try {
@@ -83,7 +92,10 @@ export function CopilotoDrawer() {
         setSessaoChatId(currentSessao);
       }
 
-      const resp = await sendMessage(currentSessao!, inqueritoAtivoId, userText);
+      const resp = arquivoAnexado
+        ? await sendMessageComAnexo(currentSessao!, userText, arquivoAnexado)
+        : await sendMessage(currentSessao!, inqueritoAtivoId, userText);
+
       const botText = resp.resposta;
       const newIndex = messages.length + 1; // +1 para contar a mensagem do user que acabou de entrar
 
@@ -249,19 +261,70 @@ export function CopilotoDrawer() {
           </div>
         </ScrollArea>
 
-        <div className="p-4 border-t border-zinc-800 bg-zinc-950">
+        <div className="p-4 border-t border-zinc-800 bg-zinc-950 space-y-2">
+          {/* Preview do anexo */}
+          {anexo && (
+            <div className="flex items-center gap-2 bg-zinc-800/70 border border-zinc-700 rounded-lg px-3 py-2">
+              {anexo.type.startsWith("image/") ? (
+                <Image size={14} className="text-blue-400 shrink-0" />
+              ) : (
+                <FileText size={14} className="text-amber-400 shrink-0" />
+              )}
+              <span className="text-xs text-zinc-300 truncate flex-1">{anexo.name}</span>
+              <span className="text-xs text-zinc-500 shrink-0">
+                {(anexo.size / 1024).toFixed(0)} KB
+              </span>
+              <button
+                onClick={() => { setAnexo(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                className="text-zinc-500 hover:text-zinc-300 transition-colors ml-1 shrink-0"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          )}
+
           <form
             onSubmit={(e) => { e.preventDefault(); handleSend(); }}
             className="flex gap-2"
           >
+            {/* Input oculto para arquivo */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.tiff,.webp"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) setAnexo(f);
+              }}
+            />
+            {/* Botão clipe */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={loading || !inqueritoAtivoId}
+              title="Anexar arquivo (PDF, imagem ou texto)"
+              className={`shrink-0 p-2 rounded-md border transition-colors disabled:opacity-40 ${
+                anexo
+                  ? "border-amber-500/40 text-amber-400 bg-amber-500/10"
+                  : "border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600"
+              }`}
+            >
+              <Paperclip size={16} />
+            </button>
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Pergunte sobre o caso..."
+              placeholder={anexo ? "Instrução para o arquivo (opcional)..." : "Pergunte sobre o caso..."}
               className="bg-zinc-900 border-zinc-800 focus-visible:ring-blue-500"
               disabled={loading || !inqueritoAtivoId}
             />
-            <Button type="submit" size="icon" disabled={loading || !inqueritoAtivoId || !input.trim()} className="bg-blue-600 hover:bg-blue-700">
+            <Button
+              type="submit"
+              size="icon"
+              disabled={loading || !inqueritoAtivoId || (!input.trim() && !anexo)}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
               <Send size={18} />
             </Button>
           </form>

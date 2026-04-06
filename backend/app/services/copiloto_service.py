@@ -52,6 +52,8 @@ class CopilotoService:
         max_chunks: int = 15,
         auditar: bool = True,
         db=None,  # AsyncSession opcional para buscar resumo do caso
+        texto_anexo: Optional[str] = None,  # texto extraído de arquivo anexado pelo usuário
+        nome_anexo: Optional[str] = None,   # nome original do arquivo
     ) -> Dict[str, Any]:
         """
         Processa uma mensagem do usuário e retorna resposta com fontes.
@@ -302,7 +304,19 @@ class CopilotoService:
             ultimas = historico[-20:]
             messages.extend(ultimas)
 
-        messages.append({"role": "user", "content": query})
+        # Se há anexo, injeta como bloco no início do conteúdo do usuário
+        if texto_anexo:
+            nome_label = f' ("{nome_anexo}")' if nome_anexo else ""
+            user_content = (
+                f"[DOCUMENTO ANEXADO{nome_label}]\n"
+                f"{texto_anexo[:30000]}\n"
+                f"[FIM DO DOCUMENTO ANEXADO]\n\n"
+                f"{query}"
+            )
+        else:
+            user_content = query
+
+        messages.append({"role": "user", "content": user_content})
 
         # ── 4. Chamar LLM ────────────────────────────────
         logger.info("[COPILOTO] Enviando para LLM (premium)")

@@ -144,6 +144,21 @@ export const deleteDocGerado = (inqId: string, docId: string) =>
 export const updateDocGerado = (inqId: string, docId: string, data: { titulo: string; tipo: string; conteudo: string }) =>
   api.put(`/inqueritos/${inqId}/docs-gerados/${docId}`, data);
 
+export const sendMessageComAnexo = async (
+  sessaoId: string,
+  mensagem: string,
+  file: File,
+) => {
+  const formData = new FormData();
+  formData.append("mensagem", mensagem);
+  formData.append("auditar", "false");
+  formData.append("file", file);
+  const response = await apiMultipart.post(`/copiloto/chat/${sessaoId}/com-anexo`, formData, {
+    timeout: 120000,
+  });
+  return response.data;
+};
+
 // ── Peças Extraídas ────────────────────────────────────────────────────────
 export const getPecasExtraidas = (inqId: string) =>
   api.get(`/inqueritos/${inqId}/pecas-extraidas`);
