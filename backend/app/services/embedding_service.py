@@ -1,15 +1,16 @@
 """
 Escrivão AI — Serviço de Embeddings
-Geração de embeddings via API do Google Gemini (text-embedding-004).
+Geração de embeddings via API do Google Gemini (gemini-embedding-001).
 Substituiu o sentence-transformers local para economizar RAM e reduzir tempo de build.
-Dimensões: 768.
+Dimensões: 768 (via outputDimensionality para manter compatibilidade com coleção Qdrant).
 
-NOTA: O SDK google-genai 1.x (sync e async) usa v1beta por padrão e causa 404 para
-text-embedding-004. Fix definitivo: chamar a REST API diretamente via httpx na v1,
-sem passar pelo SDK. Nunca usar self._client.models.embed_content nem aio.models.
+NOTA: O SDK google-genai 1.x (sync e async) usa v1beta por padrão e causa 404.
+text-embedding-004 não está disponível para esta chave de API.
+Modelos disponíveis confirmados: gemini-embedding-001, gemini-embedding-2-preview.
+Fix definitivo: chamar a REST API diretamente via httpx na v1beta, sem SDK.
+Nunca usar self._client.models.embed_content nem aio.models.
 """
 
-import asyncio
 import logging
 from typing import List
 
@@ -19,7 +20,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "text-embedding-004"
+DEFAULT_MODEL = "gemini-embedding-001"
 DEFAULT_VECTOR_SIZE = 768
 _EMBED_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:embedContent"
 _BATCH_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:batchEmbedContents"
@@ -46,6 +47,7 @@ class EmbeddingService:
         payload = {
             "model": f"models/{self.model_name}",
             "content": {"parts": [{"text": text[:8000]}]},
+            "outputDimensionality": self.vector_size,
         }
         try:
             resp = httpx.post(url, params={"key": self._api_key}, json=payload, timeout=30)
@@ -72,6 +74,7 @@ class EmbeddingService:
         payload = {
             "model": f"models/{self.model_name}",
             "content": {"parts": [{"text": text[:8000]}]},
+            "outputDimensionality": self.vector_size,
         }
         try:
             async with httpx.AsyncClient(timeout=30) as client:
@@ -103,7 +106,11 @@ class EmbeddingService:
             batch = [str(t).replace("\x00", "").strip() or " " for t in texts[i:i + batch_size]]
             payload = {
                 "requests": [
-                    {"model": f"models/{self.model_name}", "content": {"parts": [{"text": t[:8000]}]}}
+                    {
+                        "model": f"models/{self.model_name}",
+                        "content": {"parts": [{"text": t[:8000]}]},
+                        "outputDimensionality": self.vector_size,
+                    }
                     for t in batch
                 ]
             }

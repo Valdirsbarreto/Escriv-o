@@ -19,6 +19,13 @@ function detectarTipo(text: string): string {
   return "outro";
 }
 
+function pediriaDocumento(texto: string): boolean {
+  const lower = texto.toLowerCase();
+  const verbos = ["crie", "cria", "gere", "gera", "escreva", "escreve", "elabore", "elabora", "redija", "redigir", "faça", "faz", "monte", "salve", "salva"];
+  const objetos = ["roteiro", "oitiva", "ofício", "oficio", "relatório", "relatorio", "documento", "minuta", "cautelar", "mandado", "requisição", "requisicao", "perguntas"];
+  return verbos.some(v => lower.includes(v)) && objetos.some(o => lower.includes(o));
+}
+
 function detectarTitulo(text: string): string {
   const lines = text.split("\n");
   for (const line of lines) {
@@ -59,10 +66,23 @@ export function CopilotoDrawer() {
         setSessaoChatId(currentSessao);
       }
 
-      // TODO: Adaptar para usar stream real se necessário.
-      // O mock aqui só bate no endpoint normal.
       const resp = await sendMessage(currentSessao!, inqueritoAtivoId, userText);
-      setMessages((prev) => [...prev, { role: "bot", text: resp.resposta }]);
+      const botText = resp.resposta;
+      const newIndex = messages.length + 1; // +1 para contar a mensagem do user que acabou de entrar
+
+      setMessages((prev) => [...prev, { role: "bot", text: botText }]);
+
+      // Auto-salva se o usuário pediu para criar um documento e a resposta é substancial
+      if (pediriaDocumento(userText) && botText.length > 300) {
+        try {
+          const titulo = detectarTitulo(botText);
+          const tipo = detectarTipo(botText);
+          await createDocGerado(inqueritoAtivoId, { titulo, tipo, conteudo: botText });
+          setSavedMsgs((prev) => new Set(prev).add(newIndex));
+        } catch (saveErr) {
+          console.error("Erro ao auto-salvar documento:", saveErr);
+        }
+      }
 
     } catch (error) {
       console.error(error);
