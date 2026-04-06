@@ -141,6 +141,9 @@ export const getDocGerado = (inqId: string, docId: string) =>
 export const deleteDocGerado = (inqId: string, docId: string) =>
   api.delete(`/inqueritos/${inqId}/docs-gerados/${docId}`);
 
+export const updateDocGerado = (inqId: string, docId: string, data: { titulo: string; tipo: string; conteudo: string }) =>
+  api.put(`/inqueritos/${inqId}/docs-gerados/${docId}`, data);
+
 export const osintConsultaAvulsa = async (params: {
   cpf?: string;
   cnpj?: string;

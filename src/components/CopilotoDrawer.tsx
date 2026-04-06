@@ -5,8 +5,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Send, Bot, User, Save } from "lucide-react";
-import { useState } from "react";
-import { sendMessage, createSessao, createDocGerado } from "@/lib/api";
+import { useState, useEffect } from "react";
+import { sendMessage, createSessao, createDocGerado, updateDocGerado, getDocsGerados } from "@/lib/api";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -49,6 +49,16 @@ export function CopilotoDrawer() {
   const [loading, setLoading] = useState(false);
   const [savedMsgs, setSavedMsgs] = useState<Set<number>>(new Set());
   const [savingMsg, setSavingMsg] = useState<number | null>(null);
+  const [existingDocs, setExistingDocs] = useState<any[]>([]);
+  // confirmReplace: { index, text, titulo, tipo, existingDoc } — aguarda confirmação do usuário
+  const [confirmReplace, setConfirmReplace] = useState<{ index: number; text: string; titulo: string; tipo: string; existingDoc: any } | null>(null);
+
+  // Busca docs existentes para oferecer substituição
+  useEffect(() => {
+    if (inqueritoAtivoId) {
+      getDocsGerados(inqueritoAtivoId).then(r => setExistingDocs(r.data || [])).catch(() => {});
+    }
+  }, [inqueritoAtivoId]);
 
   const handleSend = async () => {
     if (!input.trim() || !inqueritoAtivoId) return;
@@ -95,11 +105,28 @@ export function CopilotoDrawer() {
 
   const handleSalvar = async (index: number, text: string) => {
     if (!inqueritoAtivoId) return;
+    const titulo = detectarTitulo(text);
+    const tipo = detectarTipo(text);
+    // Verifica se já existe doc do mesmo tipo — oferece substituição
+    const docExistente = existingDocs.find(d => d.tipo === tipo);
+    if (docExistente) {
+      setConfirmReplace({ index, text, titulo, tipo, existingDoc: docExistente });
+      return;
+    }
+    await _executarSave(index, text, titulo, tipo, null);
+  };
+
+  const _executarSave = async (index: number, text: string, titulo: string, tipo: string, substituirId: string | null) => {
+    if (!inqueritoAtivoId) return;
     setSavingMsg(index);
     try {
-      const titulo = detectarTitulo(text);
-      const tipo = detectarTipo(text);
-      await createDocGerado(inqueritoAtivoId, { titulo, tipo, conteudo: text });
+      if (substituirId) {
+        await updateDocGerado(inqueritoAtivoId, substituirId, { titulo, tipo, conteudo: text });
+        setExistingDocs(prev => prev.map(d => d.id === substituirId ? { ...d, titulo, tipo } : d));
+      } else {
+        await createDocGerado(inqueritoAtivoId, { titulo, tipo, conteudo: text });
+        getDocsGerados(inqueritoAtivoId).then(r => setExistingDocs(r.data || [])).catch(() => {});
+      }
       setSavedMsgs((prev) => new Set(prev).add(index));
       bumpDocsGerados();
     } catch (error) {
@@ -228,6 +255,38 @@ export function CopilotoDrawer() {
             </Button>
           </form>
         </div>
+
+        {/* Diálogo de confirmação de substituição */}
+        {confirmReplace && (
+          <div className="absolute inset-0 z-10 flex items-end justify-center bg-black/60 backdrop-blur-sm rounded-none">
+            <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-5 mx-4 mb-6 w-full shadow-xl">
+              <p className="text-sm font-semibold text-zinc-100 mb-1">Substituir documento existente?</p>
+              <p className="text-xs text-zinc-400 mb-4">
+                Já existe um <span className="text-zinc-200">{confirmReplace.existingDoc.titulo}</span> salvo. Quer substituí-lo ou criar um novo?
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => { const cr = confirmReplace; setConfirmReplace(null); await _executarSave(cr.index, cr.text, cr.titulo, cr.tipo, cr.existingDoc.id); }}
+                  className="flex-1 text-xs bg-amber-600 hover:bg-amber-500 text-white rounded-lg px-3 py-2 transition-colors"
+                >
+                  Substituir
+                </button>
+                <button
+                  onClick={async () => { const cr = confirmReplace; setConfirmReplace(null); await _executarSave(cr.index, cr.text, cr.titulo, cr.tipo, null); }}
+                  className="flex-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg px-3 py-2 transition-colors"
+                >
+                  Criar novo
+                </button>
+                <button
+                  onClick={() => setConfirmReplace(null)}
+                  className="text-xs text-zinc-500 hover:text-zinc-300 px-3 py-2 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
     </aside>
   );
 }

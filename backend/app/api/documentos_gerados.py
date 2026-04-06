@@ -125,6 +125,38 @@ async def obter_doc_gerado(
     )
 
 
+@router.put("/inqueritos/{inquerito_id}/docs-gerados/{doc_id}", response_model=DocGeradoResponse)
+async def atualizar_doc_gerado(
+    inquerito_id: str,
+    doc_id: str,
+    body: DocGeradoCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Substitui o conteúdo de um documento gerado existente."""
+    result = await db.execute(
+        select(DocumentoGerado).where(
+            DocumentoGerado.id == uuid.UUID(doc_id),
+            DocumentoGerado.inquerito_id == uuid.UUID(inquerito_id),
+        )
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento gerado não encontrado.")
+    doc.titulo = body.titulo
+    doc.tipo = body.tipo
+    doc.conteudo = body.conteudo
+    await db.commit()
+    await db.refresh(doc)
+    return DocGeradoResponse(
+        id=str(doc.id),
+        inquerito_id=str(doc.inquerito_id),
+        titulo=doc.titulo,
+        tipo=doc.tipo,
+        conteudo=doc.conteudo,
+        created_at=doc.created_at.isoformat() if doc.created_at else "",
+    )
+
+
 @router.delete("/inqueritos/{inquerito_id}/docs-gerados/{doc_id}", status_code=204)
 async def deletar_doc_gerado(
     inquerito_id: str,
