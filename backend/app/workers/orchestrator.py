@@ -30,6 +30,24 @@ _IP_PATTERNS = [
     re.compile(r'(\d{4,6})[/\-](\d{4})'),                 # 07699/2016
 ]
 
+def _normalizar_numero_ip(numero: str) -> str:
+    """
+    Normaliza número de IP para formato canônico DDD-NNNNN-YYYY.
+    Exemplos:
+      "921-332-2012"    → "921-00332-2012"
+      "921/332/2012"    → "921-00332-2012"
+      "921-00332-2012"  → "921-00332-2012"
+      "033.07699.2016"  → "033-07699-2016"
+    """
+    m = re.match(r'^(\d{3})[-./](\d+)[-./](\d{4})$', numero.strip())
+    if m:
+        delegacia = m.group(1)
+        seq = m.group(2).zfill(5)  # zero-padding a 5 dígitos
+        ano = m.group(3)
+        return f"{delegacia}-{seq}-{ano}"
+    return numero
+
+
 def _extrair_numero_ip_dos_filenames(filenames: List[str]):
     """Tenta extrair número do IP dos nomes dos arquivos antes de chamar o LLM."""
     for fname in filenames:
@@ -39,9 +57,11 @@ def _extrair_numero_ip_dos_filenames(filenames: List[str]):
             if m:
                 grupos = m.groups()
                 if len(grupos) == 3:
-                    return f"{grupos[0]}-{grupos[1]}-{grupos[2]}", int(grupos[2])
+                    numero = f"{grupos[0]}-{grupos[1]}-{grupos[2]}"
+                    return _normalizar_numero_ip(numero), int(grupos[2])
                 elif len(grupos) == 2:
-                    return f"{grupos[0]}-{grupos[1]}", int(grupos[1])
+                    numero = f"{grupos[0]}-{grupos[1]}"
+                    return numero, int(grupos[1])
     return None, None
 
 @celery_app.task(bind=True, max_retries=2)
@@ -78,7 +98,9 @@ def orchestrate_new_inquerito(self, storage_paths: List[str], filenames: List[st
             meta = analise.get("inquerito", {})
             # Prioridade: filename > LLM > TEMP
             numero_fname, ano_fname = _extrair_numero_ip_dos_filenames(filenames)
-            numero_ip = numero_fname or meta.get("numero") or f"TEMP-{uuid.uuid4().hex[:6].upper()}"
+            numero_raw = numero_fname or meta.get("numero") or f"TEMP-{uuid.uuid4().hex[:6].upper()}"
+            # Normaliza formato: garante DDD-NNNNN-YYYY com zero-padding
+            numero_ip = _normalizar_numero_ip(numero_raw)
             # ano: prefere o extraído do filename/LLM; NÃO usa o ano atual como fallback
             # (IPs antigos teriam o ano atual erroneamente atribuído)
             ano_llm = meta.get("ano")
@@ -86,9 +108,14 @@ def orchestrate_new_inquerito(self, storage_paths: List[str], filenames: List[st
             delegacia_cod = meta.get("delegacia_codigo")
             delegacia_nome = meta.get("delegacia_nome")
 
-            # Buscar por número para evitar duplicidade
+            # Buscar por número para evitar duplicidade (busca também a forma sem normalizar)
+            numero_alt = numero_raw if numero_raw != numero_ip else None
+            from sqlalchemy import or_
+            filtro = [Inquerito.numero == numero_ip]
+            if numero_alt:
+                filtro.append(Inquerito.numero == numero_alt)
             inquerito = db.execute(
-                select(Inquerito).where(Inquerito.numero == numero_ip)
+                select(Inquerito).where(or_(*filtro))
             ).scalar_one_or_none()
 
             if not inquerito:

@@ -374,6 +374,10 @@ async def upload_documento(
         )
         db.add(transicao)
 
+    # Commit antes de disparar Celery — garante que o documento existe no banco
+    await db.commit()
+    await db.refresh(documento)
+
     # Disparar task de ingestão assíncrona
     task_id = None
     try:
