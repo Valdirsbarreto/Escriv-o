@@ -211,7 +211,8 @@ export default function InqueritoDetalhePage() {
   const params = useParams();
   const router = useRouter();
   const inqId = params.id as string;
-  const { setInqueritoAtivoId, setCopilotoOpen, docsGeradosVersion } = useAppStore();
+  const { setInqueritoAtivoId, setCopilotoOpen, docsGeradosVersion, setSidebarCollapsed } = useAppStore();
+  const [activeTab, setActiveTab] = useState<"workspace" | "autos">("workspace");
 
   const [inquerito, setInq] = useState<any>(null);
   const [documentos, setDocumentos] = useState<any[]>([]);
@@ -288,9 +289,11 @@ export default function InqueritoDetalhePage() {
     if (inqId) {
       fetchDados();
       setCopilotoOpen(true);
+      setSidebarCollapsed(true);
     }
     return () => {
       setCopilotoOpen(false);
+      setSidebarCollapsed(false);
       if (sintesePollingRef.current) clearInterval(sintesePollingRef.current);
     };
   }, [inqId]);
@@ -598,23 +601,137 @@ export default function InqueritoDetalhePage() {
 
       <ProgressoPipeline inqId={inqId} onConcluido={fetchDados} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Info lateral esquerdo */}
-        <div className="space-y-6">
-          <Card className="bg-zinc-900 border-zinc-800">
-            <CardHeader>
-              <CardTitle className="text-lg">Fato Típico</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-zinc-400 whitespace-pre-wrap leading-relaxed">
-                {inquerito.descricao || "Sem informações inseridas no formulário inicial."}
-              </p>
-            </CardContent>
-          </Card>
+      {/* Fato Típico — compacto inline */}
+      {inquerito.descricao && (
+        <div className="mb-4 px-4 py-3 rounded-xl border border-zinc-800 bg-zinc-900/40 flex gap-3 items-start">
+          <span className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mt-0.5 shrink-0">Fato</span>
+          <p className="text-sm text-zinc-400 leading-relaxed line-clamp-3">{inquerito.descricao}</p>
         </div>
+      )}
 
-        {/* Peças Processuais (Lista Docs) */}
-        <div className="lg:col-span-2 space-y-4">
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-zinc-800 mb-6">
+        {([
+          { id: "workspace", label: "Área de Trabalho" },
+          { id: "autos", label: `Autos Físicos Digitalizados (${documentos.length})` },
+        ] as const).map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              activeTab === tab.id
+                ? "border-blue-500 text-blue-400"
+                : "border-transparent text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── ABA: ÁREA DE TRABALHO ── */}
+      {activeTab === "workspace" && (
+        <div className="space-y-8">
+          {/* Documentos Gerados pela IA */}
+          <div>
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-4">
+              <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
+                <Bot size={18} className="text-blue-400" /> Documentos Gerados pela IA
+              </h2>
+              <span className="text-sm text-zinc-500">{docsGerados.length} documento(s)</span>
+            </div>
+            {docsGeradosLoading ? (
+              <div className="flex items-center gap-2 text-zinc-500 py-6">
+                <Loader2 size={16} className="animate-spin" /> Carregando documentos gerados...
+              </div>
+            ) : docsGerados.length === 0 ? (
+              <div className="py-10 text-center text-zinc-600 border border-zinc-800 border-dashed rounded-lg bg-zinc-900/40">
+                <Bot className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                <p>Nenhum documento gerado ainda.</p>
+                <p className="text-sm mt-1">Use o Copiloto Investigativo e salve os documentos aqui.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {docsGerados.map((doc: any) => (
+                  <div key={doc.id} className="flex items-center justify-between border border-zinc-800 rounded-xl px-4 py-3 bg-zinc-900/40 hover:border-zinc-700 transition-colors">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="p-1.5 rounded border bg-zinc-950 text-blue-400 border-zinc-800 shrink-0">
+                        <Bot size={15} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-zinc-200 truncate">{doc.titulo}</p>
+                        <p className="text-xs text-zinc-500 mt-0.5">
+                          {new Date(doc.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${TIPO_GERADO_COLOR[doc.tipo] || TIPO_GERADO_COLOR["outro"]}`}>
+                        {TIPO_GERADO_LABEL[doc.tipo] || doc.tipo}
+                      </span>
+                      <button onClick={() => handleAbrirDocGerado(doc)} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-blue-400 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors">
+                        <Eye size={11} /> Ver
+                      </button>
+                      <button onClick={() => handleDeletarDocGerado(doc.id)} disabled={deletingDocGerado === doc.id} className="p-1.5 rounded text-zinc-600 hover:text-red-400 transition-colors disabled:opacity-40" title="Excluir documento">
+                        {deletingDocGerado === doc.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Peças Individuais Extraídas */}
+          <div>
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-4">
+              <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
+                <FileText size={18} className="text-amber-400" /> Peças Individuais Extraídas
+              </h2>
+              <span className="text-sm text-zinc-500">
+                {documentos.filter(d => d.tipo_peca && d.tipo_peca !== "sintese_investigativa" && d.status_processamento === "concluido").length} peça(s)
+              </span>
+            </div>
+            {(() => {
+              const pecas = documentos.filter(d => d.tipo_peca && d.tipo_peca !== "sintese_investigativa" && d.status_processamento === "concluido");
+              if (pecas.length === 0) {
+                return (
+                  <div className="py-10 text-center text-zinc-600 border border-zinc-800 border-dashed rounded-xl bg-zinc-900/40">
+                    <FileText className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                    <p className="font-medium">Nenhuma peça extraída ainda.</p>
+                    <p className="text-sm mt-1 text-zinc-700">Use o Copiloto para extrair peças específicas dos autos.</p>
+                  </div>
+                );
+              }
+              return (
+                <div className="space-y-2">
+                  {pecas.map(doc => (
+                    <div key={doc.id} className="flex items-center justify-between border border-zinc-800 rounded-xl px-4 py-3 bg-zinc-900/40 hover:border-zinc-700 transition-colors">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileText size={15} className="text-amber-400 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-zinc-200 truncate">{doc.nome_arquivo}</p>
+                          <p className="text-xs text-zinc-500">{doc.tipo_peca?.replace(/_/g, " ")}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleAbrirDoc(doc)}
+                        className="flex items-center gap-1 text-xs text-zinc-400 hover:text-blue-400 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors shrink-0"
+                      >
+                        <Eye size={11} /> Ver
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* ── ABA: AUTOS FÍSICOS ── */}
+      {activeTab === "autos" && (
+        <div className="space-y-4">
           <div className="flex justify-between items-end border-b border-zinc-800 pb-2">
             <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
               <FolderOpen className="text-blue-500"/> Autos Físicos Digitalizados
@@ -789,7 +906,7 @@ export default function InqueritoDetalhePage() {
             </div>
           </ScrollArea>
         </div>
-      </div>
+      )}
 
       {/* Intimações */}
       {intimacoes.length > 0 && (
@@ -866,67 +983,6 @@ export default function InqueritoDetalhePage() {
           </div>
         </div>
       )}
-
-      {/* Documentos Gerados pela IA */}
-      <div className="mt-8">
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-4">
-          <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
-            <Bot size={18} className="text-blue-400" /> Documentos Gerados pela IA
-          </h2>
-          <span className="text-sm text-zinc-500">{docsGerados.length} documento(s)</span>
-        </div>
-        {docsGeradosLoading ? (
-          <div className="flex items-center gap-2 text-zinc-500 py-6">
-            <Loader2 size={16} className="animate-spin" /> Carregando documentos gerados...
-          </div>
-        ) : docsGerados.length === 0 ? (
-          <div className="py-10 text-center text-zinc-600 border border-zinc-800 border-dashed rounded-lg bg-zinc-900/40">
-            <Bot className="w-10 h-10 mx-auto mb-3 opacity-20" />
-            <p>Nenhum documento gerado ainda.</p>
-            <p className="text-sm mt-1">Use o Copiloto Investigativo e salve os documentos aqui.</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {docsGerados.map((doc: any) => (
-              <div key={doc.id} className="flex items-center justify-between border border-zinc-800 rounded-xl px-4 py-3 bg-zinc-900/40 hover:border-zinc-700 transition-colors">
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="p-1.5 rounded border bg-zinc-950 text-blue-400 border-zinc-800 shrink-0">
-                    <Bot size={15} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-zinc-200 truncate">{doc.titulo}</p>
-                    <p className="text-xs text-zinc-500 mt-0.5">
-                      {new Date(doc.created_at).toLocaleDateString("pt-BR", {
-                        day: "2-digit", month: "2-digit", year: "numeric",
-                        hour: "2-digit", minute: "2-digit",
-                      })}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0 ml-3">
-                  <span className={`text-xs px-2 py-0.5 rounded-full border ${TIPO_GERADO_COLOR[doc.tipo] || TIPO_GERADO_COLOR["outro"]}`}>
-                    {TIPO_GERADO_LABEL[doc.tipo] || doc.tipo}
-                  </span>
-                  <button
-                    onClick={() => handleAbrirDocGerado(doc)}
-                    className="flex items-center gap-1 text-xs text-zinc-400 hover:text-blue-400 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors"
-                  >
-                    <Eye size={11} /> Ver
-                  </button>
-                  <button
-                    onClick={() => handleDeletarDocGerado(doc.id)}
-                    disabled={deletingDocGerado === doc.id}
-                    className="p-1.5 rounded text-zinc-600 hover:text-red-400 transition-colors disabled:opacity-40"
-                    title="Excluir documento"
-                  >
-                    {deletingDocGerado === doc.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
       {showIntimacaoModal && (
         <IntimacaoUploadModal

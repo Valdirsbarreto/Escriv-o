@@ -15,6 +15,10 @@ interface AppState {
   // Sinaliza para page.tsx re-buscar docs gerados após save do copiloto
   docsGeradosVersion: number;
   bumpDocsGerados: () => void;
+
+  // Controle de colapso da sidebar (recolhe ao abrir um inquérito)
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (collapsed: boolean) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -30,4 +34,7 @@ export const useAppStore = create<AppState>((set) => ({
 
   docsGeradosVersion: 0,
   bumpDocsGerados: () => set((state) => ({ docsGeradosVersion: state.docsGeradosVersion + 1 })),
+
+  sidebarCollapsed: false,
+  setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
 }));
