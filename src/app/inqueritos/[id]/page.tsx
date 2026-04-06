@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/app";
-import { api, getDocsGerados, getDocGerado, deleteDocGerado } from "@/lib/api";
+import { api, getDocsGerados, getDocGerado, deleteDocGerado, getPecasExtraidas, getPecaExtraida, reextrairPecas } from "@/lib/api";
 import { deleteInquerito } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -235,6 +235,10 @@ export default function InqueritoDetalhePage() {
   const [docsGeradosLoading, setDocsGeradosLoading] = useState(false);
   const [docGeradoViewer, setDocGeradoViewer] = useState<{ open: boolean; doc: any | null; conteudo: string | null; loading: boolean }>({ open: false, doc: null, conteudo: null, loading: false });
   const [deletingDocGerado, setDeletingDocGerado] = useState<string | null>(null);
+  const [pecasExtraidas, setPecasExtraidas] = useState<any[]>([]);
+  const [pecasLoading, setPecasLoading] = useState(false);
+  const [pecaViewer, setPecaViewer] = useState<{ open: boolean; peca: any | null; loading: boolean }>({ open: false, peca: null, loading: false });
+  const [reextrahindo, setReextrahindo] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sintesePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const searchParams = useSearchParams();
@@ -251,6 +255,18 @@ export default function InqueritoDetalhePage() {
     }
   };
 
+  const fetchPecasExtraidas = async () => {
+    setPecasLoading(true);
+    try {
+      const res = await getPecasExtraidas(inqId);
+      setPecasExtraidas(res.data);
+    } catch {
+      // silencioso
+    } finally {
+      setPecasLoading(false);
+    }
+  };
+
   const fetchDados = async () => {
     try {
       const [inqRes, docsRes, intRes] = await Promise.all([
@@ -263,6 +279,7 @@ export default function InqueritoDetalhePage() {
       setIntimacoes(intRes.data);
       setInqueritoAtivoId(inqId);
       fetchDocsGerados();
+      fetchPecasExtraidas();
 
       // Se veio de intimação (?sintese=1), abre a síntese automaticamente
       if (searchParams.get("sintese") === "1") {
@@ -307,10 +324,10 @@ export default function InqueritoDetalhePage() {
 
   // Trava scroll do body quando qualquer modal estiver aberto
   useEffect(() => {
-    const anyOpen = docGeradoViewer.open || docViewer.open || deleteDialogOpen || showIntimacaoModal || citacoes.open;
+    const anyOpen = docGeradoViewer.open || docViewer.open || deleteDialogOpen || showIntimacaoModal || citacoes.open || pecaViewer.open;
     document.body.style.overflow = anyOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
-  }, [docGeradoViewer.open, docViewer.open, deleteDialogOpen, showIntimacaoModal, citacoes.open]);
+  }, [docGeradoViewer.open, docViewer.open, deleteDialogOpen, showIntimacaoModal, citacoes.open, pecaViewer.open]);
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -465,6 +482,59 @@ export default function InqueritoDetalhePage() {
     } finally {
       setDeletingDocGerado(null);
     }
+  };
+
+  const handleAbrirPeca = async (peca: any) => {
+    // Se já temos conteudo_texto no objeto, usa direto; senão busca
+    if (peca.conteudo_texto) {
+      setPecaViewer({ open: true, peca, loading: false });
+      return;
+    }
+    setPecaViewer({ open: true, peca, loading: true });
+    try {
+      const res = await getPecaExtraida(inqId, peca.id);
+      setPecaViewer({ open: true, peca: res.data, loading: false });
+    } catch {
+      setPecaViewer(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  const handleReextrairPecas = async (docId: string) => {
+    setReextrahindo(docId);
+    try {
+      await reextrairPecas(inqId, docId);
+      setTimeout(fetchPecasExtraidas, 5000);
+    } catch {
+      alert("Erro ao acionar extração de peças.");
+    } finally {
+      setReextrahindo(null);
+    }
+  };
+
+  const TIPO_PECA_LABEL: Record<string, string> = {
+    termo_declaracao: "Declaração",
+    auto_apreensao: "Auto de Apreensão",
+    oficio: "Ofício",
+    laudo: "Laudo",
+    bo: "Boletim de Ocorrência",
+    despacho: "Despacho",
+    portaria: "Portaria",
+    requisicao: "Requisição",
+    mandado: "Mandado",
+    outro: "Outro",
+  };
+
+  const TIPO_PECA_COLOR: Record<string, string> = {
+    termo_declaracao: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+    auto_apreensao: "bg-red-500/10 text-red-400 border-red-500/20",
+    oficio: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+    laudo: "bg-teal-500/10 text-teal-400 border-teal-500/20",
+    bo: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+    despacho: "bg-zinc-700/50 text-zinc-400 border-zinc-600",
+    portaria: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
+    requisicao: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    mandado: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+    outro: "bg-zinc-800 text-zinc-400 border-zinc-700",
   };
 
   const TIPO_GERADO_LABEL: Record<string, string> = {
@@ -688,43 +758,53 @@ export default function InqueritoDetalhePage() {
               <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
                 <FileText size={18} className="text-amber-400" /> Peças Individuais Extraídas
               </h2>
-              <span className="text-sm text-zinc-500">
-                {documentos.filter(d => d.tipo_peca && d.tipo_peca !== "sintese_investigativa" && d.status_processamento === "concluido").length} peça(s)
-              </span>
+              <span className="text-sm text-zinc-500">{pecasExtraidas.length} peça(s)</span>
             </div>
-            {(() => {
-              const pecas = documentos.filter(d => d.tipo_peca && d.tipo_peca !== "sintese_investigativa" && d.status_processamento === "concluido");
-              if (pecas.length === 0) {
-                return (
-                  <div className="py-10 text-center text-zinc-600 border border-zinc-800 border-dashed rounded-xl bg-zinc-900/40">
-                    <FileText className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                    <p className="font-medium">Nenhuma peça extraída ainda.</p>
-                    <p className="text-sm mt-1 text-zinc-700">Use o Copiloto para extrair peças específicas dos autos.</p>
-                  </div>
-                );
-              }
-              return (
-                <div className="space-y-2">
-                  {pecas.map(doc => (
-                    <div key={doc.id} className="flex items-center justify-between border border-zinc-800 rounded-xl px-4 py-3 bg-zinc-900/40 hover:border-zinc-700 transition-colors">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <FileText size={15} className="text-amber-400 shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-zinc-200 truncate">{doc.nome_arquivo}</p>
-                          <p className="text-xs text-zinc-500">{doc.tipo_peca?.replace(/_/g, " ")}</p>
-                        </div>
+            {pecasLoading ? (
+              <div className="flex items-center gap-2 text-zinc-500 py-6">
+                <Loader2 size={16} className="animate-spin" /> Carregando peças extraídas...
+              </div>
+            ) : pecasExtraidas.length === 0 ? (
+              <div className="py-10 text-center text-zinc-600 border border-zinc-800 border-dashed rounded-xl bg-zinc-900/40">
+                <FileText className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">Nenhuma peça extraída ainda.</p>
+                <p className="text-sm mt-1 text-zinc-700 max-w-sm mx-auto">
+                  As peças são extraídas automaticamente após a ingestão. Para documentos já importados, use o botão "Extrair peças" na aba Autos.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {pecasExtraidas.map((peca: any) => (
+                  <div key={peca.id} className="flex items-center justify-between border border-zinc-800 rounded-xl px-4 py-3 bg-zinc-900/40 hover:border-zinc-700 transition-colors">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="p-1.5 rounded border bg-zinc-950 text-amber-400 border-zinc-800 shrink-0">
+                        <FileText size={14} />
                       </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-zinc-200 truncate">{peca.titulo}</p>
+                        <p className="text-xs text-zinc-500 mt-0.5">
+                          {peca.documento_nome && <span className="mr-2 opacity-60">{peca.documento_nome}</span>}
+                          {peca.pagina_inicial != null && (
+                            <span>fls. {peca.pagina_inicial}{peca.pagina_final && peca.pagina_final !== peca.pagina_inicial ? `–${peca.pagina_final}` : ""}</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${TIPO_PECA_COLOR[peca.tipo] || TIPO_PECA_COLOR["outro"]}`}>
+                        {TIPO_PECA_LABEL[peca.tipo] || peca.tipo}
+                      </span>
                       <button
-                        onClick={() => handleAbrirDoc(doc)}
-                        className="flex items-center gap-1 text-xs text-zinc-400 hover:text-blue-400 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors shrink-0"
+                        onClick={() => handleAbrirPeca(peca)}
+                        className="flex items-center gap-1 text-xs text-zinc-400 hover:text-blue-400 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors"
                       >
                         <Eye size={11} /> Ver
                       </button>
                     </div>
-                  ))}
-                </div>
-              );
-            })()}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -846,6 +926,17 @@ export default function InqueritoDetalhePage() {
                             className="text-xs text-zinc-400 hover:text-blue-400 flex items-center gap-1 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors"
                           >
                             <Quote size={11}/> Citações
+                          </button>
+                        )}
+                        {doc.status_processamento === "concluido" && doc.tipo_peca !== "sintese_investigativa" && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleReextrairPecas(doc.id); }}
+                            disabled={reextrahindo === doc.id}
+                            className="text-xs text-zinc-400 hover:text-amber-400 flex items-center gap-1 px-2 py-1 rounded border border-zinc-700 hover:border-amber-500/40 transition-colors disabled:opacity-50"
+                            title="Extrair peças individuais deste PDF"
+                          >
+                            {reextrahindo === doc.id ? <Loader2 size={11} className="animate-spin"/> : <FileText size={11}/>}
+                            Extrair peças
                           </button>
                         )}
                         {isSintetico ? (
@@ -1093,6 +1184,60 @@ export default function InqueritoDetalhePage() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de visualização de peça extraída */}
+      {pecaViewer.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setPecaViewer(v => ({ ...v, open: false }))}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <FileText size={18} className="text-amber-400 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-zinc-100 truncate">{pecaViewer.peca?.titulo}</p>
+                  <p className="text-xs text-zinc-500">
+                    {TIPO_PECA_LABEL[pecaViewer.peca?.tipo] || pecaViewer.peca?.tipo}
+                    {pecaViewer.peca?.documento_nome && ` · ${pecaViewer.peca.documento_nome}`}
+                    {pecaViewer.peca?.pagina_inicial != null && ` · fls. ${pecaViewer.peca.pagina_inicial}${pecaViewer.peca.pagina_final && pecaViewer.peca.pagina_final !== pecaViewer.peca.pagina_inicial ? `–${pecaViewer.peca.pagina_final}` : ""}`}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setPecaViewer(v => ({ ...v, open: false }))} className="text-zinc-500 hover:text-zinc-300 p-1 transition-colors ml-4 shrink-0">
+                <X size={18} />
+              </button>
+            </div>
+            {pecaViewer.peca?.resumo && (
+              <div className="px-6 pt-4 pb-0">
+                <p className="text-xs text-zinc-500 bg-zinc-800/60 border border-zinc-700/40 rounded-lg px-3 py-2 leading-relaxed italic">{pecaViewer.peca.resumo}</p>
+              </div>
+            )}
+            <div className="overflow-y-auto flex-1 px-6 py-4">
+              {pecaViewer.loading ? (
+                <div className="flex items-center justify-center py-16 text-zinc-500">
+                  <Loader2 size={24} className="animate-spin mr-2" /> Carregando peça...
+                </div>
+              ) : pecaViewer.peca?.conteudo_texto ? (
+                <div className="text-sm text-zinc-300 leading-relaxed font-sans selection:bg-amber-500/20">
+                  {pecaViewer.peca.conteudo_texto.split(/(?:\r?\n\s*){2,}/).map((para: string, i: number) => (
+                    <p key={i} className="mb-4 text-justify">
+                      {para.replace(/\r?\n/g, ' ')}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-16 text-zinc-500">
+                  <FileText size={32} className="mx-auto mb-3 opacity-30" />
+                  <p>Conteúdo não disponível.</p>
+                </div>
+              )}
+            </div>
+            {pecaViewer.peca?.conteudo_texto && (
+              <div className="px-6 py-3 border-t border-zinc-800 text-xs text-zinc-600 shrink-0">
+                {pecaViewer.peca.conteudo_texto.length.toLocaleString()} caracteres
+              </div>
+            )}
           </div>
         </div>
       )}

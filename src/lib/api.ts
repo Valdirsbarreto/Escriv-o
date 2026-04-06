@@ -144,6 +144,16 @@ export const deleteDocGerado = (inqId: string, docId: string) =>
 export const updateDocGerado = (inqId: string, docId: string, data: { titulo: string; tipo: string; conteudo: string }) =>
   api.put(`/inqueritos/${inqId}/docs-gerados/${docId}`, data);
 
+// ── Peças Extraídas ────────────────────────────────────────────────────────
+export const getPecasExtraidas = (inqId: string) =>
+  api.get(`/inqueritos/${inqId}/pecas-extraidas`);
+
+export const getPecaExtraida = (inqId: string, pecaId: string) =>
+  api.get(`/inqueritos/${inqId}/pecas-extraidas/${pecaId}`);
+
+export const reextrairPecas = (inqId: string, docId: string) =>
+  api.post(`/inqueritos/${inqId}/documentos/${docId}/reextrair-pecas`);
+
 export const osintConsultaAvulsa = async (params: {
   cpf?: string;
   cnpj?: string;

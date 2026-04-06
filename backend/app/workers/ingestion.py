@@ -451,6 +451,14 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
             except Exception as e:
                 logger.warning(f"[INGESTÃO] Falha ao agendar resumos: {e}")
 
+            # ── 9b. Disparar extração de peças individuais ────────────────────
+            try:
+                from app.workers.peca_extraction_task import extrair_pecas_task
+                extrair_pecas_task.delay(documento_id, inquerito_id)
+                logger.info(f"[INGESTÃO] Task de extração de peças disparada para doc={documento_id}")
+            except Exception as e:
+                logger.warning(f"[INGESTÃO] Falha ao agendar extração de peças: {e}")
+
             # ── 10. Atualizar status ──────────────────────────
             doc.status_processamento = "concluido"
             db.commit()
