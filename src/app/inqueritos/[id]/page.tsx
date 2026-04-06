@@ -302,6 +302,13 @@ export default function InqueritoDetalhePage() {
     }
   }, [docsGeradosVersion]);
 
+  // Trava scroll do body quando qualquer modal estiver aberto
+  useEffect(() => {
+    const anyOpen = docGeradoViewer.open || docViewer.open || deleteDialogOpen || showIntimacaoModal || citacoes.open;
+    document.body.style.overflow = anyOpen ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [docGeradoViewer.open, docViewer.open, deleteDialogOpen, showIntimacaoModal, citacoes.open]);
+
   const handleDelete = async () => {
     setDeleting(true);
     try {
