@@ -23,6 +23,7 @@ from app.models.resultado_agente import ResultadoAgente
 from app.models.delegacia import Delegacia
 from app.models.consulta_externa import ConsultaExterna
 from app.models.consumo_api import ConsumoApi
+from app.models.documento_gerado import DocumentoGerado
 
 __all__ = [
     "Inquerito",
@@ -45,4 +46,5 @@ __all__ = [
     "Delegacia",
     "ConsultaExterna",
     "ConsumoApi",
+    "DocumentoGerado",
 ]

@@ -128,6 +128,19 @@ export const getConsumoModelos = async () => {
   return response.data;
 };
 
+// ── Documentos Gerados ─────────────────────────────────────────────────────
+export const getDocsGerados = (inqId: string) =>
+  api.get(`/inqueritos/${inqId}/docs-gerados`);
+
+export const createDocGerado = (inqId: string, data: { titulo: string; tipo: string; conteudo: string }) =>
+  api.post(`/inqueritos/${inqId}/docs-gerados`, data);
+
+export const getDocGerado = (inqId: string, docId: string) =>
+  api.get(`/inqueritos/${inqId}/docs-gerados/${docId}`);
+
+export const deleteDocGerado = (inqId: string, docId: string) =>
+  api.delete(`/inqueritos/${inqId}/docs-gerados/${docId}`);
+
 export const osintConsultaAvulsa = async (params: {
   cpf?: string;
   cnpj?: string;

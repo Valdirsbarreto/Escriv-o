@@ -19,6 +19,28 @@ from app.api.ingestao import router as ingestao_router
 from app.api.intimacoes import router as intimacoes_router
 from app.api.telegram import router as telegram_router
 from app.api.consumo import router as consumo_router
+from app.api.documentos_gerados import router as docs_gerados_router
+
+
+async def _diagnostico_embeddings():
+    """Verifica quais modelos de embedding estão disponíveis com a API key configurada."""
+    if not settings.GEMINI_API_KEY:
+        print("   [EMBEDDINGS] GEMINI_API_KEY não configurada — embeddings desativados")
+        return
+    try:
+        from google import genai
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        modelos = client.models.list()
+        embedding_models = [
+            m.name for m in modelos
+            if "embed" in (m.name or "").lower() or "embed" in str(getattr(m, "supported_actions", "")).lower()
+        ]
+        if embedding_models:
+            print(f"   [EMBEDDINGS] Modelos disponíveis: {embedding_models[:5]}")
+        else:
+            print("   [EMBEDDINGS] Nenhum modelo de embedding encontrado com esta API key")
+    except Exception as e:
+        print(f"   [EMBEDDINGS] Erro ao listar modelos: {e}")
 
 
 @asynccontextmanager
@@ -32,6 +54,7 @@ async def lifespan(app: FastAPI):
     print(f"   Redis:    {settings.REDIS_URL}")
     print(f"   Storage:  {settings.S3_ENDPOINT_URL}")
     print("   ──────────────────────────────────────────────")
+    await _diagnostico_embeddings()
     yield
     # Shutdown
     print("🛑 Escrivão AI — Encerrando...")
@@ -71,6 +94,7 @@ app.include_router(ingestao_router, prefix="/api/v1")
 app.include_router(intimacoes_router, prefix="/api/v1")
 app.include_router(telegram_router, prefix="/api/v1")
 app.include_router(consumo_router, prefix="/api/v1")
+app.include_router(docs_gerados_router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["Sistema"])

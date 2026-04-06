@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAppStore } from "@/store/app";
-import { api } from "@/lib/api";
+import { api, getDocsGerados, getDocGerado, deleteDocGerado } from "@/lib/api";
 import { deleteInquerito } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,8 +18,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check, CalendarPlus, Clock, MapPin, ExternalLink, BookOpen, Quote, ChevronDown, ChevronRight } from "lucide-react";
+import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check, CalendarPlus, Clock, MapPin, ExternalLink, BookOpen, Quote, ChevronDown, ChevronRight, Bot, Eye } from "lucide-react";
 import { IntimacaoUploadModal } from "@/components/IntimacaoUploadModal";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 // ── Etapas do pipeline ────────────────────────────────────────────────────────
 
@@ -228,9 +230,25 @@ export default function InqueritoDetalhePage() {
   const [citacoes, setCitacoes] = useState<{ open: boolean; doc: any | null; fragmentos: any[]; loading: boolean }>({ open: false, doc: null, fragmentos: [], loading: false });
   const [gruposAbertos, setGruposAbertos] = useState<Record<string, boolean>>({});
   const [reclassificando, setReclassificando] = useState(false);
+  const [docsGerados, setDocsGerados] = useState<any[]>([]);
+  const [docsGeradosLoading, setDocsGeradosLoading] = useState(false);
+  const [docGeradoViewer, setDocGeradoViewer] = useState<{ open: boolean; doc: any | null; conteudo: string | null; loading: boolean }>({ open: false, doc: null, conteudo: null, loading: false });
+  const [deletingDocGerado, setDeletingDocGerado] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sintesePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const searchParams = useSearchParams();
+
+  const fetchDocsGerados = async () => {
+    setDocsGeradosLoading(true);
+    try {
+      const res = await getDocsGerados(inqId);
+      setDocsGerados(res.data);
+    } catch {
+      // silencioso
+    } finally {
+      setDocsGeradosLoading(false);
+    }
+  };
 
   const fetchDados = async () => {
     try {
@@ -243,6 +261,7 @@ export default function InqueritoDetalhePage() {
       setDocumentos(docsRes.data);
       setIntimacoes(intRes.data);
       setInqueritoAtivoId(inqId);
+      fetchDocsGerados();
 
       // Se veio de intimação (?sintese=1), abre a síntese automaticamente
       if (searchParams.get("sintese") === "1") {
@@ -406,6 +425,45 @@ export default function InqueritoDetalhePage() {
       setGerandoSintese(false);
       alert("Erro ao acionar geração da Síntese Investigativa.");
     }
+  };
+
+  const handleAbrirDocGerado = async (doc: any) => {
+    setDocGeradoViewer({ open: true, doc, conteudo: null, loading: true });
+    try {
+      const res = await getDocGerado(inqId, doc.id);
+      setDocGeradoViewer(prev => ({ ...prev, conteudo: res.data.conteudo, loading: false }));
+    } catch {
+      setDocGeradoViewer(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  const handleDeletarDocGerado = async (docId: string) => {
+    if (!confirm("Excluir este documento gerado? Esta ação não pode ser desfeita.")) return;
+    setDeletingDocGerado(docId);
+    try {
+      await deleteDocGerado(inqId, docId);
+      setDocsGerados(prev => prev.filter(d => d.id !== docId));
+    } catch {
+      alert("Erro ao excluir documento.");
+    } finally {
+      setDeletingDocGerado(null);
+    }
+  };
+
+  const TIPO_GERADO_LABEL: Record<string, string> = {
+    roteiro_oitiva: "Roteiro de Oitiva",
+    oficio: "Ofício",
+    minuta_cautelar: "Minuta Cautelar",
+    relatorio: "Relatório",
+    outro: "Outro",
+  };
+
+  const TIPO_GERADO_COLOR: Record<string, string> = {
+    roteiro_oitiva: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    oficio: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+    minuta_cautelar: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+    relatorio: "bg-green-500/10 text-green-400 border-green-500/20",
+    outro: "bg-zinc-800 text-zinc-400 border-zinc-700",
   };
 
   if (loading) return <div className="p-8 text-zinc-500 animate-pulse">Carregando autos...</div>;
@@ -795,6 +853,67 @@ export default function InqueritoDetalhePage() {
         </div>
       )}
 
+      {/* Documentos Gerados pela IA */}
+      <div className="mt-8">
+        <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-4">
+          <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
+            <Bot size={18} className="text-blue-400" /> Documentos Gerados pela IA
+          </h2>
+          <span className="text-sm text-zinc-500">{docsGerados.length} documento(s)</span>
+        </div>
+        {docsGeradosLoading ? (
+          <div className="flex items-center gap-2 text-zinc-500 py-6">
+            <Loader2 size={16} className="animate-spin" /> Carregando documentos gerados...
+          </div>
+        ) : docsGerados.length === 0 ? (
+          <div className="py-10 text-center text-zinc-600 border border-zinc-800 border-dashed rounded-lg bg-zinc-900/40">
+            <Bot className="w-10 h-10 mx-auto mb-3 opacity-20" />
+            <p>Nenhum documento gerado ainda.</p>
+            <p className="text-sm mt-1">Use o Copiloto Investigativo e salve os documentos aqui.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {docsGerados.map((doc: any) => (
+              <div key={doc.id} className="flex items-center justify-between border border-zinc-800 rounded-xl px-4 py-3 bg-zinc-900/40 hover:border-zinc-700 transition-colors">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="p-1.5 rounded border bg-zinc-950 text-blue-400 border-zinc-800 shrink-0">
+                    <Bot size={15} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-zinc-200 truncate">{doc.titulo}</p>
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      {new Date(doc.created_at).toLocaleDateString("pt-BR", {
+                        day: "2-digit", month: "2-digit", year: "numeric",
+                        hour: "2-digit", minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 ml-3">
+                  <span className={`text-xs px-2 py-0.5 rounded-full border ${TIPO_GERADO_COLOR[doc.tipo] || TIPO_GERADO_COLOR["outro"]}`}>
+                    {TIPO_GERADO_LABEL[doc.tipo] || doc.tipo}
+                  </span>
+                  <button
+                    onClick={() => handleAbrirDocGerado(doc)}
+                    className="flex items-center gap-1 text-xs text-zinc-400 hover:text-blue-400 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors"
+                  >
+                    <Eye size={11} /> Ver
+                  </button>
+                  <button
+                    onClick={() => handleDeletarDocGerado(doc.id)}
+                    disabled={deletingDocGerado === doc.id}
+                    className="p-1.5 rounded text-zinc-600 hover:text-red-400 transition-colors disabled:opacity-40"
+                    title="Excluir documento"
+                  >
+                    {deletingDocGerado === doc.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {showIntimacaoModal && (
         <IntimacaoUploadModal
           inquerito_id={inqId}
@@ -866,6 +985,44 @@ export default function InqueritoDetalhePage() {
                 {citacoes.fragmentos.length} fragmento(s)
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de visualização de documento gerado */}
+      {docGeradoViewer.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setDocGeradoViewer(v => ({ ...v, open: false }))}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <Bot size={18} className="text-blue-400 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-zinc-100 truncate">{docGeradoViewer.doc?.titulo}</p>
+                  <p className="text-xs text-zinc-500">{TIPO_GERADO_LABEL[docGeradoViewer.doc?.tipo] || docGeradoViewer.doc?.tipo}</p>
+                </div>
+              </div>
+              <button onClick={() => setDocGeradoViewer(v => ({ ...v, open: false }))} className="text-zinc-500 hover:text-zinc-300 p-1 transition-colors ml-4 shrink-0">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-6 py-4">
+              {docGeradoViewer.loading ? (
+                <div className="flex items-center justify-center py-16 text-zinc-500">
+                  <Loader2 size={24} className="animate-spin mr-2" /> Carregando...
+                </div>
+              ) : docGeradoViewer.conteudo ? (
+                <div className="prose prose-invert prose-sm max-w-none text-zinc-300">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {docGeradoViewer.conteudo}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                <div className="text-center py-16 text-zinc-500">
+                  <Bot size={32} className="mx-auto mb-3 opacity-30" />
+                  <p>Conteúdo não disponível.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
