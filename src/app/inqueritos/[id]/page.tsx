@@ -18,14 +18,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, 
-  FileType2, Trash2, RefreshCw, Sparkles, Loader2, 
-  AlertCircle, Pencil, X, Check, CalendarPlus, Clock, 
-  MapPin, ExternalLink, BookOpen, Quote, ChevronDown, 
-  ChevronRight, Bot, Eye 
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check, CalendarPlus, Clock, MapPin, ExternalLink, BookOpen, Quote, ChevronDown, ChevronRight, Bot, Eye } from "lucide-react";
 import { IntimacaoUploadModal } from "@/components/IntimacaoUploadModal";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -392,17 +385,10 @@ export default function InqueritoDetalhePage() {
     if (!novoNumero.trim()) return;
     setSalvandoNumero(true);
     try {
-      const res = await api.patch(`/inqueritos/${inqId}/numero`, { numero: novoNumero.trim() });
-      const data = res.data;
-      
-      if (data.status === "merged") {
-        // Se houve fusão, redireciona para o inquérito de destino
-        router.push(`/inqueritos/${data.id}`);
-      } else {
-        await fetchDados();
-        setEditandoNumero(false);
-        setNovoNumero("");
-      }
+      await api.patch(`/inqueritos/${inqId}/numero`, { numero: novoNumero.trim() });
+      await fetchDados();
+      setEditandoNumero(false);
+      setNovoNumero("");
     } catch (e) {
       console.error(e);
       alert("Erro ao atualizar número do inquérito.");
@@ -516,64 +502,42 @@ export default function InqueritoDetalhePage() {
 
   const handleReextrairPecas = async (docId: string) => {
     setReextrahindo(docId);
-    setExtractProgress(5); // Início imediato visual
+    setExtractProgress(0);
     try {
-      await api.post(`/inqueritos/${inqId}/documentos/${docId}/reextrair-pecas`);
+      await reextrairPecas(inqId, docId);
       
-      // Barra de progresso visual simulada até 90%
+      // Barra de progresso visual simulada até 95%
       const progInterval = setInterval(() => {
         setExtractProgress(prev => {
-          if (prev >= 90) return 90;
-          return prev + Math.floor(Math.random() * 3) + 1;
+          if (prev >= 95) return 95;
+          return prev + Math.floor(Math.random() * 5) + 2;
         });
-      }, 2500);
+      }, 3000);
 
-      // Polling robusto: verifica se surgiram novas peças OU se o status no doc mudou para concluido
+      // A extração roda longo em background (celery: Gemini ~30s). 
+      // Faremos polling até as novas peças surgirem no banco.
       let chamadas = 0;
       const poll = setInterval(async () => {
         chamadas++;
         try {
-          const [pecasRes, docRes] = await Promise.all([
-            api.get(`/inqueritos/${inqId}/pecas-extraidas`),
-            api.get(`/inqueritos/${inqId}/documentos`)
-          ]);
-          
-          const pecas = pecasRes.data;
-          const documentosLocal = docRes.data;
-          const docAtual = documentosLocal.find((d: any) => d.id === docId);
-
-          // Se surgiram peças ou o status mudou para concluído
-          if (pecas.some((p: any) => p.documento_id === docId) || (docAtual && docAtual.status_extracao_pecas === "concluido")) {
+          const res = await api.get(`/inqueritos/${inqId}/pecas-extraidas`);
+          const pecas = res.data;
+          // Se a API retornar peças com este docId, a task concluiu
+          if (pecas.some((p: any) => p.documento_id === docId)) {
             setPecasExtraidas(pecas);
-            setDocumentos(documentosLocal); // Atualiza status global
             clearInterval(poll);
             clearInterval(progInterval);
             setExtractProgress(100);
             setTimeout(() => setReextrahindo(null), 1000);
-            return;
           }
-
-          // Se deu erro no backend
-          if (docAtual && docAtual.status_extracao_pecas === "erro") {
-            clearInterval(poll);
-            clearInterval(progInterval);
-            setReextrahindo(null);
-            alert("A IA encontrou um erro ao processar as peças deste documento.");
-            return;
-          }
-
         } catch { /* erro na chamada silencioso */ }
         
-        // Timeout longo (~3 min)
-        if (chamadas >= 40) { 
+        // Timeout de ~90s (18 * 5s)
+        if (chamadas >= 18) {
           clearInterval(poll);
           clearInterval(progInterval);
-          // NÃO limpamos reextrahindo(null) imediatamente para não causar "sumiço"
-          // Apenas avisamos que continuará em background
-          alert("A extração está demorando devido ao tamanho do arquivo (limite de 120s da conexão excedido). \n\nO Escrivão AI continuará processando em segundo plano. As peças aparecerão automaticamente nesta lista em alguns minutos.");
-          // Fazemos um poll final mais lento ou deixamos o usuário navegar
           setReextrahindo(null);
-          fetchDados(); // Atualiza para pegar o status 'processando' do backend
+          alert("A extração está demorando devido ao tamanho do arquivo. As peças aparecerão no painel assim que concluírem o processamento em nuvem.");
         }
       }, 5000);
       
@@ -641,41 +605,40 @@ export default function InqueritoDetalhePage() {
           </button>
           <div className="flex items-center gap-3 flex-wrap">
             {editandoNumero ? (
-              <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-2 transition-all">
+              <div className="flex items-center gap-2">
                 <input
                   autoFocus
                   value={novoNumero}
                   onChange={e => setNovoNumero(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") handleSalvarNumero(); if (e.key === "Escape") setEditandoNumero(false); }}
-                  placeholder="Ex: 911-00019/2024"
-                  className="text-2xl font-black bg-zinc-900 border border-blue-500/50 rounded-xl px-4 py-2 text-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-72 shadow-2xl shadow-blue-500/10"
+                  placeholder="Ex: 033-07699-2024"
+                  className="text-xl font-bold bg-zinc-800 border border-zinc-600 rounded px-3 py-1 text-zinc-100 focus:outline-none focus:border-blue-500 w-56"
                 />
-                <button onClick={handleSalvarNumero} disabled={salvandoNumero} className="p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-all disabled:opacity-50">
-                  {salvandoNumero ? <Loader2 size={20} className="animate-spin" /> : <Check size={20} />}
+                <button onClick={handleSalvarNumero} disabled={salvandoNumero} className="text-green-400 hover:text-green-300 disabled:opacity-50">
+                  {salvandoNumero ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
                 </button>
-                <button onClick={() => setEditandoNumero(false)} className="p-3 bg-zinc-800 text-zinc-400 rounded-xl hover:bg-zinc-700 transition-all">
-                  <X size={20} />
+                <button onClick={() => setEditandoNumero(false)} className="text-zinc-500 hover:text-zinc-300">
+                  <X size={18} />
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-4 flex-wrap">
-                <h1 className="text-4xl font-black tracking-tight text-white drop-shadow-sm">
+              <div className="flex items-center gap-2">
+                <h1 className="text-3xl font-bold tracking-tight text-zinc-100">
                   {inquerito.numero}
                 </h1>
                 {inquerito.numero.startsWith("TEMP-") && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-full animate-pulse">
-                    <AlertCircle size={14} className="text-amber-500" />
-                    <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Aguardando Identificação</span>
-                  </div>
+                  <Badge variant="outline" className="text-yellow-400 border-yellow-400/30 bg-yellow-400/10 text-xs">
+                    Nº provisório
+                  </Badge>
                 )}
                 {inquerito.numero.startsWith("TEMP-") && (
-                  <Button
+                  <button
                     onClick={() => { setNovoNumero(""); setEditandoNumero(true); }}
-                    variant="outline"
-                    className="h-10 border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white hover:border-blue-500/40 rounded-xl"
+                    className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                    title="Corrigir número"
                   >
-                    <Pencil size={14} className="mr-2" /> Identificar IP
-                  </Button>
+                    <Pencil size={14} />
+                  </button>
                 )}
               </div>
             )}
@@ -1004,31 +967,22 @@ export default function InqueritoDetalhePage() {
                             </button>
                           )}
                           {doc.status_processamento === "concluido" && doc.tipo_peca !== "sintese_investigativa" && (
-                             <button
-                               onClick={(e) => { e.stopPropagation(); handleReextrairPecas(doc.id); }}
-                               disabled={reextrahindo === doc.id || doc.status_extracao_pecas === "processando"}
-                               className={cn(
-                                "text-xs flex items-center gap-1 px-2 py-1 rounded border transition-colors disabled:opacity-80",
-                                (reextrahindo === doc.id || doc.status_extracao_pecas === "processando")
-                                 ? "text-amber-500 border-amber-500/40 bg-amber-500/5 cursor-wait"
-                                 : "text-zinc-400 hover:text-amber-400 border-zinc-700 hover:border-amber-500/40"
-                               )}
-                               title="Extrair peças individuais deste PDF"
-                             >
-                               {(reextrahindo === doc.id || doc.status_extracao_pecas === "processando") 
-                                 ? <Loader2 size={11} className="animate-spin"/> 
-                                 : <FileText size={11}/>}
-                               {(reextrahindo === doc.id || doc.status_extracao_pecas === "processando") 
-                                 ? "Extraindo peças..." 
-                                 : "Extrair peças"}
-                             </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleReextrairPecas(doc.id); }}
+                              disabled={reextrahindo === doc.id}
+                              className="text-xs text-zinc-400 hover:text-amber-400 flex items-center gap-1 px-2 py-1 rounded border border-zinc-700 hover:border-amber-500/40 transition-colors disabled:opacity-50"
+                              title="Extrair peças individuais deste PDF"
+                            >
+                              {reextrahindo === doc.id ? <Loader2 size={11} className="animate-spin"/> : <FileText size={11}/>}
+                              Extrair peças
+                            </button>
                           )}
                           {isSintetico ? (
                             <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-xs">
                               <Sparkles size={10} className="mr-1 inline"/> IA
                             </Badge>
                           ) : doc.status_processamento === "concluido" ? (
-                            <Badge variant="outline" className={`bg-green-500/10 text-green-400 border-green-500/20 text-xs`}>
+                            <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/20 text-xs">
                               <CheckCircle2 size={10} className="mr-1 inline"/> Indexado
                             </Badge>
                           ) : doc.status_processamento === "processando" ? (
@@ -1043,21 +997,19 @@ export default function InqueritoDetalhePage() {
                         </div>
                       </div>
                       
-                      {(reextrahindo === doc.id || doc.status_extracao_pecas === "processando") && (
+                      {reextrahindo === doc.id && (
                         <div className="mt-3 w-full animate-in fade-in slide-in-from-top-1">
                           <div className="flex justify-between items-center mb-1 w-full">
                             <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-semibold flex items-center gap-1">
                               <Loader2 size={10} className="animate-spin text-amber-500"/>
-                              Acelerador Neuronal em uso {doc.status_extracao_pecas === "processando" && !reextrahindo && "(em 2º plano)"}
+                              Acelerador Neuronal em uso
                             </span>
-                            <span className="text-[10px] text-zinc-500 font-mono">
-                              {reextrahindo === doc.id ? `${extractProgress}%` : "Analisando..."}
-                            </span>
+                            <span className="text-[10px] text-zinc-500 font-mono">{extractProgress}%</span>
                           </div>
                           <div className="h-1 bg-zinc-950/80 rounded-full overflow-hidden w-full border border-black/50">
                             <div 
                               className="h-full bg-gradient-to-r from-amber-500 to-amber-300 rounded-full transition-all duration-500 ease-out" 
-                              style={{ width: reextrahindo === doc.id ? `${extractProgress}%` : `85%` }} 
+                              style={{ width: `${extractProgress}%` }} 
                             />
                           </div>
                         </div>

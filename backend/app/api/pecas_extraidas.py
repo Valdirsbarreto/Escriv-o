@@ -125,9 +125,8 @@ async def reextrair_pecas(
     if not doc:
         raise HTTPException(status_code=404, detail="Documento não encontrado.")
 
-    # Marca documento como em processamento e apaga as antigas
+    # Apaga peças existentes para permitir re-extração
     from sqlalchemy import delete
-    doc.status_extracao_pecas = "processando"
     await db.execute(
         delete(PecaExtraida).where(
             PecaExtraida.documento_id == uuid.UUID(documento_id)

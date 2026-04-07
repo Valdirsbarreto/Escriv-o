@@ -2,14 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
-import { useRouter } from "next/navigation";
 import {
   CloudUpload, FileText, FileImage, Loader2,
   CheckCircle2, AlertTriangle, X, WifiOff, Brain, ArrowRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { api, apiMultipart } from "@/lib/api";
-import { Progress } from "@/components/ui/progress";
 
 type Stage = "idle" | "uploading" | "analisando_ia" | "extraindo_dados" | "criando_inquerito" | "orquestrando" | "concluido" | "erro";
 
@@ -68,7 +66,6 @@ function diagnosarErro(err: any): string {
 }
 
 export function DropZoneIngestao() {
-  const router = useRouter();
   const [stage, setStage] = useState<Stage>("idle");
   const [arquivos, setArquivos] = useState<ArquivoItem[]>([]);
   const [lotes, setLotes] = useState<LoteStatus[]>([]);
@@ -167,19 +164,19 @@ export function DropZoneIngestao() {
       setStage("orquestrando");
       setStepAtivo(0);
 
-      // Animar steps a cada 4s
+      // Animar steps a cada 6s
       let stepIdx = 0;
       stepIntervalRef.current = setInterval(() => {
         stepIdx = Math.min(stepIdx + 1, ORQUESTRANDO_STEPS.length - 1);
         setStepAtivo(stepIdx);
-      }, 4000);
+      }, 6000);
 
       // Polling: detectar quando o inquérito aparecer
       const uploadTs = uploadTimestampRef.current;
       let pollCount = 0;
       pollIntervalRef.current = setInterval(async () => {
         pollCount++;
-        if (pollCount > 60) { // espera até 3 min
+        if (pollCount > 40) {
           clearInterval(pollIntervalRef.current!);
           clearInterval(stepIntervalRef.current!);
           setStage("concluido");
@@ -196,11 +193,6 @@ export function DropZoneIngestao() {
             clearInterval(stepIntervalRef.current!);
             setInqueritoCriado({ id: novo.id, numero: novo.numero });
             setStage("concluido");
-            
-            // REDIRECIONAMENTO AUTOMÁTICO
-            setTimeout(() => {
-              router.push(`/inqueritos/${novo.id}`);
-            }, 1000);
           }
         } catch { /* ignora erro de rede no poll */ }
       }, 3000);
@@ -209,7 +201,7 @@ export function DropZoneIngestao() {
       const errosMsg = statusLotes.filter((l) => l.erro).map((l) => `Lote ${l.lote}: ${l.erro}`).join("\n");
       setErro(errosMsg || "Alguns lotes falharam.");
     }
-  }, [router]);
+  }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -301,33 +293,21 @@ export function DropZoneIngestao() {
           )}
 
           {isOrquestrando && (
-            <div className="text-center w-full max-w-[400px] animate-in fade-in zoom-in duration-500">
-              <p className="text-lg font-bold text-white mb-1">IA Orquestradora Trabalhando</p>
-              <p className="text-zinc-500 text-xs mb-6">Analisando documentos, extraindo capas e identificando partes.</p>
-              
-              <div className="mb-8 px-4">
-                <Progress 
-                  value={((stepAtivo + 1) / ORQUESTRANDO_STEPS.length) * 100} 
-                  className="h-2 bg-zinc-900" 
-                />
-                <div className="flex justify-between mt-2 text-[10px] font-black uppercase tracking-widest text-zinc-600">
-                  <span>Análise Inicial</span>
-                  <span>{Math.round(((stepAtivo + 1) / ORQUESTRANDO_STEPS.length) * 100)}%</span>
-                </div>
-              </div>
-
-              <div className="space-y-3 text-left bg-zinc-950/50 p-6 rounded-2xl border border-zinc-800/50">
+            <div className="text-center w-full max-w-sm">
+              <p className="text-lg font-semibold text-blue-300 animate-pulse">IA Orquestradora trabalhando...</p>
+              <p className="text-zinc-500 text-xs mt-1 mb-4">Analisando documentos em segundo plano</p>
+              <div className="space-y-2 text-left">
                 {ORQUESTRANDO_STEPS.map((step, i) => (
                   <div key={i} className={cn(
-                    "flex items-center gap-3 text-xs transition-all duration-700",
-                    i < stepAtivo ? "text-green-400 opacity-60" : i === stepAtivo ? "text-blue-400 font-bold translate-x-1" : "text-zinc-600"
+                    "flex items-center gap-2 text-xs transition-all duration-500",
+                    i < stepAtivo ? "text-green-400" : i === stepAtivo ? "text-blue-300" : "text-zinc-600"
                   )}>
                     {i < stepAtivo ? (
-                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                     ) : i === stepAtivo ? (
-                      <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                      <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
                     ) : (
-                      <div className="w-4 h-4 rounded-full border border-zinc-800 shrink-0" />
+                      <div className="w-3.5 h-3.5 rounded-full border border-zinc-700 shrink-0" />
                     )}
                     {step.label}
                   </div>

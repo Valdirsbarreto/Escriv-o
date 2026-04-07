@@ -593,70 +593,26 @@ async def corrigir_numero(
     dados: dict,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Substitui o número do inquérito. Se o novo número já existir em outro inquérito,
-    realiza o MERGE (fusão) dos dados e remove o inquérito temporário.
-    """
+    """Substitui manualmente o número do inquérito (útil para números TEMP-)."""
     novo_numero = (dados.get("numero") or "").strip()
     if not novo_numero:
         raise HTTPException(status_code=422, detail="Campo 'numero' é obrigatório")
 
-    # 1. Buscar o inquérito atual (o que será corrigido/removido)
-    inq_atual = await db.get(Inquerito, inquerito_id)
-    if not inq_atual:
-        raise HTTPException(status_code=404, detail="Inquérito de origem não encontrado")
+    inq = await db.get(Inquerito, inquerito_id)
+    if not inq:
+        raise HTTPException(status_code=404, detail="Inquérito não encontrado")
 
-    # 2. Verificar se o novo número já existe em OUTRO inquérito
-    result_existente = await db.execute(
-        select(Inquerito).where(Inquerito.numero == novo_numero).where(Inquerito.id != inquerito_id)
-    )
-    inq_destino = result_existente.scalar_one_or_none()
+    numero_anterior = inq.numero
+    inq.numero = novo_numero
 
-    if inq_destino:
-        logger.info(f"[MERGE] Iniciando fusão: {inq_atual.numero} ({inq_atual.id}) -> {inq_destino.numero} ({inq_destino.id})")
-        
-        # Mover Documentos
-        await db.execute(
-            text("UPDATE documentos SET inquerito_id = :destino WHERE inquerito_id = :origem"),
-            {"destino": str(inq_destino.id), "origem": str(inq_atual.id)}
-        )
-        # Mover Dados Extraídos (Pessoas, Empresas, etc.)
-        await db.execute(text("UPDATE pessoas SET inquerito_id = :destino WHERE inquerito_id = :origem"), {"destino": str(inq_destino.id), "origem": str(inq_atual.id)})
-        await db.execute(text("UPDATE empresas SET inquerito_id = :destino WHERE inquerito_id = :origem"), {"destino": str(inq_destino.id), "origem": str(inq_atual.id)})
-        await db.execute(text("UPDATE eventos_cronologicos SET inquerito_id = :destino WHERE inquerito_id = :origem"), {"destino": str(inq_destino.id), "origem": str(inq_atual.id)})
-        await db.execute(text("UPDATE resultados_agentes SET inquerito_id = :destino WHERE inquerito_id = :origem"), {"destino": str(inq_destino.id), "origem": str(inq_atual.id)})
-        
-        # Atualizar contadores do destino
-        inq_destino.total_documentos += inq_atual.total_documentos
-        inq_destino.total_paginas += inq_atual.total_paginas
-        
-        # Remover o inquérito de origem (provisório)
-        # Primeiro remove logs e chunks que podem ter restrições
-        await db.execute(text("DELETE FROM logs_ingestao WHERE inquerito_id = :id"), {"id": str(inq_atual.id)})
-        await db.execute(text("DELETE FROM chunks WHERE inquerito_id = :id"), {"id": str(inq_atual.id)})
-        await db.execute(text("DELETE FROM sessoes_chat WHERE inquerito_id = :id"), {"id": str(inq_atual.id)})
-        await db.execute(text("DELETE FROM inqueritos WHERE id = :id"), {"id": str(inq_atual.id)})
-        
-        await db.commit()
-        return {
-            "status": "merged", 
-            "id": str(inq_destino.id), 
-            "numero": inq_destino.numero,
-            "mensagem": "Inquéritos fundidos com sucesso."
-        }
-    
-    # 3. Caso normal: apenas renomear
-    numero_anterior = inq_atual.numero
-    inq_atual.numero = novo_numero
-
-    # Tentar extrair ano do número (formato RJ: XXX-YYYYY-AAAA ou YYYYY-AAAA)
+    # Tentar extrair ano do número (formato XXX-YYYYY-AAAA ou YYYYY-AAAA)
     m = re.search(r'[/\-](\d{4})$', novo_numero)
-    if m and not inq_atual.ano:
-        inq_atual.ano = int(m.group(1))
+    if m and not inq.ano:
+        inq.ano = int(m.group(1))
 
     await db.commit()
     logger.info(f"[INQUERITO] Número atualizado {numero_anterior} → {novo_numero} (id={inquerito_id})")
-    return {"status": "updated", "id": str(inq_atual.id), "numero": novo_numero}
+    return {"numero": novo_numero, "numero_anterior": numero_anterior}
 
 
 @router.post("/{inquerito_id}/gerar-sintese")

@@ -88,24 +88,20 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
             from app.models.documento import Documento
             from app.models.peca_extraida import PecaExtraida
 
-            # 1. Busca documento
+            # Busca o documento e seu texto extraído
             doc = db.execute(
                 select(Documento).where(Documento.id == uuid.UUID(documento_id))
             ).scalar_one_or_none()
+
             if not doc:
                 logger.warning(f"[PEÇAS] Documento {documento_id} não encontrado")
                 return
 
-            # 2. Marca como processando e verifica se já existe
-            doc.status_extracao_pecas = "processando"
-            db.commit()
-
             if not doc.texto_extraido or len(doc.texto_extraido.strip()) < 100:
                 logger.warning(f"[PEÇAS] Documento {documento_id} sem texto extraído suficiente")
-                doc.status_extracao_pecas = "concluido"
-                db.commit()
                 return
 
+            # Verifica se já existem peças extraídas para este documento
             existing = db.execute(
                 select(PecaExtraida).where(
                     PecaExtraida.documento_id == uuid.UUID(documento_id)
@@ -114,20 +110,17 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
 
             if existing:
                 logger.info(f"[PEÇAS] Documento {documento_id} já tem peças extraídas — pulando")
-                doc.status_extracao_pecas = "concluido"
-                db.commit()
                 return
 
-            # 3. Extração via Gemini
+            # Chama Gemini via httpx (padrão do projeto)
             import httpx
-            texto_limite = doc.texto_extraido[:80000]
+
+            texto_limite = doc.texto_extraido[:80000]  # até 80k chars
             prompt = PROMPT_EXTRAIR_PECAS.format(texto=texto_limite)
 
             api_key = settings.GEMINI_API_KEY
             if not api_key:
                 logger.warning("[PEÇAS] GEMINI_API_KEY não configurada — extração cancelada")
-                doc.status_extracao_pecas = "erro"
-                db.commit()
                 return
 
             response = httpx.post(
@@ -140,7 +133,7 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
                         "maxOutputTokens": 8192,
                     },
                 },
-                timeout=180.0, # Aumentado para 3 min por ser Gemini
+                timeout=120.0,
             )
             response.raise_for_status()
 
@@ -151,17 +144,18 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
                 .get("parts", [{}])[0]
                 .get("text", "")
             )
+
+            # Remove blocos de código markdown se presentes
             text_content = re.sub(r"```(?:json)?\n?", "", text_content).strip()
+
             parsed = json.loads(text_content)
             pecas_data = parsed.get("pecas", [])
 
             if not pecas_data:
                 logger.warning(f"[PEÇAS] IA não identificou peças no documento {documento_id}")
-                doc.status_extracao_pecas = "concluido"
-                db.commit()
                 return
 
-            # 4. Salvar peças
+            # Persiste peças no banco
             doc_uuid = uuid.UUID(documento_id)
             inq_uuid = uuid.UUID(inquerito_id)
             criadas = 0
@@ -170,30 +164,25 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
                 titulo = (p.get("titulo") or "Peça sem título")[:500]
                 tipo = (p.get("tipo") or "outro")[:80]
                 conteudo = p.get("conteudo_texto") or ""
-                if not conteudo.strip(): continue
+                if not conteudo.strip():
+                    continue
 
                 peca = PecaExtraida(
-                    id=uuid.uuid4(), inquerito_id=inq_uuid, documento_id=doc_uuid,
-                    titulo=titulo, tipo=tipo, conteudo_texto=conteudo,
-                    pagina_inicial=p.get("pagina_inicial"), pagina_final=p.get("pagina_final"),
+                    id=uuid.uuid4(),
+                    inquerito_id=inq_uuid,
+                    documento_id=doc_uuid,
+                    titulo=titulo,
+                    tipo=tipo,
+                    conteudo_texto=conteudo,
+                    pagina_inicial=p.get("pagina_inicial"),
+                    pagina_final=p.get("pagina_final"),
                     resumo=(p.get("resumo") or "")[:2000] or None,
                 )
                 db.add(peca)
                 criadas += 1
 
-            doc.status_extracao_pecas = "concluido"
             db.commit()
             logger.info(f"[PEÇAS] {criadas} peças extraídas e salvas para doc={documento_id}")
-
-        except Exception as e:
-            logger.error(f"[PEÇAS] Erro na extração de peças: {e}", exc_info=True)
-            # Tenta marcar como erro no banco se possível
-            try:
-                doc = db.execute(select(Documento).where(Documento.id == uuid.UUID(documento_id))).scalar_one_or_none()
-                if doc: doc.status_extracao_pecas = "erro"
-                db.commit()
-            except: pass
-            raise self.retry(exc=e)
 
         except json.JSONDecodeError as e:
             logger.error(f"[PEÇAS] Falha ao parsear JSON da IA: {e}")

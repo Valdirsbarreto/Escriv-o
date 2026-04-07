@@ -21,7 +21,6 @@ class DocumentoResponse(BaseModel):
     total_paginas: int
     status_ocr: str
     status_processamento: str
-    status_extracao_pecas: Optional[str] = None
     storage_path: Optional[str]
     created_at: datetime
 
