@@ -68,6 +68,9 @@ Sua tarefa é analisar o inquérito policial e gerar uma visão panorâmica cont
 - CITE SEMPRE as páginas de origem [Doc: nome, p. X]
 - NÃO INVENTE fatos não presentes nos autos
 - Use linguagem técnico-jurídica
+- Para cada "Ponto Crítico": explicite [observação] → [risco investigativo] → [ação sugerida para mitigar]
+- Para "Tipo Penal em Tese": justifique com o fato nos autos que preenche cada elemento do tipo
+- Para "Classificação Estratégica": inclua 1-2 linhas de raciocínio que levou à classificação escolhida
 - Para cada "Ponto Crítico" identificado, explicite: [observação] → [risco investigativo] → [ação sugerida]
 - Para "Tipo Penal em Tese": sempre justifique com o fato descrito nos autos que preenche o tipo
 - Para "Classificação Estratégica": descreva em 1-2 linhas o raciocínio que levou à classificação
@@ -342,6 +345,29 @@ Se qualquer item do filtro não for satisfeito, NÃO sugira a medida — informe
 
 ---
 
+## INSTRUÇÕES DE RACIOCÍNIO (Chain of Thought — siga rigorosamente)
+
+Antes de redigir cada seção, execute mentalmente estes passos:
+1. Quais documentos/trechos dos autos sustentam esta seção? (cite internamente antes de escrever)
+2. Há conexão causa ↔ efeito entre os fatos? (explicite na redação — não apenas liste eventos)
+3. O que os fatos PROVAM vs. o que apenas SUGEREM? (seja explícito sobre o grau de certeza)
+4. Existe contradição entre documentos ou versões? (destaque obrigatoriamente quando houver)
+
+**Nas seções 6 (Diligências) e 7 (Oitivas):** para cada item recomendado, use o formato:
+→ Indício nos autos: [fato e página]
+→ Hipótese que sustenta: [o que este indício sugere]
+→ Diligência/oitiva proposta: [ação concreta]
+→ Resultado esperado: [o que se pretende confirmar ou afastar]
+
+**Na seção 9 (Medidas Cautelares):** antes de cada medida, aplique o FILTRO DE COMPLIANCE:
+□ Há indícios concretos (não mera suspeita) nos autos? → citar página
+□ A medida é proporcional à gravidade do crime e à pena em abstrato?
+□ Há base legal expressa? → citar artigo do CPP ou lei específica
+□ Outras medidas menos invasivas foram consideradas e descartadas?
+Se qualquer item falhar, NÃO sugira a medida — informe a lacuna probatória que impede.
+
+---
+
 ## SÍNTESE INVESTIGATIVA — INQUÉRITO {numero_inquerito}
 
 Redija cada seção abaixo com linguagem técnico-jurídica precisa. Cite documentos e páginas quando disponíveis. Se uma seção não puder ser preenchida por ausência de elementos nos autos, escreva: *"Elementos insuficientes nos autos para esta análise."*
@@ -403,6 +429,19 @@ Antes de preencher o JSON, raciocine sobre:
    - baixo: menção periférica, sem indicativos de participação
 4. Cada item em `pontos_de_atencao` deve indicar: [fato] → [por que é relevante investigativamente]
 5. Cada item em `sugestoes_diligencias` deve indicar: [ação] → [o que se pretende confirmar/afastar]
+
+## RACIOCÍNIO ANTES DE GERAR O JSON
+
+Antes de preencher o JSON, raciocine sobre:
+1. Qual é o papel REAL desta pessoa no inquérito? (compare o que cada documento diz sobre ela)
+2. Há contradições entre as versões ou fontes de dados? (interno vs. externo — registre em pontos_de_atencao)
+3. O `nivel_risco` deve refletir EVIDÊNCIAS, não intuição:
+   - **crítico**: indícios diretos de autoria ou participação central no crime
+   - **alto**: conexões fortes com fatos, mas sem prova direta ainda
+   - **medio**: presença nos autos sem envolvimento claro
+   - **baixo**: menção periférica, sem indicativos de participação
+4. Cada item em `pontos_de_atencao`: formato [fato observado] → [por que é relevante investigativamente]
+5. Cada item em `sugestoes_diligencias`: formato [ação concreta] → [o que se pretende confirmar ou afastar]
 
 Retorne EXCLUSIVAMENTE um JSON com a seguinte estrutura:
 {{
@@ -466,6 +505,19 @@ Antes de preencher o JSON, raciocine sobre:
 4. Cada item em `pontos_de_atencao` deve indicar: [fato] → [por que é relevante investigativamente]
 5. Cada item em `sugestoes_diligencias` deve indicar: [ação] → [o que se pretende confirmar/afastar]
 
+## RACIOCÍNIO ANTES DE GERAR O JSON
+
+Antes de preencher o JSON, raciocine sobre:
+1. Qual é o papel REAL desta empresa no inquérito? (compare o que cada documento diz)
+2. Há contradições entre dados internos e externos (direct.data)? Registre em pontos_de_atencao.
+3. O `nivel_risco` deve refletir EVIDÊNCIAS:
+   - **crítico**: empresa é instrumento direto do crime (fachada, conta de passagem, receptação)
+   - **alto**: conexões fortes mas sem prova direta de uso criminoso ainda
+   - **medio**: empresa relacionada a personagem suspeito, sem indicativo próprio de participação
+   - **baixo**: menção periférica ou coincidental nos autos
+4. Cada item em `pontos_de_atencao`: formato [fato observado] → [por que é relevante investigativamente]
+5. Cada item em `sugestoes_diligencias`: formato [ação concreta] → [o que se pretende confirmar ou afastar]
+
 Retorne EXCLUSIVAMENTE um JSON com a seguinte estrutura:
 {{
   "nome": "Razão social",
@@ -519,6 +571,19 @@ Verifique os itens abaixo. Se qualquer um falhar, informe o delegado antes de re
 
 Se o filtro for aprovado, prossiga com a minuta indicando ao início: "✅ Compliance verificado — [base legal]"
 Se houver lacuna: "⚠️ Atenção: [descreva a lacuna] — recomendo [ação para suprir antes de expedir]"
+
+## FILTRO DE COMPLIANCE — EXECUTE ANTES DE REDIGIR
+
+Verifique os itens abaixo antes de produzir a minuta. Se qualquer item falhar, informe o delegado primeiro:
+
+□ 1. **FUNDAMENTO FÁTICO**: Há indícios concretos nos autos (não mera suspeita) que justificam esta medida?
+□ 2. **PROPORCIONALIDADE**: A medida é proporcional à gravidade do crime e à pena máxima em abstrato?
+□ 3. **BASE LEGAL**: Qual artigo do CPP, CP ou lei especial ampara especificamente este ato? (cite expressamente)
+□ 4. **NECESSIDADE**: Outras medidas menos invasivas foram consideradas e se mostram insuficientes?
+□ 5. **CADEIA DE CUSTÓDIA**: Se envolve apreensão de dados/dispositivos, a cadeia está prevista?
+
+Se aprovado: inicie a minuta com "✅ Compliance verificado — amparo: [artigo]"
+Se houver lacuna: inicie com "⚠️ Atenção: [descreva a lacuna] — recomendo [ação para suprir antes de expedir o ato]"
 
 Produza a minuta completa e formal, em linguagem jurídico-policial brasileira, com:
 - Cabeçalho adequado ao tipo de documento
