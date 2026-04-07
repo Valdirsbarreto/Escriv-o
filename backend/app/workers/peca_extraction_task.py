@@ -20,6 +20,8 @@ from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
+# Pedimos apenas METADADOS + uma frase-âncora para localizar o texto no doc original.
+# Isso evita o estouro de maxOutputTokens que ocorre quando o Gemini copia o texto completo.
 PROMPT_EXTRAIR_PECAS = """Você é um assistente jurídico especializado em inquéritos policiais brasileiros.
 
 Analise o texto a seguir, que foi extraído de um arquivo PDF de autos de inquérito policial.
@@ -30,15 +32,15 @@ Identifique CADA peça individual dentro deste texto e retorne um JSON com a lis
 
 Para cada peça, forneça:
 - "titulo": nome descritivo e específico, incluindo nomes de pessoas quando relevante
-  (ex: "Termo de Declaração de João da Silva", "Ofício nº 123/2024 ao ICCE", "Laudo de Exame de Local de Crime", "Auto de Apreensão de Veículo")
+  (ex: "Termo de Declaração de João da Silva", "Ofício nº 123/2024 ao ICCE", "Laudo de Exame de Local de Crime")
 - "tipo": uma das categorias: termo_declaracao | auto_apreensao | oficio | laudo | bo | despacho | portaria | requisicao | mandado | outro
-- "conteudo_texto": texto completo desta peça, copiado ipsis litteris do texto fornecido
+- "trecho_inicio": copie ipsis litteris os primeiros 120 caracteres do texto desta peça (será usado para localizar o texto no documento)
 - "pagina_inicial": número de página aproximado onde esta peça começa (se identificável), ou null
 - "pagina_final": número de página aproximado onde esta peça termina (se identificável), ou null
 - "resumo": resumo de 2-3 linhas descrevendo o conteúdo e relevância desta peça
 
 REGRAS:
-- Preserve o texto original da peça sem modificações (ipsis litteris)
+- NÃO reproduza o texto completo das peças — apenas o "trecho_inicio" de 120 chars
 - Use nomes completos das pessoas nos títulos sempre que possível
 - Se o texto for muito curto ou homogêneo (apenas uma peça), retorne um único item
 - Não invente conteúdo; baseie-se exclusivamente no texto fornecido
@@ -50,7 +52,7 @@ Formato da resposta:
     {
       "titulo": "...",
       "tipo": "...",
-      "conteudo_texto": "...",
+      "trecho_inicio": "...",
       "pagina_inicial": null,
       "pagina_final": null,
       "resumo": "..."
@@ -70,6 +72,42 @@ def _build_sync_engine():
     else:
         sync_url = raw_url.replace("postgresql+asyncpg://", "postgresql://")
     return create_engine(_encode_password_in_url(sync_url), pool_pre_ping=True)
+
+
+def _extrair_conteudo_por_ancora(texto_doc: str, pecas_data: list) -> list:
+    """
+    Localiza cada peça no texto do documento usando 'trecho_inicio' como âncora.
+    Extrai o texto entre o início de uma peça e o início da próxima.
+    """
+    # Encontra a posição de início de cada peça
+    posicoes = []
+    for p in pecas_data:
+        ancora = (p.get("trecho_inicio") or "").strip()
+        if not ancora:
+            posicoes.append(-1)
+            continue
+        # Busca pelos primeiros 60 chars para tolerar pequenas variações
+        busca = ancora[:60].strip()
+        idx = texto_doc.find(busca)
+        posicoes.append(idx)
+
+    resultados = []
+    for i, (p, pos_ini) in enumerate(zip(pecas_data, posicoes)):
+        if pos_ini < 0:
+            # Âncora não encontrada — usa o trecho_inicio como fallback
+            conteudo = p.get("trecho_inicio") or ""
+        else:
+            # Fim desta peça = início da próxima (ou fim do doc)
+            pos_fim = len(texto_doc)
+            for j in range(i + 1, len(posicoes)):
+                if posicoes[j] > pos_ini:
+                    pos_fim = posicoes[j]
+                    break
+            conteudo = texto_doc[pos_ini:pos_fim].strip()
+
+        resultados.append({**p, "conteudo_texto": conteudo})
+
+    return resultados
 
 
 @celery_app.task(bind=True, max_retries=2, default_retry_delay=60)
@@ -115,7 +153,7 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
             # Chama Gemini via httpx (padrão do projeto)
             import httpx
 
-            texto_limite = doc.texto_extraido[:80000]  # até 80k chars
+            texto_limite = doc.texto_extraido[:80000]  # até 80k chars de entrada
             prompt = PROMPT_EXTRAIR_PECAS.replace("{texto}", texto_limite)
 
             api_key = settings.GEMINI_API_KEY
@@ -131,7 +169,7 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
                     "contents": [{"parts": [{"text": prompt}]}],
                     "generationConfig": {
                         "temperature": 0.1,
-                        "maxOutputTokens": 8192,
+                        "maxOutputTokens": 4096,  # suficiente para metadados apenas
                     },
                 },
                 timeout=120.0,
@@ -156,12 +194,15 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
                 logger.warning(f"[PEÇAS] IA não identificou peças no documento {documento_id}")
                 return
 
+            # Localiza o texto de cada peça no documento original
+            pecas_com_texto = _extrair_conteudo_por_ancora(doc.texto_extraido, pecas_data)
+
             # Persiste peças no banco
             doc_uuid = uuid.UUID(documento_id)
             inq_uuid = uuid.UUID(inquerito_id)
             criadas = 0
 
-            for p in pecas_data:
+            for p in pecas_com_texto:
                 titulo = (p.get("titulo") or "Peça sem título")[:500]
                 tipo = (p.get("tipo") or "outro")[:80]
                 conteudo = p.get("conteudo_texto") or ""
