@@ -169,7 +169,8 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
                     "contents": [{"parts": [{"text": prompt}]}],
                     "generationConfig": {
                         "temperature": 0.1,
-                        "maxOutputTokens": 4096,  # suficiente para metadados apenas
+                        "maxOutputTokens": 4096,
+                        "response_mime_type": "application/json",
                     },
                 },
                 timeout=120.0,
