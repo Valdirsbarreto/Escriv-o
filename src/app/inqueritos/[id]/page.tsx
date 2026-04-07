@@ -502,45 +502,50 @@ export default function InqueritoDetalhePage() {
 
   const handleReextrairPecas = async (docId: string) => {
     setReextrahindo(docId);
-    setExtractProgress(0);
+    setExtractProgress(5);
     try {
       await reextrairPecas(inqId, docId);
-      
-      // Barra de progresso visual simulada até 95%
+
+      // Barra de progresso visual simulada até 90%
       const progInterval = setInterval(() => {
         setExtractProgress(prev => {
-          if (prev >= 95) return 95;
-          return prev + Math.floor(Math.random() * 5) + 2;
+          if (prev >= 90) return 90;
+          return prev + Math.floor(Math.random() * 3) + 1;
         });
       }, 3000);
 
-      // A extração roda longo em background (celery: Gemini ~30s). 
-      // Faremos polling até as novas peças surgirem no banco.
+      // Polling a cada 5s por até 3 minutos (36 × 5s = 180s > timeout Gemini de 120s)
       let chamadas = 0;
       const poll = setInterval(async () => {
         chamadas++;
         try {
           const res = await api.get(`/inqueritos/${inqId}/pecas-extraidas`);
           const pecas = res.data;
-          // Se a API retornar peças com este docId, a task concluiu
           if (pecas.some((p: any) => p.documento_id === docId)) {
             setPecasExtraidas(pecas);
             clearInterval(poll);
             clearInterval(progInterval);
             setExtractProgress(100);
             setTimeout(() => setReextrahindo(null), 1000);
+            return;
           }
-        } catch { /* erro na chamada silencioso */ }
-        
-        // Timeout de ~90s (18 * 5s)
-        if (chamadas >= 18) {
-          clearInterval(poll);
+        } catch { /* erro silencioso */ }
+
+        // Timeout de ~3 min: avisa mas mantém polling lento (a cada 15s) até aparecer
+        if (chamadas === 36) {
           clearInterval(progInterval);
+          // continua o poll — não para, só troca a velocidade
+        }
+        if (chamadas >= 36 && chamadas % 3 !== 0) return; // após 3 min, checa só a cada 15s
+
+        // Desiste depois de ~6 min no total
+        if (chamadas >= 72) {
+          clearInterval(poll);
           setReextrahindo(null);
-          alert("A extração está demorando devido ao tamanho do arquivo. As peças aparecerão no painel assim que concluírem o processamento em nuvem.");
+          alert("A extração não foi concluída. Verifique os logs do servidor ou tente novamente.");
         }
       }, 5000);
-      
+
     } catch {
       alert("Erro ao acionar extração de peças.");
       setReextrahindo(null);
