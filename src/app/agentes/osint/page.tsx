@@ -1031,7 +1031,7 @@ export default function AgenteOsintPage() {
             <Button 
                variant="outline" 
                className="flex-1 bg-zinc-900/50 border-zinc-800 hover:bg-zinc-800 text-zinc-100 h-12 text-base rounded-xl border-2 transition-all hover:scale-105"
-               onClick={() => window.location.href = '/dashboard'}
+               onClick={() => window.location.href = '/'}
             >
               Ir para o Dashboard
             </Button>
