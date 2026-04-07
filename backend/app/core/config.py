@@ -84,6 +84,11 @@ class Settings(BaseSettings):
     DIRECTDATA_API_TOKEN: str = ""
     DIRECTDATA_BASE_URL: str = "https://apiv3.directd.com.br"
 
+    # ── Cripto / Blockchain OSINT ──────────────────────────
+    CHAINABUSE_API_KEY: Optional[str] = None
+    ETHERSCAN_API_KEY: Optional[str] = None
+    TRONSCAN_API_KEY: Optional[str] = None
+
     # ── Google Calendar ─────────────────────────────────────
     GOOGLE_CLIENT_ID: Optional[str] = None
     GOOGLE_CLIENT_SECRET: Optional[str] = None

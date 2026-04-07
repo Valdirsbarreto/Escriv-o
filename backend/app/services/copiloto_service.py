@@ -318,7 +318,12 @@ class CopilotoService:
             "com os atributos de busca (cpf, cnpj, placa, ou nome).\n"
             "Exemplo: <OSINT_CALL>{\"cpf\": \"123.456.789-00\"}</OSINT_CALL> ou <OSINT_CALL>{\"placa\": \"ABC1234\"}</OSINT_CALL>\n"
             "Se você usar a tag, o sistema vai interromper, buscar os dados e devolver para você analisar na próxima rodada.\n"
-            "IMPORTANTE: Se você usar a tag, não escreva mais NADA além dela!"
+            "Se você usar a tag, o sistema vai interromper, buscar os dados e devolver para você analisar na próxima rodada.\n"
+            "IMPORTANTE: Se você usar a tag, não escreva mais NADA além dela!\n\n"
+            "NOVA FERRAMENTA CRIPTO/BLOCKCHAIN:\n"
+            "Se detectar endereços de carteiras (Ex: 0x...) para investigação de lavagem de dinheiro,\n"
+            "use a tag <CRIPTO_CALL>{\"address\": \"0x...\"}</CRIPTO_CALL>.\n"
+            "O sistema fará a varredura no Chainabuse e Etherscan para você."
         )
         system_prompt += f"\n\n{tool_instruction}"
         
@@ -392,7 +397,40 @@ class CopilotoService:
                         llm_result["custo_estimado"] += llm_result2["custo_estimado"]
                     except Exception as json_e:
                         logger.error(f"[COPILOTO] Erro ao parsear Tool OSINT: {json_e}")
+            
+            if "<CRIPTO_CALL>" in resposta:
+                match = re.search(r"<CRIPTO_CALL>(.*?)</CRIPTO_CALL>", resposta, re.DOTALL)
+                if match:
+                    try:
+                        args = json.loads(match.group(1).strip())
+                        logger.info(f"[COPILOTO] Acionando Ferramenta CRIPTO com: {args}")
+                        from app.services.cripto_service import CriptoService
+                        cripto = CriptoService()
+                        res_cripto = await cripto.analisar_carteira_completa(args.get("address"))
+                        res_str = json.dumps(res_cripto, ensure_ascii=False, indent=2)
                         
+                        # Injetar o prompt especializado para a análise final
+                        from app.core.prompts import SYSTEM_PROMPT_CRIPTO
+                        messages.append({"role": "model", "content": resposta})
+                        messages.append({
+                            "role": "user", 
+                            "content": f"{SYSTEM_PROMPT_CRIPTO}\n\n[DADOS BRUTOS DA BLOCKCHAIN]\n{res_str[:15000]}\n"
+                                       f"Analise os dados e gere o relatório final do Comissário IA."
+                        })
+                        
+                        llm_result2 = await self.llm_service.chat_completion(
+                            messages=messages,
+                            tier="premium",
+                            temperature=0.2, # Menos criatividade, mais análise
+                            max_tokens=3000,
+                            agente="AgenteCripto",
+                        )
+                        resposta = llm_result2["content"]
+                        llm_result["tokens_prompt"] += llm_result2["tokens_prompt"]
+                        llm_result["tokens_resposta"] += llm_result2["tokens_resposta"]
+                        llm_result["custo_estimado"] += llm_result2["custo_estimado"]
+                    except Exception as e:
+                        logger.error(f"[COPILOTO] Erro na ferramenta Cripto: {e}")                        
         except Exception as e:
             logger.error(f"[COPILOTO] LLM indisponível: {e}")
             return {
