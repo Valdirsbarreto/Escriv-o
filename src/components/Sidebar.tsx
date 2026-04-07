@@ -53,8 +53,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className={cn("flex-1 space-y-1 transition-all duration-300", sidebarCollapsed ? "px-2" : "px-4")}>
-        <NavItem href="/" icon={<LayoutDashboard size={18} />} label="Dashboard" active={pathname === "/"} collapsed={sidebarCollapsed} />
-        <NavItem href="/inqueritos" icon={<FolderOpen size={18} />} label="Inquéritos" active={pathname.startsWith("/inquerito")} collapsed={sidebarCollapsed} />
+        <NavItem href="/" icon={<FolderOpen size={18} />} label="Inquéritos" active={pathname === "/"} collapsed={sidebarCollapsed} />
         <NavItem href="/agentes/osint" icon={<UserSearch size={18} />} label="Agente OSINT" active={pathname === "/agentes/osint"} collapsed={sidebarCollapsed} />
         <NavItem href="/intimacoes" icon={<CalendarDays size={18} />} label="Intimações" active={pathname === "/intimacoes"} collapsed={sidebarCollapsed} />
       </nav>
