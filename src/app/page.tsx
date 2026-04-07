@@ -47,10 +47,18 @@ export default function Home() {
     if (!editInquerito || !novoNumero) return;
     setSalvando(true);
     try {
-      // Atualiza apenas o número do inquérito
-      await api.patch(`/inqueritos/${editInquerito.id}`, { numero: novoNumero });
+      // Atualiza o número e permite MERGE se já existir
+      const res = await api.patch(`/inqueritos/${editInquerito.id}/numero`, { numero: novoNumero.trim() });
+      const data = res.data;
+      
       setEditInquerito(null);
-      fetchInqueritos();
+      
+      if (data.status === "merged") {
+        // Redireciona se houve fusão
+        window.location.href = `/inqueritos/${data.id}`;
+      } else {
+        fetchInqueritos();
+      }
     } catch (e) {
       console.error(e);
       alert("Erro ao atualizar o número do inquérito.");

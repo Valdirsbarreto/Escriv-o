@@ -36,6 +36,9 @@ class Documento(Base):
     status_processamento: Mapped[str] = mapped_column(
         String(30), default="pendente", nullable=False
     )
+    status_extracao_pecas: Mapped[str | None] = mapped_column(
+        String(30), default=None, nullable=True # None | 'processando' | 'concluido' | 'erro'
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
