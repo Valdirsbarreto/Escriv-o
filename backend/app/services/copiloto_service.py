@@ -287,6 +287,19 @@ class CopilotoService:
             "ainda não foram indexados para busca vetorial."
         )
 
+        # ── 2b. Few-shot: casos históricos similares (Banco de Casos Gold) ───
+        try:
+            from app.services.casos_gold_service import CasosGoldService
+            casos = await CasosGoldService().buscar_casos_similares(query=query, top_k=2)
+            if casos:
+                casos_ctx = "\n\n### Casos Históricos Similares (referência investigativa)\n"
+                for c in casos:
+                    casos_ctx += f"\n**{c['titulo']}** ({c['tipo']}):\n{c['texto'][:800]}\n---\n"
+                # Prepend ao contexto
+                contexto_rag = casos_ctx + contexto_rag
+        except Exception:
+            pass  # few-shot é complementar, nunca bloqueia
+
         # ── 3. Montar mensagens ───────────────────────────
         system_prompt = SYSTEM_PROMPT_COPILOTO.format(
             numero_inquerito=numero_inquerito,

@@ -311,6 +311,9 @@ Seja criterioso, objetivo e fundamentado exclusivamente no material dos autos ab
 
 ## MATERIAL DOS AUTOS
 
+### Casos Históricos Similares (Few-Shot Investigativo)
+{casos_historicos}
+
 ### Resumos dos Documentos Indexados
 {resumos_documentos}
 

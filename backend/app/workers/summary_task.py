@@ -315,8 +315,31 @@ def generate_analise_task(self, inquerito_id: str):
 
             # ── 4. Montar prompt e chamar LLM premium ──────────────────────────
             numero = inq.numero or inquerito_id
+            # Few-shot: buscar casos históricos similares (Banco de Casos Gold)
+            casos_historicos_str = ""
+            try:
+                from app.services.casos_gold_service import CasosGoldService
+                # Usa resumo do volume ou número do inquérito como query
+                query_casos = resumos_str[:500] if resumos_str else numero
+                casos_similares = await CasosGoldService().buscar_casos_similares(
+                    query=query_casos, top_k=2
+                )
+                if casos_similares:
+                    linhas = []
+                    for c in casos_similares:
+                        linhas.append(
+                            f"**{c['titulo']}** ({c['tipo']}):\n{c['texto'][:600]}"
+                        )
+                    casos_historicos_str = "\n\n---\n\n".join(linhas)
+                    logger.info(
+                        f"[SINTESE-TASK] {len(casos_similares)} caso(s) histórico(s) injetado(s)"
+                    )
+            except Exception as _e:
+                logger.warning(f"[SINTESE-TASK] Few-shot de casos falhou (não crítico): {_e}")
+
             prompt = PROMPT_SINTESE_INVESTIGATIVA.format(
                 numero_inquerito=numero,
+                casos_historicos=casos_historicos_str or "Nenhum caso histórico similar disponível.",
                 resumos_documentos=resumos_str,
                 personagens=personagens_str,
                 cronologia=cronologia_str,

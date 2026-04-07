@@ -16,6 +16,7 @@ celery_app = Celery(
         "app.workers.summary_task",
         "app.workers.intimacao_task",
         "app.workers.telegram_alertas",
+        "app.workers.casos_gold_task",
     ],
 )
 
