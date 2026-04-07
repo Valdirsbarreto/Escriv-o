@@ -28,7 +28,7 @@ def _check_admin(x_admin_secret: str) -> None:
 
 @router.post("/ingerir")
 async def ingerir_caso(
-    file: UploadFile = File(..., description="Arquivo PDF do caso histórico"),
+    file: UploadFile = File(..., description="Arquivo PDF ou TIFF do caso histórico"),
     titulo: str = Form(..., description="Título do caso (ex: 'Sentença Caso Furto Qualificado 2023')"),
     tipo: str = Form(
         ...,
@@ -66,8 +66,8 @@ async def ingerir_caso(
             detail=f"Tipo inválido. Use um de: {sorted(tipos_validos)}",
         )
 
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=422, detail="Apenas arquivos PDF são aceitos")
+    if not file.filename or not file.filename.lower().endswith((".pdf", ".tif", ".tiff")):
+        raise HTTPException(status_code=422, detail="Apenas arquivos PDF ou TIFF são aceitos")
 
     # Ler conteúdo do upload
     try:
@@ -81,7 +81,8 @@ async def ingerir_caso(
 
     # Gerar caso_id e s3_key
     caso_id = str(uuid.uuid4())
-    s3_key = f"casos_gold/{caso_id}.pdf"
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "pdf"
+    s3_key = f"casos_gold/{caso_id}.{ext}"
 
     # Upload para S3
     try:
@@ -90,9 +91,9 @@ async def ingerir_caso(
         await storage.upload_file(
             content=conteudo,
             key=s3_key,
-            content_type="application/pdf",
+            content_type=file.content_type or "application/octet-stream",
         )
-        logger.info(f"[CASOS-GOLD-API] PDF salvo em S3: {s3_key}")
+        logger.info(f"[CASOS-GOLD-API] Arquivo salvo em S3: {s3_key}")
     except Exception as e:
         logger.error(f"[CASOS-GOLD-API] Erro ao salvar no S3: {e}")
         raise HTTPException(status_code=500, detail=f"Erro ao salvar arquivo no S3: {e}")

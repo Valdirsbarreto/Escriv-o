@@ -213,11 +213,21 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
                        duracao_ms=int((time.time() - t0) * 1000),
                        dados_extras={"tamanho_bytes": len(content)})
 
-            # ── 2. Extração de texto + OCR seletivo ───────────
+            # ── 2. Extração de texto + OCR seletivo (ou OCR de imagem) ───────────
             t0 = time.time()
-            logger.info("[INGESTÃO] Extraindo texto do PDF (com OCR seletivo)")
+            logger.info("[INGESTÃO] Extraindo texto do documento")
+            
+            content_type = "application/pdf"
+            ext = doc.storage_path.rsplit(".", 1)[-1].lower() if "." in doc.storage_path else "pdf"
+            if ext in ("tif", "tiff"):
+                content_type = "image/tiff"
+            elif ext in ("jpg", "jpeg"):
+                content_type = "image/jpeg"
+            elif ext == "png":
+                content_type = "image/png"
+
             pdf_service = PDFExtractorService()
-            extraction = pdf_service.extract_with_ocr(content)
+            extraction = pdf_service.extract_any_file(content, content_type)
 
             doc.total_paginas = extraction["total_paginas"]
             doc.texto_extraido = extraction["texto_completo"][:100000]

@@ -37,8 +37,7 @@ def processar_caso_gold(
     async def _run():
         # Imports pesados lazy (não bloqueiam health check do Railway)
         from app.services.storage import StorageService
-        import pdfplumber
-        import io
+        from app.services.pdf_extractor import PDFExtractorService
         from app.services.casos_gold_service import CasosGoldService
 
         # ── 1. Download do arquivo do S3 ─────────────────────────────────────
@@ -52,22 +51,28 @@ def processar_caso_gold(
             logger.error(f"[CASOS-GOLD-TASK] Erro ao baixar arquivo do S3: {e}")
             raise
 
-        # ── 2. Extração de texto via pdfplumber ───────────────────────────────
+        # ── 2. Extração de texto via PDFExtractorService ───────────────────────
         try:
-            texto_paginas = []
-            with pdfplumber.open(io.BytesIO(conteudo_bytes)) as pdf:
-                for page in pdf.pages:
-                    texto_pagina = page.extract_text() or ""
-                    if texto_pagina.strip():
-                        texto_paginas.append(texto_pagina)
+            content_type = "application/pdf"
+            ext = s3_key.rsplit(".", 1)[-1].lower() if "." in s3_key else "pdf"
+            if ext in ("tif", "tiff"):
+                content_type = "image/tiff"
+            elif ext in ("jpg", "jpeg"):
+                content_type = "image/jpeg"
+            elif ext == "png":
+                content_type = "image/png"
 
-            texto_completo = "\n\n".join(texto_paginas).strip()
+            extractor = PDFExtractorService()
+            extraction = extractor.extract_any_file(conteudo_bytes, content_type)
+            texto_completo = extraction.get("texto_completo", "").strip()
+            total_paginas = extraction.get("total_paginas", 0)
+
             logger.info(
                 f"[CASOS-GOLD-TASK] Texto extraído: {len(texto_completo)} chars, "
-                f"{len(texto_paginas)} página(s) com conteúdo"
+                f"{total_paginas} página(s) processadas"
             )
         except Exception as e:
-            logger.error(f"[CASOS-GOLD-TASK] Erro ao extrair texto do PDF: {e}")
+            logger.error(f"[CASOS-GOLD-TASK] Erro ao extrair texto do arquivo: {e}")
             raise
 
         if not texto_completo:
