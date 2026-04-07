@@ -169,6 +169,39 @@ export const getPecaExtraida = (inqId: string, pecaId: string) =>
 export const reextrairPecas = (inqId: string, docId: string) =>
   api.post(`/inqueritos/${inqId}/documentos/${docId}/reextrair-pecas`);
 
+// ── Agente Chat Web (Sprint D) ──────────────────────────────────────────────
+
+const CHAT_SECRET = process.env.NEXT_PUBLIC_CHAT_SECRET || "";
+
+export const agentChat = async (
+  mensagem: string,
+  sessionId: string,
+  inqueritoId?: string | null,
+) => {
+  const response = await api.post(
+    "/agent/chat",
+    { mensagem, session_id: sessionId, inquerito_id: inqueritoId ?? null },
+    { headers: { "X-Chat-Secret": CHAT_SECRET }, timeout: 90000 },
+  );
+  return response.data as { resposta: string };
+};
+
+export const setAgentInquerito = async (sessionId: string, inqueritoId: string) => {
+  await api.post(
+    "/agent/chat/set-inquerito",
+    { session_id: sessionId, inquerito_id: inqueritoId },
+    { headers: { "X-Chat-Secret": CHAT_SECRET } },
+  );
+};
+
+export const clearAgentContext = async (sessionId: string) => {
+  await api.delete(`/agent/chat/context?session_id=${sessionId}`, {
+    headers: { "X-Chat-Secret": CHAT_SECRET },
+  });
+};
+
+// ── OSINT ──────────────────────────────────────────────────────────────────
+
 export const osintConsultaAvulsa = async (params: {
   cpf?: string;
   cnpj?: string;

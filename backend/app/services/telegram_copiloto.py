@@ -257,7 +257,7 @@ class TelegramCopilotoService:
             self._redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
         return self._redis
 
-    async def _load_ctx(self, chat_id: int) -> dict:
+    async def _load_ctx(self, chat_id: int | str) -> dict:
         r = await self._get_redis()
         raw = await r.get(f"telegram:ctx:{chat_id}")
         if raw:
@@ -267,7 +267,7 @@ class TelegramCopilotoService:
                 pass
         return {"historico": [], "inquerito_atual": None, "ultimo_alvo": None}
 
-    async def _save_ctx(self, chat_id: int, ctx: dict) -> None:
+    async def _save_ctx(self, chat_id: int | str, ctx: dict) -> None:
         r = await self._get_redis()
         await r.setex(
             f"telegram:ctx:{chat_id}",
@@ -278,7 +278,7 @@ class TelegramCopilotoService:
     # ── Entry point ───────────────────────────────────────────────────────────
 
     async def processar_mensagem(
-        self, chat_id: int, mensagem: str, db: AsyncSession
+        self, chat_id: int | str, mensagem: str, db: AsyncSession
     ) -> str:
         """Processa uma mensagem recebida e retorna a resposta formatada em HTML."""
 
