@@ -85,7 +85,17 @@ Commits: `cff2c44`, `df09856`, `6995094`, `5b4c67e`, `dd8b7fe`, `dd8e9a9`, `d043
 
 ---
 
-## 3. Estado Atual (05/04/2026)
+### ✅ Sessão Arquitetura CoT e Ingestão TIFF — 07/04/2026
+- **Chain of Thought (CoT)**: Reestruturado o `SYSTEM_PROMPT_COPILOTO` e todos os sub-prompts críticos com blocos de instrução paso a passo (ex: identifica→conecta→formula→explicita).
+- **Banco de Casos Gold**: Adicionada a indexação em nova coleção separada do Qdrant (`casos_historicos`) para injetar Contexto Few-Shot Jurídico no processo RAG.
+- **Suporte Universal a TIFF/Imagens**: Refatorado `PDFExtractorService().extract_any_file()` para reconhecer extensões `.tif`, `.tiff`, `.jpg` via Pytesseract/Gemini Vision.
+- **Deploy Railway Resiliente**: Removida a configuração de `startCommand` do Windows (CRLF); delegando ao `start.sh` corrigido via shell.
+- **Agente Cripto (Fase 1 e 2)**: Criado `CriptoService` com integrações Chainabuse (reportes de crimes) e Etherscan (fluxo de ativos), integrado ao Copiloto via tag `<CRIPTO_CALL>`.
+- **Arquitetura v2.0**: Memória atualizada com os novos pilares de Agentes, OSINT, FSM e Auditoria.
+
+---
+
+## 3. Estado Atual (07/04/2026)
 
 **Sistema em produção funcionando e super-leve:**
 - ✅ Pipeline de ingestão otimizado (com deduplicação de entidades baseada em regras prioritárias de CPF e CNPJ) e Reclassificação Integrada.
@@ -99,16 +109,13 @@ Commits: `cff2c44`, `df09856`, `6995094`, `5b4c67e`, `dd8b7fe`, `dd8e9a9`, `d043
 ## 4. Próximos Passos
 
 ### ⏳ Imediato
-- **Testar o Copiloto** em produção com a nova arquitetura do Gemini na base recriada com Qdrant `text-multilingual-embedding-002`
-- **Separar Celery em serviço próprio** na Railway (P2 — estabilidade) se necessário, embora não esteja mais travando a inicialização
+- **Sprint 6: Módulo Cripto/Blockchain** (Chainabuse + Flow Analysis p/ PLD) - **PRIORIDADE**.
+- **FSM e Menu Decisório**: Implementar lógica de "Escolha de Caminho" pós-ingestão (v2.0).
+- **Auditores Factual e de Fonte**: Garantir citações automáticas em todas as saídas de agentes.
 
-### Sprint 6
-- **Agentes Especializados e OSINT**: Tela de triagem OSINT para enriquecimento de dados de pessoas
-
-### Pendências de Infraestrutura
-- Autenticação de usuários (sem auth hoje — qualquer um com a URL acessa)
-- Monitoramento de tasks Celery (Flower ou similar)
-- Websocket para progresso de ingestão em tempo real
+### Sprint 7
+- **Módulo OSINT Pro**: Pivoting automático, busca Sherlock e Mapas de Vínculos.
+- **Autenticação e Perfis (Prod)**: Proteção de acesso e trilha de auditoria por usuário.
 
 ---
 
@@ -141,10 +148,10 @@ Commits: `cff2c44`, `df09856`, `6995094`, `5b4c67e`, `dd8b7fe`, `dd8e9a9`, `d043
 | `backend/app/workers/summary_task.py` | Resumos hierárquicos assíncronos |
 | `backend/app/services/orchestrator_service.py` | LLM análise inicial + relatório de boas-vindas |
 | `backend/app/services/extractor_service.py` | Classificação de peças + NER |
-| `backend/app/services/copiloto_service.py` | RAG Copiloto conversacional |
+| `backend/app/services/pdf_extractor.py` | Extrator unificado (PDF/TIFF/OCR) |
 | `backend/railway.toml` | Comando de start: Celery + Uvicorn |
-| `backend/nixpacks.toml` | Build config Railway (tesseract, poppler) |
-| `src/lib/api.ts` | Axios com timeout (15s API, 60s upload) |
+| `especificacao_app_investigacao_digital_v2.md` | **Visão Geral V2.0 (Agentes + OSINT + FSM)** |
+| `especificacao_app_agentes_investigativos-1.md` | Especificação funcional dos Agentes |
 | `memory.md` | **Este arquivo** |
 
 ---

@@ -17,7 +17,8 @@ import {
   UserSearch, Bot, Target, AlertTriangle, Building, User, Search,
   FileSearch, CheckCircle, XCircle, Phone, Mail, MapPin, Car,
   Shield, Briefcase, ChevronDown, ChevronRight, Loader2, Play,
-  TriangleAlert, MinusCircle,
+  TriangleAlert, MinusCircle, Wallet, Coins, ArrowRightLeft,
+  History, Info, ExternalLink,
 } from "lucide-react";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -80,6 +81,158 @@ const initSugestao = (perfil: number): string[] => {
   if (perfil === 4) return ["cadastro_pf_plus", "vinculo_empregaticio", "historico_veiculos_pf", "mandados_prisao", "aml", "processos_tj"];
   return [];
 };
+
+// ── Componente de Investigação Cripto (Novo!) ────────────────────────────────
+
+function InvestigacaoCripto() {
+  const [address, setAddress] = useState("");
+  const [analisando, setAnalisando] = useState(false);
+  const [resultado, setResultado] = useState<any | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const handleAnalisar = async () => {
+    if (!address.trim()) return;
+    setAnalisando(true); setErro(null); setResultado(null);
+    try {
+      // Simulação de chamada ao Agente Cripto via API
+      // Nota: O Agente Cripto é acionado pelo Copiloto, mas aqui fornecemos uma UI direta.
+      const res = await api.post("/agentes/cripto/analisar", { address: address.trim() });
+      setResultado(res.data);
+    } catch (e: any) {
+      setErro(e?.response?.data?.detail || "Erro ao analisar carteira. Verifique se as chaves de API estão configuradas.");
+    } finally { setAnalisando(false); }
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-700">
+      <Card className="bg-zinc-900/50 border-zinc-800 border-dashed">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Wallet className="text-orange-500" size={20} /> Investigação de Ativos Blockchain
+          </CardTitle>
+          <CardDescription>
+            Rastreie o fluxo de capitais e verifique reportes criminais (Chainabuse + Etherscan).
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-3">
+            <div className="relative flex-1">
+              <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-zinc-500">
+                <Coins size={16} />
+              </div>
+              <Input 
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Endereço da Carteira (ex: 0x...)" 
+                className="pl-10 bg-zinc-950 border-zinc-700 text-zinc-100 h-11"
+              />
+            </div>
+            <Button 
+              onClick={handleAnalisar} 
+              disabled={analisando || !address}
+              className="bg-orange-600 hover:bg-orange-700 text-white h-11 px-6 shadow-lg shadow-orange-900/10"
+            >
+              {analisando ? <Loader2 className="animate-spin mr-2" size={18} /> : <Search className="mr-2" size={18} />}
+              Analisar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {erro && (
+        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm flex gap-3">
+          <TriangleAlert size={18} className="shrink-0" /> {erro}
+        </div>
+      )}
+
+      {resultado && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-bottom-4 duration-500">
+          {/* Status Chainabuse */}
+          <Card className="bg-zinc-900 border-zinc-800 h-full">
+            <CardHeader className="pb-3 border-b border-zinc-800">
+              <div className="flex justify-between items-center">
+                <CardTitle className="text-sm font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                  <Shield size={14} className="text-blue-400" /> Vínculo Criminal (Chainabuse)
+                </CardTitle>
+                <Badge variant={resultado.chainabuse?.status === "denunciado" ? "destructive" : "outline"} className="capitalize">
+                  {resultado.chainabuse?.status || "Desconhecido"}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-3">
+              {resultado.chainabuse?.total_reportes > 0 ? (
+                <div className="space-y-4">
+                  <div className="p-3 bg-red-500/5 border border-red-500/20 rounded text-red-500 text-xs">
+                    Detectados {resultado.chainabuse.total_reportes} reportes criminais para este endereço.
+                  </div>
+                  <ScrollArea className="h-48">
+                    <div className="space-y-2">
+                      {resultado.chainabuse.detalhes?.map((rep: any, i: number) => (
+                        <div key={i} className="text-[11px] p-2 bg-zinc-950 border border-zinc-800 rounded">
+                          <p className="text-zinc-300 font-medium">{rep.category || "Reporte"}</p>
+                          <p className="text-zinc-500 mt-1">{rep.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-center text-zinc-500">
+                  <CheckCircle className="text-green-500 mb-3" size={32} />
+                  <p className="text-sm font-medium text-zinc-300">Nenhum reporte encontrado</p>
+                  <p className="text-xs px-6 mt-1">Este endereço não figura em bases de denúncias públicas.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Fluxo de Ativos */}
+          <Card className="bg-zinc-900 border-zinc-800 h-full">
+            <CardHeader className="pb-3 border-b border-zinc-800">
+              <CardTitle className="text-sm font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                <ArrowRightLeft size={14} className="text-orange-400" /> Transações Recentes (Fluxo)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[300px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-zinc-800 hover:bg-transparent">
+                      <TableHead className="text-[10px] text-zinc-500">Data</TableHead>
+                      <TableHead className="text-[10px] text-zinc-500 text-right">Valor (ETH)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {resultado.fluxo?.transacoes?.map((tx: any, i: number) => (
+                      <TableRow key={i} className="border-zinc-800">
+                        <TableCell className="text-[10px] text-zinc-400">
+                          {new Date(tx.timeStamp * 1000).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-right text-[11px] font-mono text-zinc-200">
+                          {(tx.value / 1e18).toFixed(4)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {!resultado.fluxo?.transacoes?.length && (
+                      <TableRow>
+                        <TableCell colSpan={2} className="text-center py-12 text-zinc-500 text-xs">Sem transações recentes para exibir.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+              <div className="p-3 border-t border-zinc-800 bg-zinc-950/50">
+                <Button variant="ghost" className="w-full text-[10px] text-zinc-500 h-6 hover:text-zinc-300">
+                  <History size={11} className="mr-1" /> Ver histórico completo no Explorer <ExternalLink size={10} className="ml-1" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -847,15 +1000,51 @@ function FichaIndividual({ inqueritoId }: { inqueritoId: string }) {
 
 export default function AgenteOsintPage() {
   const { inqueritoAtivoId } = useAppStore();
-  const [tab, setTab] = useState<"painel" | "ficha">("painel");
+  const [tab, setTab] = useState<"painel" | "ficha" | "cripto">("painel");
 
   if (!inqueritoAtivoId) {
     return (
-      <div className="flex flex-col items-center justify-center h-full p-8 text-center text-zinc-500">
-        <UserSearch className="w-16 h-16 mb-4 text-zinc-700" />
-        <h2 className="text-xl font-medium text-zinc-300">Nenhum inquérito selecionado</h2>
-        <p className="mt-2 max-w-md text-sm">Selecione um inquérito ativo no Dashboard para utilizar o Agente OSINT.</p>
-        <div className="mt-6"><ConsultaAvulsaDialog /></div>
+      <div className="relative h-full flex items-center justify-center overflow-hidden bg-zinc-950">
+        {/* Background Decorative */}
+        <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/10 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[30%] h-[30%] bg-orange-500/5 rounded-full blur-[100px] pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col items-center max-w-lg text-center p-8 animate-in fade-in zoom-in-95 duration-1000">
+          <div className="mb-6 p-4 bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl relative">
+            <div className="absolute -top-3 -right-3">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+              </span>
+            </div>
+            <UserSearch className="w-16 h-16 text-blue-500 opacity-90" />
+          </div>
+          
+          <h2 className="text-3xl font-extrabold tracking-tight text-white mb-3">
+             Nenhum Inquérito Ativo
+          </h2>
+          <p className="text-zinc-400 text-base leading-relaxed mb-8">
+            O Agente OSINT opera com base no contexto dos autos. Selecione um inquérito no seu Dashboard para iniciar a varredura automática de personagens.
+          </p>
+          
+          <div className="flex flex-col sm:flex-row gap-4 w-full">
+            <Button 
+               variant="outline" 
+               className="flex-1 bg-zinc-900/50 border-zinc-800 hover:bg-zinc-800 text-zinc-100 h-12 text-base rounded-xl border-2 transition-all hover:scale-105"
+               onClick={() => window.location.href = '/dashboard'}
+            >
+              Ir para o Dashboard
+            </Button>
+            <div className="flex-1 transition-all hover:scale-105">
+              <ConsultaAvulsaDialog />
+            </div>
+          </div>
+          
+          <div className="mt-12 flex items-center gap-3 text-zinc-600">
+            <Bot size={16} />
+            <span className="text-xs uppercase tracking-[0.2em] font-semibold">Osint Intelligence Module v2.0</span>
+          </div>
+        </div>
       </div>
     );
   }
@@ -875,20 +1064,26 @@ export default function AgenteOsintPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-zinc-800">
-        {([["painel", "Painel de Personagens"], ["ficha", "Ficha Individual"]] as const).map(([t, label]) => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
-              tab === t ? "border-blue-500 text-zinc-100" : "border-transparent text-zinc-500 hover:text-zinc-300"
+        {([
+          ["painel", "Personagens", UserSearch], 
+          ["ficha", "Relatório OSINT", Bot],
+          ["cripto", "Blockchain / Cripto", Wallet]
+        ] as const).map(([t, label, Icon]) => (
+          <button key={t} onClick={() => setTab(t as any)}
+            className={`px-4 py-3 text-sm font-medium transition-all border-b-2 -mb-px flex items-center gap-2 ${
+              tab === t ? "border-blue-500 text-zinc-100 bg-blue-500/5" : "border-transparent text-zinc-500 hover:text-zinc-300"
             }`}>
+            <Icon size={14} className={tab === t ? "text-blue-500" : ""} />
             {label}
           </button>
         ))}
       </div>
 
       {/* Conteúdo */}
-      {tab === "painel"
-        ? <PainelPersonagens key={inqueritoAtivoId} inqueritoId={inqueritoAtivoId} />
-        : <FichaIndividual key={inqueritoAtivoId} inqueritoId={inqueritoAtivoId} />}
-    </div>
+      <div className="relative">
+        {tab === "painel" && <PainelPersonagens key={inqueritoAtivoId} inqueritoId={inqueritoAtivoId} />}
+        {tab === "ficha" && <FichaIndividual key={inqueritoAtivoId} inqueritoId={inqueritoAtivoId} />}
+        {tab === "cripto" && <InvestigacaoCripto />}
+      </div>    </div>
   );
 }
