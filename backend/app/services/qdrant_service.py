@@ -48,12 +48,26 @@ class QdrantService:
                 ),
             )
             logger.info(
-                f"[QDRANT] Coleção '{self.collection_name}' criada (dims={size})"
+                f"[QDRANT] Coleção principal '{self.collection_name}' criada (dims={size})"
             )
         else:
             logger.info(
-                f"[QDRANT] Coleção '{self.collection_name}' já existe"
+                f"[QDRANT] Coleção principal '{self.collection_name}' já existe"
             )
+
+        if "casos_historicos" not in names:
+            self.client.create_collection(
+                collection_name="casos_historicos",
+                vectors_config=VectorParams(
+                    size=size,
+                    distance=Distance.COSINE,
+                ),
+            )
+            logger.info(
+                f"[QDRANT] Coleção de jurisprudência 'casos_historicos' criada (dims={size})"
+            )
+        else:
+            logger.info("[QDRANT] Coleção 'casos_historicos' já existe")
 
     def recreate_collection(self, vector_size: int = None) -> Dict[str, Any]:
         """
@@ -118,6 +132,7 @@ class QdrantService:
         inquerito_id: Optional[str] = None,
         tipo_documento: Optional[str] = None,
         score_threshold: Optional[float] = None,
+        collection_name: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Busca vetorial com filtros opcionais por metadados.
@@ -140,9 +155,10 @@ class QdrantService:
             )
 
         search_filter = Filter(must=filters) if filters else None
+        target_collection = collection_name or self.collection_name
 
         results = self.client.search(
-            collection_name=self.collection_name,
+            collection_name=target_collection,
             query_vector=query_vector,
             limit=limit,
             query_filter=search_filter,

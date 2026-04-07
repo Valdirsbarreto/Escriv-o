@@ -97,7 +97,7 @@ export const osintSugestao = async (inqueritoId: string) => {
 
 export const osintLote = async (
   inqueritoId: string,
-  itens: { pessoa_id: string; perfil: number | null }[]
+  itens: { pessoa_id: string; modulos: string[] }[]
 ) => {
   const response = await api.post(
     "/agentes/osint/lote",

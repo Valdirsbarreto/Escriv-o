@@ -127,7 +127,7 @@ Eventos/Cronologia:
             content = result["content"].strip()
             ficha_json = json.loads(content)
 
-            # Persistir resultado
+            # Persistir resultado técnico
             registro = ResultadoAgente(
                 inquerito_id=inquerito_id,
                 tipo_agente="ficha_pessoa",
@@ -136,9 +136,36 @@ Eventos/Cronologia:
                 modelo_llm=result.get("model"),
             )
             db.add(registro)
+
+            # Persistir como Documento Gerado visível para os Autos
+            from app.models.documento_gerado import DocumentoGerado
+            markdown_content = f"# Ficha de Inteligência: {ficha_json.get('nome', pessoa.nome)}\n\n"
+            markdown_content += f"**Risco / Nível:** {ficha_json.get('nivel_risco', ficha_json.get('risco', 'Desconhecido'))}\n\n"
+            markdown_content += f"## Resumo Executivo\n{ficha_json.get('perfil_resumido', ficha_json.get('resumo', ''))}\n\n"
+            
+            if ficha_json.get('pontos_de_atencao'):
+                markdown_content += "## Pontos de Atenção\n"
+                for ponto in ficha_json['pontos_de_atencao']:
+                    markdown_content += f"- {ponto}\n"
+                markdown_content += "\n"
+
+            if ficha_json.get('sugestoes_diligencias'):
+                markdown_content += "## Sugestões de Diligências\n"
+                for sug in ficha_json['sugestoes_diligencias']:
+                    markdown_content += f"- {sug}\n"
+                markdown_content += "\n"
+
+            doc_gerado = DocumentoGerado(
+                inquerito_id=inquerito_id,
+                titulo=f"Ficha OSINT: {pessoa.nome}",
+                tipo="relatorio",
+                conteudo=markdown_content
+            )
+            db.add(doc_gerado)
+            
             await db.commit()
 
-            logger.info(f"[AGENTE-FICHA] Ficha de pessoa {pessoa.nome} gerada.")
+            logger.info(f"[AGENTE-FICHA] Ficha de pessoa {pessoa.nome} gerada e salva nos autos.")
             return ficha_json
 
         except json.JSONDecodeError as e:
@@ -228,9 +255,36 @@ Endereços:
                 modelo_llm=result.get("model"),
             )
             db.add(registro)
+
+            # Persistir como Documento Gerado visível para os Autos
+            from app.models.documento_gerado import DocumentoGerado
+            markdown_content = f"# Ficha de Inteligência: {ficha_json.get('nome', empresa.nome)}\n\n"
+            markdown_content += f"**Risco / Nível:** {ficha_json.get('nivel_risco', ficha_json.get('risco', 'Desconhecido'))}\n\n"
+            markdown_content += f"## Resumo Executivo\n{ficha_json.get('perfil_resumido', ficha_json.get('resumo', ''))}\n\n"
+            
+            if ficha_json.get('pontos_de_atencao'):
+                markdown_content += "## Pontos de Atenção\n"
+                for ponto in ficha_json['pontos_de_atencao']:
+                    markdown_content += f"- {ponto}\n"
+                markdown_content += "\n"
+
+            if ficha_json.get('sugestoes_diligencias'):
+                markdown_content += "## Sugestões de Diligências\n"
+                for sug in ficha_json['sugestoes_diligencias']:
+                    markdown_content += f"- {sug}\n"
+                markdown_content += "\n"
+
+            doc_gerado = DocumentoGerado(
+                inquerito_id=inquerito_id,
+                titulo=f"Ficha OSINT: {empresa.nome}",
+                tipo="relatorio",
+                conteudo=markdown_content
+            )
+            db.add(doc_gerado)
+
             await db.commit()
 
-            logger.info(f"[AGENTE-FICHA] Ficha de empresa {empresa.nome} gerada.")
+            logger.info(f"[AGENTE-FICHA] Ficha de empresa {empresa.nome} gerada e salva nos autos.")
             return ficha_json
 
         except Exception as e:

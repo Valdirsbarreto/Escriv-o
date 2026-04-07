@@ -503,10 +503,33 @@ export default function InqueritoDetalhePage() {
     setReextrahindo(docId);
     try {
       await reextrairPecas(inqId, docId);
-      setTimeout(fetchPecasExtraidas, 5000);
+      
+      // A extração roda longo em background (celery: Gemini ~30s). 
+      // Faremos polling até as novas peças surgirem no banco.
+      let chamadas = 0;
+      const poll = setInterval(async () => {
+        chamadas++;
+        try {
+          const res = await api.get(`/inqueritos/${inqId}/pecas-extraidas`);
+          const pecas = res.data;
+          // Se a API retornar peças com este docId, a task concluiu
+          if (pecas.some((p: any) => p.documento_id === docId)) {
+            setPecasExtraidas(pecas);
+            clearInterval(poll);
+            setReextrahindo(null);
+          }
+        } catch { /* erro na chamada silencioso */ }
+        
+        // Timeout de ~90s (18 * 5s)
+        if (chamadas >= 18) {
+          clearInterval(poll);
+          setReextrahindo(null);
+          alert("A extração está demorando devido ao tamanho do arquivo. As peças aparecerão no painel assim que concluírem o processamento em nuvem.");
+        }
+      }, 5000);
+      
     } catch {
       alert("Erro ao acionar extração de peças.");
-    } finally {
       setReextrahindo(null);
     }
   };

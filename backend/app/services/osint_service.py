@@ -58,30 +58,14 @@ CUSTOS: Dict[str, Decimal] = {
     "consulta_veicular":       Decimal("0.72"),
     "processos_tj":            Decimal("2.00"),
     "processos_trf":           Decimal("2.00"),
+    "vinculo_empregaticio":    Decimal("3.10"),
+    "bpc":                     Decimal("1.50"),
 }
 
 CACHE_TTL_HORAS = 24
 
-# Perfis de profundidade OSINT — quais APIs são acionadas por nível
-_P1 = ["cadastro_pf_plus", "historico_veiculos_pf"]
-_P2 = [*_P1, "mandados_prisao", "pep", "obito"]
-_P3 = [*_P2, "aml", "ceis", "cnep"]
-_P4 = [*_P3, "processos_tj", "ofac", "lista_onu"]
-
-APIS_POR_PERFIL: Dict[int, List[str]] = {
-    1: _P1,
-    2: _P2,
-    3: _P3,
-    4: _P4,
-}
-
-# Custo estimado por perfil (soma dos custos das APIs incluídas)
-CUSTO_POR_PERFIL: Dict[int, Decimal] = {
-    1: Decimal("3.40"),   # cadastro_pf_plus + historico_veiculos
-    2: Decimal("5.68"),   # P1 + mandados + pep + obito
-    3: Decimal("7.76"),   # P2 + aml + ceis + cnep
-    4: Decimal("11.76"),  # P3 + processos_tj + ofac + lista_onu
-}
+# Perfis removidos, a nova arquitetura usa módulos granulares.
+# Os módulos disponiveis e custos base são tabelados no Enum interno, dinamicamente pelo lote.
 
 
 class OsintService:
@@ -277,37 +261,34 @@ class OsintService:
 
         return resultado
 
-    # ── Enriquecimento por Perfil (P1–P4) ─────────────────────────────────────
+    # ── Enriquecimento por Módulos (A la Carte) ───────────────────────────────
 
-    async def enriquecer_por_perfil(
+    async def enriquecer_modulos(
         self,
         db: AsyncSession,
         inquerito_id: uuid.UUID,
         pessoa_id: uuid.UUID,
-        perfil: int,
+        modulos: List[str],
     ) -> Dict[str, Any]:
         """
-        Enriquece uma Pessoa com o conjunto de APIs correspondente ao perfil:
-          P1 (1) — Localização: cadastro + veículos
-          P2 (2) — Triagem Criminal: P1 + mandados + PEP + óbito
-          P3 (3) — Investigação: P2 + AML + CEIS + CNEP
-          P4 (4) — Profundo: P3 + processos TJ + OFAC + ONU
-
-        Retorna dict com resultados de cada API + metadados do perfil.
+        Enriquece uma Pessoa cirurgicamente com o conjunto de módulos escolhidos pelo delegado.
+        Ex: ["cadastro_pf_plus", "vinculo_empregaticio", "bpc"]
         """
-        if perfil not in APIS_POR_PERFIL:
-            return {"erro": f"Perfil inválido: {perfil}. Use 1, 2, 3 ou 4."}
+        if not modulos:
+            return {"erro": "Nenhum módulo OSINT selecionado."}
 
         pessoa = await db.get(Pessoa, pessoa_id)
         if not pessoa or not pessoa.cpf:
             return {"erro": "CPF não disponível para consulta OSINT"}
 
         cpf = _limpar_documento(pessoa.cpf)
-        apis = APIS_POR_PERFIL[perfil]
+        
+        custo_parcial = sum((CUSTOS.get(m) or Decimal("0")) for m in modulos)
+        
         resultado: Dict[str, Any] = {
-            "perfil": perfil,
-            "custo_estimado": float(CUSTO_POR_PERFIL[perfil]),
-            "apis_executadas": apis,
+            "modulos": modulos,
+            "custo_estimado": float(custo_parcial),
+            "apis_executadas": modulos,
             "cpf": f"***{cpf[-4:]}",
             "nome_interno": pessoa.nome,
         }
@@ -325,9 +306,11 @@ class OsintService:
             "processos_tj":         ("processos_tj",       lambda: self.dd.processos_tj(cpf)),
             "ofac":                 ("ofac",               lambda: self.dd.ofac(pessoa.nome or "")),
             "lista_onu":            ("lista_onu",          lambda: self.dd.lista_onu(pessoa.nome or "")),
+            "vinculo_empregaticio": ("vinculo_empregaticio",lambda: self.dd.vinculo_empregaticio(cpf)),
+            "bpc":                  ("bpc",                lambda: self.dd.bpc(cpf)),
         }
 
-        for api_key in apis:
+        for api_key in modulos:
             if api_key not in api_map:
                 continue
             chave_resultado, fn = api_map[api_key]
@@ -341,32 +324,30 @@ class OsintService:
         self,
         db: AsyncSession,
         inquerito_id: uuid.UUID,
-        itens: List[Dict[str, Any]],  # [{pessoa_id, perfil}]
+        itens: List[Dict[str, Any]],  # [{pessoa_id, modulos: []}]
     ) -> List[Dict[str, Any]]:
         """
-        Executa enriquecimento em lote para múltiplas pessoas em paralelo.
-        Itens com perfil=None (Ignorar) são registrados mas não consultados.
-
-        Retorna lista de resultados na mesma ordem dos itens de entrada.
+        Executa enriquecimento em lote cirúrgico.
+        Itens vazios de modulos (ou None) são ignorados.
         """
         async def _processar(item: Dict[str, Any]) -> Dict[str, Any]:
             pessoa_id = item["pessoa_id"]
-            perfil = item.get("perfil")  # None = Ignorar
+            modulos = item.get("modulos", [])
 
-            if perfil is None:
+            if not modulos:
                 return {
                     "pessoa_id": str(pessoa_id),
-                    "perfil": None,
+                    "modulos": [],
                     "status": "ignorado",
                     "mensagem": "Delegado optou por não investigar este personagem.",
                 }
 
             try:
-                dados = await self.enriquecer_por_perfil(db, inquerito_id, pessoa_id, perfil)
-                return {"pessoa_id": str(pessoa_id), "perfil": perfil, "status": "concluido", "dados": dados}
+                dados = await self.enriquecer_modulos(db, inquerito_id, pessoa_id, modulos)
+                return {"pessoa_id": str(pessoa_id), "modulos": modulos, "status": "concluido", "dados": dados}
             except Exception as e:
-                logger.error(f"[OSINT lote] pessoa_id={pessoa_id} perfil={perfil} erro: {e}")
-                return {"pessoa_id": str(pessoa_id), "perfil": perfil, "status": "erro", "mensagem": str(e)[:200]}
+                logger.error(f"[OSINT lote] pessoa_id={pessoa_id} modulos={modulos} erro: {e}")
+                return {"pessoa_id": str(pessoa_id), "modulos": modulos, "status": "erro", "mensagem": str(e)[:200]}
 
         return await asyncio.gather(*[_processar(item) for item in itens])
 

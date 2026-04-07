@@ -165,25 +165,28 @@ def _gerar_justificativa(
 async def buscar_historico_pessoa(
     db: AsyncSession,
     cpf: str,
-    inquerito_id_atual: uuid.UUID,
+    inquerito_id_atual: Optional[uuid.UUID] = None,
 ) -> List[Dict[str, Any]]:
     """
     Busca em TODOS os inquéritos registros de Pessoa com o mesmo CPF,
-    excluindo o inquérito atual.
+    excluindo o inquérito atual (se fornecido).
     Normaliza CPF via regexp_replace (remove não-dígitos) antes de comparar.
     """
     cpf_digits = re.sub(r'\D', '', cpf)
     if not cpf_digits:
         return []
 
-    result = await db.execute(
-        select(Pessoa, Inquerito)
-        .join(Inquerito, Pessoa.inquerito_id == Inquerito.id)
-        .where(Pessoa.cpf.isnot(None))
+    stmt = select(Pessoa, Inquerito)\
+        .join(Inquerito, Pessoa.inquerito_id == Inquerito.id)\
+        .where(Pessoa.cpf.isnot(None))\
         .where(func.regexp_replace(Pessoa.cpf, r'\D', '', 'g') == cpf_digits)
-        .where(Pessoa.inquerito_id != inquerito_id_atual)
-        .order_by(Inquerito.created_at.desc())
-    )
+    
+    if inquerito_id_atual:
+        stmt = stmt.where(Pessoa.inquerito_id != inquerito_id_atual)
+        
+    stmt = stmt.order_by(Inquerito.created_at.desc())
+    
+    result = await db.execute(stmt)
     rows = result.all()
 
     return [
@@ -202,24 +205,27 @@ async def buscar_historico_pessoa(
 async def buscar_historico_empresa(
     db: AsyncSession,
     cnpj: str,
-    inquerito_id_atual: uuid.UUID,
+    inquerito_id_atual: Optional[uuid.UUID] = None,
 ) -> List[Dict[str, Any]]:
     """
     Busca em TODOS os inquéritos registros de Empresa com o mesmo CNPJ,
-    excluindo o inquérito atual.
+    excluindo o inquérito atual (se fornecido).
     """
     cnpj_digits = re.sub(r'\D', '', cnpj)
     if not cnpj_digits:
         return []
 
-    result = await db.execute(
-        select(Empresa, Inquerito)
-        .join(Inquerito, Empresa.inquerito_id == Inquerito.id)
-        .where(Empresa.cnpj.isnot(None))
+    stmt = select(Empresa, Inquerito)\
+        .join(Inquerito, Empresa.inquerito_id == Inquerito.id)\
+        .where(Empresa.cnpj.isnot(None))\
         .where(func.regexp_replace(Empresa.cnpj, r'\D', '', 'g') == cnpj_digits)
-        .where(Empresa.inquerito_id != inquerito_id_atual)
-        .order_by(Inquerito.created_at.desc())
-    )
+        
+    if inquerito_id_atual:
+        stmt = stmt.where(Empresa.inquerito_id != inquerito_id_atual)
+        
+    stmt = stmt.order_by(Inquerito.created_at.desc())
+    
+    result = await db.execute(stmt)
     rows = result.all()
 
     return [

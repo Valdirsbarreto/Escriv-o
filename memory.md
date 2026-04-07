@@ -80,6 +80,8 @@ Commits: `cff2c44`, `df09856`, `6995094`, `5b4c67e`, `dd8b7fe`, `dd8e9a9`, `d043
 - **Criado o Documento**: `Documentos/arquitetura_agentes_llm.md` detalhando a infraestrutura completa de LLMs e Tarefas.
 - **Fix Crítico do Deploy Railway**: Remover o `alembic upgrade head` do processo de start no container; a demora de timeout do banco de dados excedia a janela de saúde de 100s, fazendo a Railway matar a imagem. Foi repassado apenas `celery` em background e `exec uvicorn` como PID 1.
 - **Correção de números TEMP**: Criado script `backend/scripts/fix_temp_numbers.py` para registros legados.
+- **Estabilização do Celery + DB (05/04/2026)**: Resolvido erro de "Event loop is closed" rodando _registrar_consumo via `await` na thread principal do worker, e corrigido um Unbound Local / Float division por NoneType causado quando a SDK v1 reporta Tokens `None`.
+- **Debugging de Embeddings (05/04/2026)**: Encaramos o erro "404 NOT_FOUND: models/text-embedding-004 is not found for API version v1 / v1beta" usando a SDK 1.0 do Google. O erro ocorria porque estávamos forçando silenciosamente o endpoint (através de `HttpOptions(api_version='v1')`). A reversão consistiu em remover a flag explícita, delegando à SDK o roteamento nativo da requisição para `/embedContent` no endpoint correto para `text-embedding-004`.
 
 ---
 

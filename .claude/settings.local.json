@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m alembic upgrade head)",
+      "Bash(npx tsc:*)",
+      "Bash(find c:UsersMasterOneDriveCasaIAEscrivão -name *.py -type f -path */alembic/*)",
+      "Bash(where python:*)",
+      "Bash(pip --version)",
+      "Bash(where python3:*)",
+      "Read(//c/Users/Master/AppData/Local/Programs/Python/**)"
+    ]
+  }
+}

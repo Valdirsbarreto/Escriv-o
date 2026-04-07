@@ -296,11 +296,23 @@ class CopilotoService:
             contexto_rag=contexto_rag,
         )
 
+        # ── Injetar instrução de ferramenta (OSINT Tool) ─────────
+        tool_instruction = (
+            "FERRAMENTA OSINT DISPONÍVEL:\n"
+            "Se o Delegado solicitar buscar uma placa, CPF, CNPJ, capivara ou investigar dados que "
+            "NÃO CONSTAM nos autos/contexto acima, você PODE usar inteligência externa DirectData.\n"
+            "Para isso, sua resposta deve ser EXCLUSIVAMENTE uma tag XML <OSINT_CALL> contendo JSON "
+            "com os atributos de busca (cpf, cnpj, placa, ou nome).\n"
+            "Exemplo: <OSINT_CALL>{\"cpf\": \"123.456.789-00\"}</OSINT_CALL> ou <OSINT_CALL>{\"placa\": \"ABC1234\"}</OSINT_CALL>\n"
+            "Se você usar a tag, o sistema vai interromper, buscar os dados e devolver para você analisar na próxima rodada.\n"
+            "IMPORTANTE: Se você usar a tag, não escreva mais NADA além dela!"
+        )
+        system_prompt += f"\n\n{tool_instruction}"
+        
         messages = [{"role": "system", "content": system_prompt}]
 
         # Incluir histórico (últimas N mensagens para caber no contexto)
         if historico:
-            # Limitar a últimas 10 trocas para não estourar contexto
             ultimas = historico[-20:]
             messages.extend(ultimas)
 
@@ -318,9 +330,10 @@ class CopilotoService:
 
         messages.append({"role": "user", "content": user_content})
 
-        # ── 4. Chamar LLM ────────────────────────────────
+        # ── 4. Chamar LLM (Loop Agentico) ────────────────────────────────
         logger.info("[COPILOTO] Enviando para LLM (premium)")
-
+        
+        resultado_osint_texto = ""
         try:
             llm_result = await self.llm_service.chat_completion(
                 messages=messages,
@@ -329,12 +342,50 @@ class CopilotoService:
                 max_tokens=3000,
                 agente="Copiloto",
             )
+            resposta = llm_result["content"]
+            
+            # Loop de Tool Calling (OSINT)
+            import re, json
+            if "<OSINT_CALL>" in resposta:
+                match = re.search(r"<OSINT_CALL>(.*?)</OSINT_CALL>", resposta, re.DOTALL)
+                if match:
+                    try:
+                        args = json.loads(match.group(1).strip())
+                        logger.info(f"[COPILOTO] Acionando Ferramenta OSINT com: {args}")
+                        from app.services.osint_service import OsintService
+                        osrm = OsintService()
+                        res_osint = await osrm.consulta_avulsa(**args)
+                        resultado_osint_texto = json.dumps(res_osint, ensure_ascii=False, indent=2)
+                        
+                        # Realimentar o LLM com os dados externos
+                        messages.append({"role": "model", "content": resposta})
+                        messages.append({
+                            "role": "user", 
+                            "content": f"[RETORNO DA FERRAMENTA OSINT]\n{resultado_osint_texto[:15000]}\n[FIM DO RETORNO]\n"
+                                       f"Analise os dados acima e responda de forma elegante ao Delegado."
+                        })
+                        
+                        logger.info("[COPILOTO] Enviando resultado OSINT de volta para o LLM")
+                        llm_result2 = await self.llm_service.chat_completion(
+                            messages=messages,
+                            tier="premium",
+                            temperature=0.4,
+                            max_tokens=3000,
+                            agente="Copiloto",
+                        )
+                        resposta = llm_result2["content"]
+                        llm_result["tokens_prompt"] += llm_result2["tokens_prompt"]
+                        llm_result["tokens_resposta"] += llm_result2["tokens_resposta"]
+                        llm_result["custo_estimado"] += llm_result2["custo_estimado"]
+                    except Exception as json_e:
+                        logger.error(f"[COPILOTO] Erro ao parsear Tool OSINT: {json_e}")
+                        
         except Exception as e:
             logger.error(f"[COPILOTO] LLM indisponível: {e}")
             return {
                 "resposta": (
                     "⚠️ O serviço de LLM está temporariamente indisponível. "
-                    "Por favor, verifique as configurações de API em .env e tente novamente.\n\n"
+                    "Por favor, verifique as configurações em .env e tente novamente.\n\n"
                     f"Erro: {str(e)[:200]}"
                 ),
                 "fontes": fontes,
@@ -345,8 +396,6 @@ class CopilotoService:
                 "custo_estimado": 0.0,
                 "tempo_total_ms": int((time.time() - t_total) * 1000),
             }
-
-        resposta = llm_result["content"]
 
         # ── 5. Auditoria factual (opcional) ───────────────
         auditoria = None

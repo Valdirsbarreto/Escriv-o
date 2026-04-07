@@ -110,6 +110,14 @@ class DirectDataService:
         """Histórico de veículos vinculados ao CPF."""
         return await self._get("/api/HistoricoVeiculos", {"CPF": _limpar_documento(cpf)})
 
+    async def vinculo_empregaticio(self, cpf: str) -> Dict[str, Any]:
+        """Busca o Vínculo Empregatício formal da pessoa."""
+        return await self._get("/api/VinculoEmpregaticio", {"CPF": _limpar_documento(cpf)})
+
+    async def bpc(self, cpf: str) -> Dict[str, Any]:
+        """Busca Benefício de Prestação Continuada (BPC)."""
+        return await self._get("/api/BeneficioDePrestacaoContinuada", {"CPF": _limpar_documento(cpf)})
+
     # ── Pessoa Jurídica ───────────────────────────────────────────────────────
 
     async def receita_federal_pj(self, cnpj: str) -> Dict[str, Any]:

@@ -1,0 +1,114 @@
+﻿git : remote: error: 
+GH013: Repository rule 
+violations found for 
+refs/heads/main.        
+No linha:1 caractere:1
++ git push https://ghp_V9qK
+pgbIIzne4llWFDcVxd64XSizn11
+mG9GR@github.com/ ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (rem  
+  ote: error: ...s/main.   
+         :String) [], R    
+emoteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
+remote: 
+remote: - GITHUB PUSH 
+PROTECTION        
+remote:   ÔÇöÔÇöÔÇöÔÇöÔÇöÔÇ
+öÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇ
+öÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇ
+öÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇ
+öÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇö  
+      
+remote:     Resolve the 
+following violations 
+before pushing again       
+ 
+remote: 
+remote:     - Push cannot 
+contain secrets        
+remote: 
+remote:             
+remote:      (?) Learn how 
+to resolve a blocked push  
+      
+remote:      https://docs.g
+ithub.com/code-security/sec
+ret-scanning/working-with-s
+ecret-scanning-and-push-pro
+tection/working-with-push-p
+rotection-from-the-command-
+line#resolving-a-blocked-pu
+sh        
+remote:             
+remote:             
+remote:       ÔÇöÔÇö 
+Google OAuth Client ID ÔÇöÔ
+ÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔ
+ÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔ
+ÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇö 
+       
+remote:        locations:  
+      
+remote:          - commit: 
+3784a4bccc8a15e0a6fc21e20ea
+341e3b20c8035        
+remote:            path: ba
+ckend/scripts/credentials.j
+son:1        
+remote:             
+remote:        (?) To 
+push, remove secret from 
+commit(s) or follow this 
+URL to allow the secret.   
+     
+remote:        https://gith
+ub.com/Valdirsbarreto/Escri
+v-o/security/secret-scannin
+g/unblock-secret/3Bu13holHf
+BQDfppO4K5IAiPZ8Y        
+remote:             
+remote:             
+remote:       ÔÇöÔÇö 
+Google OAuth Client Secret 
+ÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇö
+ÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇöÔÇö
+ÔÇöÔÇöÔÇöÔÇöÔÇöÔÇö        
+remote:        locations:  
+      
+remote:          - commit: 
+3784a4bccc8a15e0a6fc21e20ea
+341e3b20c8035        
+remote:            path: ba
+ckend/scripts/credentials.j
+son:1        
+remote:             
+remote:        (?) To 
+push, remove secret from 
+commit(s) or follow this 
+URL to allow the secret.   
+     
+remote:        https://gith
+ub.com/Valdirsbarreto/Escri
+v-o/security/secret-scannin
+g/unblock-secret/3Bu13jD3GI
+8MLNhvReslW665lH7        
+remote:             
+remote: 
+remote: 
+To https://github.com/Valdi
+rsbarreto/Escriv-o.git
+ ! [remote rejected] main 
+-> main (push declined due 
+to repository rule 
+violations)
+error: failed to push some 
+refs to 'https://github.com
+/Valdirsbarreto/Escriv-o.gi
+t'

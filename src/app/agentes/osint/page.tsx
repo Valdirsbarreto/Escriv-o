@@ -58,12 +58,27 @@ interface PersonagemAnalise {
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-const PERFIL_META: Record<number | "null", { label: string; cor: string; emoji: string; custo: number }> = {
-  "null": { label: "Ignorar",        cor: "text-zinc-500",   emoji: "🚫", custo: 0     },
-  1:      { label: "P1 Localização", cor: "text-green-400",  emoji: "🟢", custo: 3.40  },
-  2:      { label: "P2 Triagem",     cor: "text-blue-400",   emoji: "🔵", custo: 5.68  },
-  3:      { label: "P3 Investigação",cor: "text-yellow-400", emoji: "🟡", custo: 7.76  },
-  4:      { label: "P4 Profundo",    cor: "text-red-400",    emoji: "🔴", custo: 11.76 },
+const OSINT_MODULOS = [
+  { id: "cadastro_pf_plus", label: "Cadastro Plus (Foco Ctt/Wpp)", custo: 2.50, color: "text-green-400" },
+  { id: "vinculo_empregaticio", label: "Vínculo CLT / RH", custo: 3.10, color: "text-green-400" },
+  { id: "historico_veiculos_pf", label: "Histórico Veicular", custo: 0.90, color: "text-lime-400" },
+  { id: "bpc", label: "Benefícios BPC", custo: 1.50, color: "text-blue-400" },
+  { id: "mandados_prisao", label: "Mandados de Prisão", custo: 1.20, color: "text-red-400" },
+  { id: "pep", label: "Pessoa Exposta (PEP)", custo: 0.72, color: "text-yellow-400" },
+  { id: "aml", label: "AML / Lavagem + PEP + Sócios", custo: 0.72, color: "text-orange-400" },
+  { id: "ceis", label: "CEIS (Inidôneas)", custo: 0.36, color: "text-orange-400" },
+  { id: "cnep", label: "CNEP (Punidas)", custo: 0.36, color: "text-orange-400" },
+  { id: "processos_tj", label: "Processos TJ (Civil/Crim)", custo: 2.00, color: "text-red-400" },
+  { id: "ofac", label: "Lista OFAC", custo: 0.36, color: "text-red-400" },
+  { id: "lista_onu", label: "Lista ONU", custo: 0.36, color: "text-red-400" },
+];
+
+const initSugestao = (perfil: number): string[] => {
+  if (perfil === 1) return ["cadastro_pf_plus", "historico_veiculos_pf"];
+  if (perfil === 2) return ["cadastro_pf_plus", "historico_veiculos_pf", "mandados_prisao", "pep"];
+  if (perfil === 3) return ["cadastro_pf_plus", "historico_veiculos_pf", "mandados_prisao", "aml", "ceis"];
+  if (perfil === 4) return ["cadastro_pf_plus", "vinculo_empregaticio", "historico_veiculos_pf", "mandados_prisao", "aml", "processos_tj"];
+  return [];
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -128,6 +143,23 @@ function ResultadoAvulso({ dados }: { dados: any }) {
           <Badge key={f.fonte} variant="outline" className="text-xs border-red-700/40 text-red-400 bg-red-500/5">{f.fonte}</Badge>
         ))}
       </div>
+      
+      {dados.historico_inqueritos && dados.historico_inqueritos.length > 0 && (
+        <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4 flex gap-3 text-orange-400">
+          <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-semibold mb-1">ALERTA DE CRUZAMENTO</p>
+            <p className="mb-2">Este alvo já figura em outros Inquéritos sob sua custódia:</p>
+            <ul className="list-disc ml-4 space-y-1 text-xs">
+              {dados.historico_inqueritos.map((h: any, i: number) => (
+                <li key={i}>
+                  IP {h.numero} <span className="text-orange-500/70">({h.tipo_pessoa || h.tipo_empresa})</span> — {h.descricao}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
       {cadastro && (
         <SecaoResultado titulo="Qualificação" icone={User}>
           <div className="space-y-1 text-sm text-zinc-200">
@@ -343,8 +375,8 @@ function PainelPersonagens({ inqueritoId }: { inqueritoId: string }) {
   const [carregando, setCarregando] = useState(false);
   const [erroAnalise, setErroAnalise] = useState<string | null>(null);
 
-  // Perfil selecionado por pessoa: pessoa_id → PerfilOpt
-  const [perfis, setPerfis] = useState<Record<string, PerfilOpt>>({});
+  // Módulos selecionados por pessoa: pessoa_id → string[]
+  const [modulos, setModulos] = useState<Record<string, string[]>>({});
   // Justificativa expandida por pessoa
   const [expandidos, setExpandidos] = useState<Record<string, boolean>>({});
 
@@ -355,16 +387,18 @@ function PainelPersonagens({ inqueritoId }: { inqueritoId: string }) {
   const [erroExec, setErroExec] = useState<string | null>(null);
 
   useEffect(() => {
-    setAnalise(null); setErroAnalise(null); setResultados({}); setPerfis({});
+    setAnalise(null); setErroAnalise(null); setResultados({}); setModulos({});
     setCarregando(true);
     osintSugestao(inqueritoId)
       .then(res => {
         const a = res.analise;
         setAnalise(a);
-        // Inicializar perfis com sugestão do Copiloto
-        const init: Record<string, PerfilOpt> = {};
-        (a.personagens || []).forEach((p: PersonagemAnalise) => { init[p.pessoa_id] = p.perfil_sugerido as PerfilOpt; });
-        setPerfis(init);
+        // Inicializar modulos com base na sugestão Copiloto
+        const init: Record<string, string[]> = {};
+        (a.personagens || []).forEach((p: PersonagemAnalise) => {
+          init[p.pessoa_id] = initSugestao(p.perfil_sugerido);
+        });
+        setModulos(init);
       })
       .catch(e => setErroAnalise(e?.response?.data?.detail || "Erro ao analisar personagens."))
       .finally(() => setCarregando(false));
@@ -372,24 +406,30 @@ function PainelPersonagens({ inqueritoId }: { inqueritoId: string }) {
 
   const personagens: PersonagemAnalise[] = analise?.personagens || [];
   const custoTotal = personagens.reduce((acc, p) => {
-    const perf = perfis[p.pessoa_id];
-    return acc + (perf !== null && perf !== undefined ? (PERFIL_META[perf]?.custo || 0) : 0);
+    const mods = modulos[p.pessoa_id] || [];
+    const custo_local = mods.reduce((sum, m) => sum + (OSINT_MODULOS.find(x => x.id === m)?.custo || 0), 0);
+    return acc + custo_local;
   }, 0);
 
   const toggleExpand = (id: string) => setExpandidos(e => ({ ...e, [id]: !e[id] }));
 
-  const setPerfil = (pessoaId: string, val: string) => {
-    const perf: PerfilOpt = val === "null" ? null : (parseInt(val) as PerfilOpt);
-    setPerfis(p => ({ ...p, [pessoaId]: perf }));
+  const toggleModulo = (pessoaId: string, moduloId: string) => {
+    setModulos(prev => {
+      const atuais = prev[pessoaId] || [];
+      if (atuais.includes(moduloId)) {
+        return { ...prev, [pessoaId]: atuais.filter(m => m !== moduloId) };
+      }
+      return { ...prev, [pessoaId]: [...atuais, moduloId] };
+    });
   };
 
-  const itensAtivos = personagens.filter(p => perfis[p.pessoa_id] !== null && perfis[p.pessoa_id] !== undefined);
+  const itensAtivos = personagens.filter(p => (modulos[p.pessoa_id] || []).length > 0);
 
   const handleExecutar = async () => {
     setConfirmOpen(false);
     setExecutando(true); setErroExec(null);
     try {
-      const itens = personagens.map(p => ({ pessoa_id: p.pessoa_id, perfil: perfis[p.pessoa_id] ?? null }));
+      const itens = personagens.map(p => ({ pessoa_id: p.pessoa_id, modulos: modulos[p.pessoa_id] || [] }));
       const res = await osintLote(inqueritoId, itens);
       const mapa: Record<string, any> = {};
       (res.resultados || []).forEach((r: any) => { mapa[r.pessoa_id] = r; });
@@ -449,9 +489,8 @@ function PainelPersonagens({ inqueritoId }: { inqueritoId: string }) {
           </TableHeader>
           <TableBody>
             {personagens.map((p) => {
-              const perf = perfis[p.pessoa_id];
-              const meta = PERFIL_META[perf ?? "null"];
-              const custo = perf !== null && perf !== undefined ? meta.custo : 0;
+              const mods = modulos[p.pessoa_id] || [];
+              const custo = mods.reduce((sum, m) => sum + (OSINT_MODULOS.find(x => x.id === m)?.custo || 0), 0);
               const resultado = resultados[p.pessoa_id];
               const expandido = expandidos[p.pessoa_id];
 
@@ -504,22 +543,26 @@ function PainelPersonagens({ inqueritoId }: { inqueritoId: string }) {
                       )}
                     </TableCell>
 
-                    {/* Dropdown perfil */}
+                    {/* Módulos checkboxes inline */}
                     <TableCell>
-                      <select
-                        value={perf === null || perf === undefined ? "null" : String(perf)}
-                        onChange={e => setPerfil(p.pessoa_id, e.target.value)}
-                        className={`bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-xs cursor-pointer focus:outline-none focus:border-zinc-500 ${meta.cor}`}
-                      >
-                        <option value="null">🚫 Ignorar</option>
-                        <option value="1" className="text-green-400">🟢 P1 Localização</option>
-                        <option value="2" className="text-blue-400">🔵 P2 Triagem</option>
-                        <option value="3" className="text-yellow-400">🟡 P3 Investigação</option>
-                        <option value="4" className="text-red-400">🔴 P4 Profundo</option>
-                      </select>
-                      {perf === p.perfil_sugerido && (
-                        <p className="text-[10px] text-zinc-600 mt-0.5">✦ sugestão Copiloto</p>
-                      )}
+                      <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
+                        {OSINT_MODULOS.map(mod => {
+                          const isChecked = (modulos[p.pessoa_id] || []).includes(mod.id);
+                          return (
+                            <label key={mod.id} className="flex items-center gap-2 cursor-pointer group">
+                              <input 
+                                type="checkbox" 
+                                checked={isChecked}
+                                onChange={() => toggleModulo(p.pessoa_id, mod.id)}
+                                className="w-3 h-3 cursor-pointer accent-blue-500 bg-zinc-900 border-zinc-700 rounded-sm"
+                              />
+                              <span className={`text-[10px] truncate w-36 ${isChecked ? mod.color : 'text-zinc-500'} group-hover:text-zinc-300`}>
+                                {mod.label}
+                              </span>
+                            </label>
+                          )
+                        })}
+                      </div>
                     </TableCell>
 
                     {/* Custo */}
@@ -615,12 +658,16 @@ function PainelPersonagens({ inqueritoId }: { inqueritoId: string }) {
               <div className="space-y-4 mt-2">
                 <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 space-y-2">
                   {itensAtivos.map(p => {
-                    const perf = perfis[p.pessoa_id];
-                    const meta = PERFIL_META[perf ?? "null"];
+                    const mods = modulos[p.pessoa_id] || [];
                     return (
-                      <div key={p.pessoa_id} className="flex items-center justify-between text-sm">
-                        <span className="text-zinc-300">{p.nome}</span>
-                        <span className={`text-xs ${meta.cor}`}>{meta.emoji} {meta.label}</span>
+                      <div key={p.pessoa_id} className="flex flex-col text-sm border-b border-zinc-800 pb-2">
+                        <span className="text-zinc-300 font-medium">{p.nome}</span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {mods.map(mID => {
+                            const mm = OSINT_MODULOS.find(x => x.id === mID);
+                            return mm ? <span key={mID} className={`text-[10px] px-1.5 py-0.5 bg-zinc-950 border border-zinc-800 rounded ${mm.color}`}>{mm.label}</span> : null;
+                          })}
+                        </div>
                       </div>
                     );
                   })}

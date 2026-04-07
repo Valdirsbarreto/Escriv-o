@@ -191,6 +191,18 @@ async def osint_consulta_avulsa(
             nome=nome, data_nascimento=data_nascimento,
             rg=rg, uf=uf,
         )
+        
+        # Cruzamento: Verifica se esse CPF ou CNPJ já está fichado no banco local!
+        from app.services.copiloto_osint_service import buscar_historico_pessoa, buscar_historico_empresa
+        
+        historico = []
+        if cpf:
+            historico = await buscar_historico_pessoa(db, cpf, None)
+        elif cnpj:
+            historico = await buscar_historico_empresa(db, cnpj, None)
+            
+        dados["historico_inqueritos"] = historico
+        
         return {"status": "concluido", "dados": dados}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro na consulta avulsa: {str(e)[:200]}")
@@ -198,7 +210,7 @@ async def osint_consulta_avulsa(
 
 class OsintLoteItem(BaseModel):
     pessoa_id: uuid.UUID
-    perfil: Optional[int] = None  # None = Ignorar; 1-4 = profundidade
+    modulos: List[str] = []  # Lista de apis a rodar, vazia = ignorar
 
 
 class OsintLoteRequest(BaseModel):
@@ -208,7 +220,7 @@ class OsintLoteRequest(BaseModel):
 
 @router.post(
     "/osint/lote",
-    summary="Enriquecimento OSINT em lote por perfil de profundidade",
+    summary="Enriquecimento OSINT em lote por módulos customizados",
 )
 async def osint_lote(
     body: OsintLoteRequest,
@@ -217,19 +229,16 @@ async def osint_lote(
     """
     Executa enriquecimento OSINT para múltiplas pessoas em paralelo.
 
-    Cada item define `pessoa_id` e `perfil`:
-    - `null` → Ignorar (registra decisão, sem consulta)
-    - `1` → P1 Localização (cadastro + veículos) ~R$ 3,40
-    - `2` → P2 Triagem Criminal (P1 + mandados + PEP + óbito) ~R$ 5,68
-    - `3` → P3 Investigação (P2 + AML + CEIS + CNEP) ~R$ 7,76
-    - `4` → P4 Profundo (P3 + processos TJ + OFAC + ONU) ~R$ 11,76
+    Cada item define `pessoa_id` e `modulos`:
+    - `[]` → Ignorar (registra decisão, sem consulta)
+    - `["cadastro_pf_plus", "vinculo_empregaticio", ...]` → Executa cirurgicamente os módulos pagos
     """
     if not body.itens:
         raise HTTPException(status_code=422, detail="Lista de itens não pode ser vazia.")
 
     osint = OsintService()
     try:
-        itens = [{"pessoa_id": item.pessoa_id, "perfil": item.perfil} for item in body.itens]
+        itens = [{"pessoa_id": item.pessoa_id, "modulos": item.modulos} for item in body.itens]
         resultados = await osint.enriquecer_lote(db, body.inquerito_id, itens)
 
         custo_total = sum(
