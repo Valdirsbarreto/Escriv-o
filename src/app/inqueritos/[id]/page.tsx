@@ -2,7 +2,10 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useAppStore } from "@/store/app";
+
+const PDFViewer = dynamic(() => import("@/components/PDFViewer"), { ssr: false });
 import { api, getDocsGerados, getDocGerado, deleteDocGerado, getPecasExtraidas, getPecaExtraida, reextrairPecas } from "@/lib/api";
 import { deleteInquerito } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -211,7 +214,7 @@ export default function InqueritoDetalhePage() {
   const params = useParams();
   const router = useRouter();
   const inqId = params.id as string;
-  const { setInqueritoAtivoId, setCopilotoOpen, docsGeradosVersion, setSidebarCollapsed } = useAppStore();
+  const { setInqueritoAtivoId, setCopilotoOpen, docsGeradosVersion, setSidebarCollapsed, pdfViewer, setPdfViewer, closePdfViewer, pecaParaAbrir, setPecaParaAbrir } = useAppStore();
   const [activeTab, setActiveTab] = useState<"workspace" | "autos">("workspace");
 
   const [inquerito, setInq] = useState<any>(null);
@@ -499,6 +502,35 @@ export default function InqueritoDetalhePage() {
       setPecaViewer(prev => ({ ...prev, loading: false }));
     }
   };
+
+  // Abre o PDF original na página da peça
+  const handleAbrirPecaNoPDF = async (peca: any) => {
+    if (!peca.documento_id) { handleAbrirPeca(peca); return; }
+    setPdfViewer({ url: null, page: peca.pagina_inicial ?? 1, titulo: peca.titulo, docId: peca.documento_id });
+    try {
+      const res = await api.get(`/inqueritos/${inqId}/documentos/${peca.documento_id}/conteudo`);
+      const { download_url } = res.data;
+      if (!download_url) { closePdfViewer(); handleAbrirPeca(peca); return; }
+      setPdfViewer({ url: download_url, page: peca.pagina_inicial ?? 1, titulo: peca.titulo, docId: peca.documento_id });
+    } catch {
+      closePdfViewer();
+      handleAbrirPeca(peca);
+    }
+  };
+
+  // Reage ao comando <ABRIR_PECA> emitido pelo copiloto
+  useEffect(() => {
+    if (!pecaParaAbrir) return;
+    const peca = pecasExtraidas.find((p: any) => p.id === pecaParaAbrir.pecaId);
+    if (peca) {
+      handleAbrirPecaNoPDF(peca);
+    } else {
+      getPecaExtraida(inqId, pecaParaAbrir.pecaId)
+        .then(res => handleAbrirPecaNoPDF(res.data))
+        .catch(() => {});
+    }
+    setPecaParaAbrir(null);
+  }, [pecaParaAbrir]);
 
   const handleReextrairPecas = async (docId: string) => {
     setReextrahindo(docId);
@@ -837,10 +869,18 @@ export default function InqueritoDetalhePage() {
                         {TIPO_PECA_LABEL[peca.tipo] || peca.tipo}
                       </span>
                       <button
-                        onClick={() => handleAbrirPeca(peca)}
+                        onClick={() => handleAbrirPecaNoPDF(peca)}
+                        title="Abrir no PDF original"
                         className="flex items-center gap-1 text-xs text-zinc-400 hover:text-blue-400 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors"
                       >
-                        <Eye size={11} /> Ver
+                        <Eye size={11} /> PDF
+                      </button>
+                      <button
+                        onClick={() => handleAbrirPeca(peca)}
+                        title="Ver texto extraído"
+                        className="flex items-center gap-1 text-xs text-zinc-500 hover:text-amber-400 px-2 py-1 rounded border border-zinc-700 hover:border-amber-500/40 transition-colors"
+                      >
+                        <FileText size={11} /> Texto
                       </button>
                     </div>
                   </div>
@@ -1305,6 +1345,24 @@ export default function InqueritoDetalhePage() {
       )}
 
       {/* Modal de visualização de documento */}
+      {/* PDF Viewer — abre PDF na página da peça */}
+      {pdfViewer.open && pdfViewer.url && (
+        <PDFViewer
+          url={pdfViewer.url}
+          initialPage={pdfViewer.page}
+          titulo={pdfViewer.titulo}
+          onClose={closePdfViewer}
+        />
+      )}
+      {pdfViewer.open && !pdfViewer.url && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 backdrop-blur-sm">
+          <div className="flex items-center gap-3 text-zinc-400 bg-zinc-900 border border-zinc-700 rounded-xl px-6 py-4">
+            <Loader2 size={20} className="animate-spin text-blue-400" />
+            <span className="text-sm">Carregando PDF...</span>
+          </div>
+        </div>
+      )}
+
       {docViewer.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setDocViewer(v => ({ ...v, open: false }))}>
           <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl mx-4" onClick={e => e.stopPropagation()}>

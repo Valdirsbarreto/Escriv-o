@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Send, Bot, User, Save, Paperclip, X, FileText, Image, RefreshCw } from "lucide-react";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { agentChat, setAgentInquerito, clearAgentContext, createDocGerado, updateDocGerado, getDocsGerados } from "@/lib/api";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -40,6 +40,15 @@ function detectarTitulo(text: string): string {
   return stripped.slice(0, 80);
 }
 
+function detectarAbrirPeca(text: string): string | null {
+  const match = text.match(/<ABRIR_PECA\s+peca_id="([^"]+)"\s*\/?>/i);
+  return match ? match[1] : null;
+}
+
+function removerTagsXML(text: string): string {
+  return text.replace(/<ABRIR_PECA\s+peca_id="[^"]+"\s*\/?>/gi, '').trim();
+}
+
 function pediriaDocumento(texto: string): boolean {
   const lower = texto.toLowerCase();
   const verbos = ["crie", "cria", "gere", "gera", "escreva", "escreve", "elabore", "elabora", "redija", "redigir", "faça", "faz", "monte"];
@@ -60,7 +69,7 @@ function AgentBotMessage({ html }: { html: string }) {
 // ── Componente principal ───────────────────────────────────────────────────────
 
 export function CopilotoDrawer() {
-  const { isCopilotoOpen, setCopilotoOpen, inqueritoAtivoId, bumpDocsGerados } = useAppStore();
+  const { isCopilotoOpen, setCopilotoOpen, inqueritoAtivoId, bumpDocsGerados, setPecaParaAbrir } = useAppStore();
 
   const [sessionId] = useState<string>(() => getOrCreateSessionId());
   const [messages, setMessages] = useState<{ role: "user" | "bot"; text: string }[]>([
@@ -112,7 +121,11 @@ export function CopilotoDrawer() {
       const botText = data.resposta;
       const newIndex = messages.length + 1;
 
-      setMessages(prev => [...prev, { role: "bot", text: botText }]);
+      // Detecta e executa comando <ABRIR_PECA peca_id="uuid"/>
+      const pecaId = detectarAbrirPeca(botText);
+      if (pecaId) setPecaParaAbrir({ pecaId, ts: Date.now() });
+
+      setMessages(prev => [...prev, { role: "bot", text: removerTagsXML(botText) }]);
 
       // Auto-salva se o usuário pediu para criar um documento
       if (inqueritoAtivoId && pediriaDocumento(userText) && botText.length > 300) {

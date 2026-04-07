@@ -45,7 +45,10 @@ Responda em português informal, direto e eficiente — como um assistente de co
 Ao receber um número de IP, sempre use o inquerito_atual do contexto se o usuário não informar um novo.
 Quando o usuário pedir algo sobre "ele", "ela", "esse cara", "o endereço", "mais dados" sem especificar quem,
 use o último_alvo do contexto (CPF ou nome da última pesquisa).
-Se faltar alguma informação para executar uma ação, pergunte de forma concisa e aguarde a resposta."""
+Se faltar alguma informação para executar uma ação, pergunte de forma concisa e aguarde a resposta.
+
+## Abertura de Peças no PDF
+Quando o usuário pedir para ABRIR, VER, MOSTRAR ou EXIBIR uma peça específica dos autos (ex: "abre o termo do João", "mostra o laudo", "exibe essa peça"), use a ferramenta abrir_peca_no_pdf com o UUID da peça encontrada via busca_autos. NUNCA invente UUIDs."""
 
 
 # ── Tool declarations (lazy) ───────────────────────────────────────────────────
@@ -211,6 +214,22 @@ def _get_fc_tools():
             name="ajuda",
             description="Exibe a lista de comandos e capacidades disponíveis.",
             parameters=_gt.Schema(type=_gt.Type.OBJECT, properties={}),
+        ),
+        _gt.FunctionDeclaration(
+            name="abrir_peca_no_pdf",
+            description=(
+                "Abre uma peça específica no visualizador de PDF da interface, na página correta. "
+                "Use quando o usuário pedir para ver/abrir/exibir uma peça dos autos. "
+                "Primeiro use busca_autos para encontrar a peça e obter seu peca_id."
+            ),
+            parameters=_gt.Schema(
+                type=_gt.Type.OBJECT,
+                properties={
+                    "peca_id": _gt.Schema(type=_gt.Type.STRING, description="UUID da peça extraída (campo id da tabela pecas_extraidas)"),
+                    "mensagem": _gt.Schema(type=_gt.Type.STRING, description="Mensagem confirmando ao usuário o que está abrindo"),
+                },
+                required=["peca_id", "mensagem"],
+            ),
         ),
     ])
     return _FC_TOOLS
@@ -384,6 +403,12 @@ class TelegramCopilotoService:
 
             elif fc_name == "ajuda":
                 resposta = _mensagem_ajuda()
+
+            elif fc_name == "abrir_peca_no_pdf":
+                peca_id = fc_args.get("peca_id", "")
+                mensagem_confirmacao = fc_args.get("mensagem", "Abrindo peça no visualizador...")
+                # Emite tag XML que o frontend detecta para abrir o PDF viewer
+                resposta = f'<ABRIR_PECA peca_id="{peca_id}"/>\n{mensagem_confirmacao}'
 
             else:
                 resposta = texto_resposta or "Como posso ajudar, Valdir?"

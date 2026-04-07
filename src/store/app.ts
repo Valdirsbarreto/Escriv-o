@@ -1,5 +1,13 @@
 import { create } from "zustand";
 
+interface PDFViewerState {
+  open: boolean;
+  url: string | null;
+  page: number;
+  titulo: string;
+  docId: string | null;
+}
+
 interface AppState {
   inqueritoAtivoId: string | null;
   setInqueritoAtivoId: (id: string | null) => void;
@@ -19,7 +27,18 @@ interface AppState {
   // Controle de colapso da sidebar (recolhe ao abrir um inquérito)
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
+
+  // PDF Viewer global (abre PDF na página da peça)
+  pdfViewer: PDFViewerState;
+  setPdfViewer: (state: Partial<PDFViewerState>) => void;
+  closePdfViewer: () => void;
+
+  // Comando do copiloto para abrir uma peça (ts garante unicidade do trigger)
+  pecaParaAbrir: { pecaId: string; ts: number } | null;
+  setPecaParaAbrir: (cmd: { pecaId: string; ts: number } | null) => void;
 }
+
+const PDF_VIEWER_INITIAL: PDFViewerState = { open: false, url: null, page: 1, titulo: '', docId: null };
 
 export const useAppStore = create<AppState>((set) => ({
   inqueritoAtivoId: null,
@@ -37,4 +56,11 @@ export const useAppStore = create<AppState>((set) => ({
 
   sidebarCollapsed: false,
   setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+
+  pdfViewer: PDF_VIEWER_INITIAL,
+  setPdfViewer: (state) => set(prev => ({ pdfViewer: { ...prev.pdfViewer, open: true, ...state } })),
+  closePdfViewer: () => set({ pdfViewer: PDF_VIEWER_INITIAL }),
+
+  pecaParaAbrir: null,
+  setPecaParaAbrir: (cmd) => set({ pecaParaAbrir: cmd }),
 }));
