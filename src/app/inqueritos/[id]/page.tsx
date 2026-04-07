@@ -239,6 +239,7 @@ export default function InqueritoDetalhePage() {
   const [pecasLoading, setPecasLoading] = useState(false);
   const [pecaViewer, setPecaViewer] = useState<{ open: boolean; peca: any | null; loading: boolean }>({ open: false, peca: null, loading: false });
   const [reextrahindo, setReextrahindo] = useState<string | null>(null);
+  const [extractProgress, setExtractProgress] = useState<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sintesePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const searchParams = useSearchParams();
@@ -501,9 +502,18 @@ export default function InqueritoDetalhePage() {
 
   const handleReextrairPecas = async (docId: string) => {
     setReextrahindo(docId);
+    setExtractProgress(0);
     try {
       await reextrairPecas(inqId, docId);
       
+      // Barra de progresso visual simulada até 95%
+      const progInterval = setInterval(() => {
+        setExtractProgress(prev => {
+          if (prev >= 95) return 95;
+          return prev + Math.floor(Math.random() * 5) + 2;
+        });
+      }, 3000);
+
       // A extração roda longo em background (celery: Gemini ~30s). 
       // Faremos polling até as novas peças surgirem no banco.
       let chamadas = 0;
@@ -516,13 +526,16 @@ export default function InqueritoDetalhePage() {
           if (pecas.some((p: any) => p.documento_id === docId)) {
             setPecasExtraidas(pecas);
             clearInterval(poll);
-            setReextrahindo(null);
+            clearInterval(progInterval);
+            setExtractProgress(100);
+            setTimeout(() => setReextrahindo(null), 1000);
           }
         } catch { /* erro na chamada silencioso */ }
         
         // Timeout de ~90s (18 * 5s)
         if (chamadas >= 18) {
           clearInterval(poll);
+          clearInterval(progInterval);
           setReextrahindo(null);
           alert("A extração está demorando devido ao tamanho do arquivo. As peças aparecerão no painel assim que concluírem o processamento em nuvem.");
         }
@@ -531,6 +544,7 @@ export default function InqueritoDetalhePage() {
     } catch {
       alert("Erro ao acionar extração de peças.");
       setReextrahindo(null);
+      setExtractProgress(0);
     }
   };
 
@@ -930,56 +944,76 @@ export default function InqueritoDetalhePage() {
                   const isSintetico = doc.status_processamento === "sintetico";
                   return (
                     <div key={doc.id} onClick={() => handleAbrirDoc(doc)}
-                      className={`flex justify-between items-center p-3 rounded-lg border transition-colors cursor-pointer ${isSintetico ? "bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40" : "bg-zinc-900/60 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/60"}`}>
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={`p-1.5 rounded border shrink-0 ${isSintetico ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-zinc-950 text-blue-400 border-zinc-800"}`}>
-                          {isSintetico ? <Sparkles size={16}/> : <FileText size={16}/>}
+                      className={`flex flex-col p-3 rounded-lg border transition-colors cursor-pointer ${isSintetico ? "bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40" : "bg-zinc-900/60 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/60"}`}>
+                      <div className="flex justify-between items-center w-full">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`p-1.5 rounded border shrink-0 ${isSintetico ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-zinc-950 text-blue-400 border-zinc-800"}`}>
+                            {isSintetico ? <Sparkles size={16}/> : <FileText size={16}/>}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-zinc-200 truncate max-w-xs">{doc.nome_arquivo}</p>
+                            <p className="text-xs text-zinc-500 mt-0.5">
+                              {isSintetico ? "Gerado pela IA" : `${new Date(doc.created_at).toLocaleDateString("pt-BR")}`}
+                            </p>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-zinc-200 truncate max-w-xs">{doc.nome_arquivo}</p>
-                          <p className="text-xs text-zinc-500 mt-0.5">
-                            {isSintetico ? "Gerado pela IA" : `${new Date(doc.created_at).toLocaleDateString("pt-BR")}`}
-                          </p>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {doc.status_processamento === "concluido" && (
+                            <button
+                              onClick={(e) => handleVerCitacoes(doc, e)}
+                              className="text-xs text-zinc-400 hover:text-blue-400 flex items-center gap-1 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors"
+                            >
+                              <Quote size={11}/> Citações
+                            </button>
+                          )}
+                          {doc.status_processamento === "concluido" && doc.tipo_peca !== "sintese_investigativa" && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleReextrairPecas(doc.id); }}
+                              disabled={reextrahindo === doc.id}
+                              className="text-xs text-zinc-400 hover:text-amber-400 flex items-center gap-1 px-2 py-1 rounded border border-zinc-700 hover:border-amber-500/40 transition-colors disabled:opacity-50"
+                              title="Extrair peças individuais deste PDF"
+                            >
+                              {reextrahindo === doc.id ? <Loader2 size={11} className="animate-spin"/> : <FileText size={11}/>}
+                              Extrair peças
+                            </button>
+                          )}
+                          {isSintetico ? (
+                            <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-xs">
+                              <Sparkles size={10} className="mr-1 inline"/> IA
+                            </Badge>
+                          ) : doc.status_processamento === "concluido" ? (
+                            <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/20 text-xs">
+                              <CheckCircle2 size={10} className="mr-1 inline"/> Indexado
+                            </Badge>
+                          ) : doc.status_processamento === "processando" ? (
+                            <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30 text-xs">
+                              Lendo IA...
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-zinc-800 text-zinc-400 border-zinc-700 text-xs">
+                              {doc.status_processamento}
+                            </Badge>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {doc.status_processamento === "concluido" && (
-                          <button
-                            onClick={(e) => handleVerCitacoes(doc, e)}
-                            className="text-xs text-zinc-400 hover:text-blue-400 flex items-center gap-1 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors"
-                          >
-                            <Quote size={11}/> Citações
-                          </button>
-                        )}
-                        {doc.status_processamento === "concluido" && doc.tipo_peca !== "sintese_investigativa" && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleReextrairPecas(doc.id); }}
-                            disabled={reextrahindo === doc.id}
-                            className="text-xs text-zinc-400 hover:text-amber-400 flex items-center gap-1 px-2 py-1 rounded border border-zinc-700 hover:border-amber-500/40 transition-colors disabled:opacity-50"
-                            title="Extrair peças individuais deste PDF"
-                          >
-                            {reextrahindo === doc.id ? <Loader2 size={11} className="animate-spin"/> : <FileText size={11}/>}
-                            Extrair peças
-                          </button>
-                        )}
-                        {isSintetico ? (
-                          <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-xs">
-                            <Sparkles size={10} className="mr-1 inline"/> IA
-                          </Badge>
-                        ) : doc.status_processamento === "concluido" ? (
-                          <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/20 text-xs">
-                            <CheckCircle2 size={10} className="mr-1 inline"/> Indexado
-                          </Badge>
-                        ) : doc.status_processamento === "processando" ? (
-                          <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30 text-xs">
-                            Lendo IA...
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="bg-zinc-800 text-zinc-400 border-zinc-700 text-xs">
-                            {doc.status_processamento}
-                          </Badge>
-                        )}
-                      </div>
+                      
+                      {reextrahindo === doc.id && (
+                        <div className="mt-3 w-full animate-in fade-in slide-in-from-top-1">
+                          <div className="flex justify-between items-center mb-1 w-full">
+                            <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-semibold flex items-center gap-1">
+                              <Loader2 size={10} className="animate-spin text-amber-500"/>
+                              Acelerador Neuronal em uso
+                            </span>
+                            <span className="text-[10px] text-zinc-500 font-mono">{extractProgress}%</span>
+                          </div>
+                          <div className="h-1 bg-zinc-950/80 rounded-full overflow-hidden w-full border border-black/50">
+                            <div 
+                              className="h-full bg-gradient-to-r from-amber-500 to-amber-300 rounded-full transition-all duration-500 ease-out" 
+                              style={{ width: `${extractProgress}%` }} 
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 };
