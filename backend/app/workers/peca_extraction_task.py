@@ -116,7 +116,7 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
             import httpx
 
             texto_limite = doc.texto_extraido[:80000]  # até 80k chars
-            prompt = PROMPT_EXTRAIR_PECAS.format(texto=texto_limite)
+            prompt = PROMPT_EXTRAIR_PECAS.replace("{texto}", texto_limite)
 
             api_key = settings.GEMINI_API_KEY
             if not api_key:
