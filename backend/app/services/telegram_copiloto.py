@@ -183,6 +183,31 @@ def _get_fc_tools():
             ),
         ),
         _gt.FunctionDeclaration(
+            name="salvar_documento",
+            description=(
+                "Salva um documento na área de trabalho do inquérito. "
+                "Use quando o usuário pedir 'salva isso', 'salva o documento', 'guarda esse roteiro', "
+                "'salva a cautelar', 'salva no IP'. Se o conteúdo não for informado, salva o último "
+                "documento gerado na conversa."
+            ),
+            parameters=_gt.Schema(
+                type=_gt.Type.OBJECT,
+                properties={
+                    "numero_ip": _gt.Schema(type=_gt.Type.STRING, description="Número do IP"),
+                    "titulo": _gt.Schema(type=_gt.Type.STRING, description="Título do documento"),
+                    "tipo": _gt.Schema(
+                        type=_gt.Type.STRING,
+                        description="Um de: roteiro_oitiva | oficio | minuta_cautelar | relatorio | outro",
+                    ),
+                    "conteudo": _gt.Schema(
+                        type=_gt.Type.STRING,
+                        description="Conteúdo do documento. Se omitido, usa o último documento gerado na conversa.",
+                    ),
+                },
+                required=["numero_ip", "titulo", "tipo"],
+            ),
+        ),
+        _gt.FunctionDeclaration(
             name="ajuda",
             description="Exibe a lista de comandos e capacidades disponíveis.",
             parameters=_gt.Schema(type=_gt.Type.OBJECT, properties={}),
@@ -310,7 +335,7 @@ class TelegramCopilotoService:
                 numero = fc_args.get("numero_ip") or ctx.get("inquerito_atual", "")
                 if numero:
                     ctx["inquerito_atual"] = numero
-                resposta = await self._sintese_investigativa(numero, db)
+                resposta = await self._sintese_investigativa(numero, db, ctx)
 
             elif fc_name == "gerar_cautelar":
                 numero = fc_args.get("numero_ip") or ctx.get("inquerito_atual", "")
@@ -318,7 +343,7 @@ class TelegramCopilotoService:
                 instrucoes = fc_args.get("instrucoes", "")
                 if numero:
                     ctx["inquerito_atual"] = numero
-                resposta = await self._gerar_cautelar(numero, tipo, instrucoes, db)
+                resposta = await self._gerar_cautelar(numero, tipo, instrucoes, db, ctx)
 
             elif fc_name == "despachar_inquerito":
                 numero = fc_args.get("numero_ip") or ctx.get("inquerito_atual", "")
@@ -347,6 +372,15 @@ class TelegramCopilotoService:
                 elif placa:
                     ctx["ultimo_alvo"] = f"placa {placa}"
                 resposta = await self._osint_avulso(fc_args)
+
+            elif fc_name == "salvar_documento":
+                numero = fc_args.get("numero_ip") or ctx.get("inquerito_atual", "")
+                titulo = fc_args.get("titulo", "Documento sem título")
+                tipo = fc_args.get("tipo", "outro")
+                conteudo = fc_args.get("conteudo") or ctx.get("ultimo_documento_conteudo", "")
+                if numero:
+                    ctx["inquerito_atual"] = numero
+                resposta = await self._salvar_documento(numero, titulo, tipo, conteudo, db)
 
             elif fc_name == "ajuda":
                 resposta = _mensagem_ajuda()
@@ -854,7 +888,9 @@ class TelegramCopilotoService:
 
     # ── Ação: síntese investigativa ───────────────────────────────────────────
 
-    async def _sintese_investigativa(self, numero_ip: str, db: AsyncSession) -> str:
+    async def _sintese_investigativa(
+        self, numero_ip: str, db: AsyncSession, ctx: dict | None = None
+    ) -> str:
         if not numero_ip:
             return "ℹ️ Informe o número do IP. Ex: <i>síntese do IP 915-001/2024</i>"
 
@@ -878,11 +914,19 @@ class TelegramCopilotoService:
                 "Acesse a interface web e clique em <b>✨ Gerar Síntese</b>."
             )
 
+        if ctx is not None:
+            ctx["ultimo_documento_conteudo"] = resumo
+            ctx["ultimo_documento_titulo"] = f"Síntese Investigativa — IP {ip.numero}"
+            ctx["ultimo_documento_tipo"] = "relatorio"
+
         preview = resumo[:3200]
         if len(resumo) > 3200:
             preview += "\n\n<i>… (acesse a interface web para a síntese completa)</i>"
 
-        return f"📊 <b>Síntese — IP {_esc(ip.numero)}</b>\n\n{_esc(preview)}"
+        return (
+            f"📊 <b>Síntese — IP {_esc(ip.numero)}</b>\n\n{_esc(preview)}\n\n"
+            f"💾 <i>Diga 'salva esse documento' para guardar na área de trabalho do inquérito.</i>"
+        )
 
     # ── Ação: gerar cautelar ──────────────────────────────────────────────────
 
@@ -892,7 +936,8 @@ class TelegramCopilotoService:
     }
 
     async def _gerar_cautelar(
-        self, numero_ip: str, tipo_cautelar: str, instrucoes: str, db: AsyncSession
+        self, numero_ip: str, tipo_cautelar: str, instrucoes: str, db: AsyncSession,
+        ctx: dict | None = None
     ) -> str:
         if not numero_ip:
             return (
@@ -925,6 +970,11 @@ class TelegramCopilotoService:
         titulo = resultado["tipo"]
         texto = resultado["texto_gerado"]
 
+        if ctx is not None:
+            ctx["ultimo_documento_conteudo"] = texto
+            ctx["ultimo_documento_titulo"] = titulo
+            ctx["ultimo_documento_tipo"] = "minuta_cautelar"
+
         preview = texto[:1800]
         if len(texto) > 1800:
             preview += "\n\n<i>… (acesse Cautelares na interface web para o documento completo)</i>"
@@ -932,7 +982,58 @@ class TelegramCopilotoService:
         return (
             f"📄 <b>{_esc(titulo)}</b>\n"
             f"IP: <code>{_esc(ip.numero)}</code>\n\n"
-            f"{_esc(preview)}"
+            f"{_esc(preview)}\n\n"
+            f"💾 <i>Diga 'salva esse documento' para guardar na área de trabalho do inquérito.</i>"
+        )
+
+    # ── Ação: salvar documento ────────────────────────────────────────────────
+
+    _TIPOS_DOC_VALIDOS = {
+        "roteiro_oitiva", "oficio", "minuta_cautelar", "relatorio", "outro",
+    }
+
+    async def _salvar_documento(
+        self, numero_ip: str, titulo: str, tipo: str, conteudo: str, db: AsyncSession
+    ) -> str:
+        if not numero_ip:
+            return (
+                "ℹ️ Informe o inquérito para salvar o documento.\n"
+                "Ex: <i>salva esse documento no IP 921-00332/2012</i>"
+            )
+
+        if not conteudo:
+            return (
+                "⚠️ Nenhum documento recente para salvar.\n"
+                "Gere um ato (cautelar, roteiro, síntese) primeiro e então diga 'salva isso'."
+            )
+
+        result = await db.execute(
+            select(Inquerito).where(Inquerito.numero.ilike(f"%{numero_ip.strip()}%"))
+        )
+        ip = result.scalars().first()
+        if not ip:
+            return f"❌ Inquérito <code>{_esc(numero_ip)}</code> não encontrado."
+
+        if tipo not in self._TIPOS_DOC_VALIDOS:
+            tipo = "outro"
+
+        from app.models.documento_gerado import DocumentoGerado
+        doc = DocumentoGerado(
+            inquerito_id=ip.id,
+            titulo=titulo,
+            tipo=tipo,
+            conteudo=conteudo,
+        )
+        db.add(doc)
+        await db.commit()
+
+        logger.info(f"[TG-COPILOTO] Documento salvo: {titulo!r} tipo={tipo} ip={ip.numero}")
+
+        return (
+            f"✅ <b>Documento salvo!</b>\n"
+            f"📄 <b>{_esc(titulo)}</b>\n"
+            f"IP: <code>{_esc(ip.numero)}</code> · Tipo: {_esc(tipo)}\n\n"
+            f"Acesse a <b>Área de Trabalho</b> na interface web para visualizar e editar."
         )
 
     # ── Ação: despachar inquérito ─────────────────────────────────────────────
@@ -1039,7 +1140,8 @@ def _mensagem_ajuda() -> str:
         "<b>📄 Atos processuais</b>\n"
         "• <i>faz um ofício de requisição para o 921-00332</i>\n"
         "• <i>manda um mandado de busca para o juiz</i>\n"
-        "• <i>quebra de sigilo bancário do investigado</i>\n\n"
+        "• <i>quebra de sigilo bancário do investigado</i>\n"
+        "• <i>salva esse documento</i> — guarda o último ato gerado na área de trabalho\n\n"
         "<b>🔍 OSINT e agenda</b>\n"
         "• <i>ve esse CPF: 000.000.000-00</i>\n"
         "• <i>verifica placa ABC1D23</i>\n"
