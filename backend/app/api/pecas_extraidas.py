@@ -139,3 +139,36 @@ async def reextrair_pecas(
     extrair_pecas_task.delay(documento_id, inquerito_id)
 
     return {"status": "agendado", "documento_id": documento_id}
+
+
+@router.post("/inqueritos/{inquerito_id}/reextrair-pecas-lote", status_code=202)
+async def reextrair_pecas_lote(
+    inquerito_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Dispara extração de peças para todos os documentos indexados do inquérito."""
+    from sqlalchemy import delete as sa_delete
+
+    result = await db.execute(
+        select(Documento).where(
+            Documento.inquerito_id == uuid.UUID(inquerito_id),
+            Documento.status_processamento == "concluido",
+            Documento.tipo_peca != "sintese_investigativa",
+        )
+    )
+    docs = result.scalars().all()
+    if not docs:
+        raise HTTPException(status_code=404, detail="Nenhum documento indexado encontrado.")
+
+    from app.workers.peca_extraction_task import extrair_pecas_task
+
+    agendados = []
+    for doc in docs:
+        await db.execute(
+            sa_delete(PecaExtraida).where(PecaExtraida.documento_id == doc.id)
+        )
+        await db.commit()
+        extrair_pecas_task.delay(str(doc.id), inquerito_id)
+        agendados.append(str(doc.id))
+
+    return {"status": "agendado", "total": len(agendados), "documentos": agendados}

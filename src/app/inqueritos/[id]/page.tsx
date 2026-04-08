@@ -246,6 +246,7 @@ export default function InqueritoDetalhePage() {
   const [editandoNumero, setEditandoNumero] = useState(false);
   const [novoNumero, setNovoNumero] = useState("");
   const [salvandoNumero, setSalvandoNumero] = useState(false);
+  const [catalogando, setCatalogando] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sintesePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const searchParams = useSearchParams();
@@ -400,6 +401,19 @@ export default function InqueritoDetalhePage() {
       alert("Erro ao atualizar número do inquérito.");
     } finally {
       setSalvandoNumero(false);
+    }
+  };
+
+  const handleCatalogarPecas = async () => {
+    setCatalogando(true);
+    try {
+      await api.post(`/inqueritos/${inqId}/reextrair-pecas-lote`);
+      alert("Catalogação iniciada. As peças aparecerão em alguns minutos.");
+      await fetchPecas();
+    } catch {
+      alert("Erro ao iniciar catalogação.");
+    } finally {
+      setCatalogando(false);
     }
   };
 
@@ -909,6 +923,16 @@ export default function InqueritoDetalhePage() {
                 >
                   <FileType2 size={12} className={reclassificando ? "animate-pulse" : ""}/>
                   {reclassificando ? "Classificando..." : "Classificar peças"}
+                </button>
+              )}
+              {documentos.some(d => d.status_processamento === "concluido" && d.tipo_peca !== "sintese_investigativa") && (
+                <button
+                  onClick={handleCatalogarPecas}
+                  disabled={catalogando}
+                  className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors disabled:opacity-50"
+                >
+                  <FileText size={12} className={catalogando ? "animate-pulse" : ""}/>
+                  {catalogando ? "Catalogando..." : "Catalogar peças"}
                 </button>
               )}
               {documentos.some(d => d.status_processamento === "processando" || d.status_processamento === "erro") && (
