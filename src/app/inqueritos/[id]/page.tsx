@@ -22,7 +22,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check, CalendarPlus, Clock, MapPin, ExternalLink, BookOpen, Quote, ChevronDown, ChevronRight, Bot, Eye, UserSearch } from "lucide-react";
+import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check, CalendarPlus, Clock, MapPin, ExternalLink, BookOpen, Quote, ChevronDown, ChevronRight, Bot, Eye, UserSearch, Network, Search } from "lucide-react";
 import { IntimacaoUploadModal } from "@/components/IntimacaoUploadModal";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -216,7 +216,7 @@ export default function InqueritoDetalhePage() {
   const router = useRouter();
   const inqId = params.id as string;
   const { setInqueritoAtivoId, setCopilotoOpen, docsGeradosVersion, setSidebarCollapsed, pdfViewer, setPdfViewer, closePdfViewer, pecaParaAbrir, setPecaParaAbrir } = useAppStore();
-  const [activeTab, setActiveTab] = useState<"workspace" | "autos" | "investigacao">("workspace");
+  const [activeTab, setActiveTab] = useState<"workspace" | "autos" | "investigacao" | "blockchain">("workspace");
 
   const [inquerito, setInq] = useState<any>(null);
   const [documentos, setDocumentos] = useState<any[]>([]);
@@ -770,25 +770,41 @@ export default function InqueritoDetalhePage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-zinc-800 mb-6">
-        {([
+      {(() => {
+        const CRIPTO_KW = ["cripto", "bitcoin", "blockchain", "ethereum", "wallet", "carteira digital", "satoshi", "nft", "defi", "binance", "metamask", "monero", "tether", "usdt"];
+        const temCripto = CRIPTO_KW.some(k =>
+          (inquerito.descricao || "").toLowerCase().includes(k) ||
+          (inquerito.classificacao_estrategica || "").toLowerCase().includes(k)
+        );
+        const tabs: { id: "workspace" | "autos" | "investigacao" | "blockchain"; label: string; badge?: string }[] = [
           { id: "workspace", label: "Área de Trabalho" },
-          { id: "autos", label: `Autos Físicos Digitalizados (${documentos.length})` },
+          { id: "autos", label: `Autos Físicos (${documentos.length})` },
           { id: "investigacao", label: "Investigação OSINT" },
-        ] as { id: "workspace" | "autos" | "investigacao"; label: string }[]).map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
-              activeTab === tab.id
-                ? "border-blue-500 text-blue-400"
-                : "border-transparent text-zinc-500 hover:text-zinc-300"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+          ...(temCripto ? [{ id: "blockchain" as const, label: "Blockchain / Cripto", badge: "auto" }] : []),
+        ];
+        return (
+          <div className="flex gap-1 border-b border-zinc-800 mb-6 overflow-x-auto">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap flex items-center gap-1.5 ${
+                  activeTab === tab.id
+                    ? "border-blue-500 text-blue-400"
+                    : "border-transparent text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                {tab.label}
+                {tab.badge && (
+                  <span className="text-[9px] px-1 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-bold uppercase tracking-wider">
+                    auto
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* ── ABA: ÁREA DE TRABALHO ── */}
       {activeTab === "workspace" && (
@@ -1307,6 +1323,84 @@ export default function InqueritoDetalhePage() {
             </h2>
           </div>
           <PainelInvestigacao inqueritoId={inqId} />
+        </div>
+      )}
+
+      {/* ── ABA: BLOCKCHAIN / CRIPTO ── */}
+      {activeTab === "blockchain" && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-4">
+            <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
+              <Network size={18} className="text-cyan-400" /> Análise Blockchain / Cripto
+            </h2>
+            <span className="text-[10px] px-2 py-1 rounded-full border border-cyan-500/30 text-cyan-400 bg-cyan-500/5 font-bold uppercase tracking-wider">
+              Detectado automaticamente
+            </span>
+          </div>
+
+          {/* Aviso de detecção */}
+          <div className="flex gap-3 p-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5">
+            <Network size={16} className="text-cyan-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm text-cyan-300 font-medium mb-1">Conteúdo cripto/blockchain identificado neste inquérito</p>
+              <p className="text-xs text-zinc-500 leading-relaxed">
+                O Escrivão AI detectou termos relacionados a criptoativos na descrição deste IP.
+                Use o Copiloto Investigativo (Ctrl+Space) com o comando{" "}
+                <code className="text-cyan-400 bg-zinc-900 px-1 rounded text-[11px]">/analisar carteira &lt;endereço&gt;</code>{" "}
+                para rastreio on-chain, análise de risco e identificação de exchanges.
+              </p>
+            </div>
+          </div>
+
+          {/* Busca rápida de carteira */}
+          <div className="space-y-3">
+            <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Busca rápida de carteira</p>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" size={14} />
+                <input
+                  id="blockchain-wallet-input"
+                  type="text"
+                  placeholder="Cole o endereço da carteira (BTC, ETH, etc.)"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-4 h-11 text-sm text-zinc-300 placeholder-zinc-700 focus:outline-none focus:border-cyan-500/40 font-mono"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  const el = document.getElementById("blockchain-wallet-input") as HTMLInputElement | null;
+                  const addr = el?.value?.trim();
+                  setCopilotoOpen(true);
+                  if (addr) {
+                    setTimeout(() => {
+                      const evt = new CustomEvent("copiloto:prefill", { detail: `/analisar carteira ${addr}` });
+                      window.dispatchEvent(evt);
+                    }, 300);
+                  }
+                }}
+                className="px-4 h-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-sm font-semibold hover:bg-cyan-500/20 transition-colors whitespace-nowrap"
+              >
+                Analisar no Copiloto
+              </button>
+            </div>
+          </div>
+
+          {/* Capacidades disponíveis */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {[
+              { icon: "🔗", titulo: "Rastreio on-chain", desc: "Mapeamento de transações em Bitcoin, Ethereum e redes compatíveis." },
+              { icon: "⚠️", titulo: "Score de risco", desc: "Identificação de carteiras associadas a darknet, ransomware e fraudes." },
+              { icon: "🏦", titulo: "Identificação de exchanges", desc: "Detecção de exchanges KYC para solicitação de dados do titular." },
+              { icon: "📊", titulo: "Fluxo de fundos", desc: "Visualização do caminho dos ativos entre carteiras e serviços." },
+            ].map(item => (
+              <div key={item.titulo} className="flex gap-3 p-4 rounded-xl border border-zinc-800 bg-zinc-900/40">
+                <span className="text-xl shrink-0">{item.icon}</span>
+                <div>
+                  <p className="text-sm font-semibold text-zinc-200 mb-0.5">{item.titulo}</p>
+                  <p className="text-xs text-zinc-500 leading-relaxed">{item.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

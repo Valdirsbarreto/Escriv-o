@@ -198,20 +198,42 @@ function CardPersonagem({
             </p>
           )}
 
-          {/* Cross-inquérito com links */}
+          {/* Cross-inquérito com links + tooltip de síntese */}
           {temCross && (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[10px] text-orange-400 font-medium">Aparece em:</span>
               {p.historico_inqueritos.map((h) => (
-                <Link
-                  key={h.inquerito_id}
-                  href={`/inqueritos/${h.inquerito_id}`}
-                  className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border border-orange-700/30 text-orange-300 bg-orange-500/5 hover:border-orange-500/50 hover:text-orange-200 transition-colors"
-                >
-                  IP {h.numero}
-                  <span className="text-orange-500/60">({h.tipo_pessoa})</span>
-                  <ExternalLink size={9} />
-                </Link>
+                <div key={h.inquerito_id} className="relative group/tip">
+                  <Link
+                    href={`/inqueritos/${h.inquerito_id}`}
+                    className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border border-orange-700/30 text-orange-300 bg-orange-500/5 hover:border-orange-500/50 hover:text-orange-200 transition-colors"
+                  >
+                    IP {h.numero}
+                    <span className="text-orange-500/60">({h.tipo_pessoa})</span>
+                    <ExternalLink size={9} />
+                  </Link>
+                  {/* Tooltip síntese investigativa */}
+                  <div className="invisible group-hover/tip:visible opacity-0 group-hover/tip:opacity-100 transition-all duration-150 absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-56 pointer-events-none">
+                    <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-3 shadow-2xl">
+                      <div className="flex items-baseline gap-1.5 mb-1.5">
+                        <span className="font-semibold text-zinc-100 text-[11px]">IP {h.numero}</span>
+                        {h.ano && <span className="text-zinc-600 text-[9px]">/{h.ano}</span>}
+                      </div>
+                      <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border inline-block mb-2 ${
+                        h.tipo_pessoa === "investigado" ? "border-red-700/40 text-red-400 bg-red-500/5"
+                        : h.tipo_pessoa === "vitima" ? "border-blue-700/40 text-blue-400 bg-blue-500/5"
+                        : h.tipo_pessoa === "testemunha" ? "border-yellow-700/40 text-yellow-400 bg-yellow-500/5"
+                        : "border-zinc-700 text-zinc-500"
+                      }`}>{h.tipo_pessoa}</span>
+                      {h.descricao ? (
+                        <p className="text-zinc-400 text-[10px] leading-relaxed">{h.descricao}</p>
+                      ) : (
+                        <p className="text-zinc-600 text-[10px] italic">Sem descrição disponível.</p>
+                      )}
+                    </div>
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-zinc-700" />
+                  </div>
+                </div>
               ))}
             </div>
           )}
