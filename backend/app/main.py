@@ -80,9 +80,8 @@ _literal_origins = [o for o in _cors_origins_raw if "*" not in o]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if _allow_all else _literal_origins,
-    allow_origin_regex=r"https://.*\.vercel\.app" if not _allow_all else None,
-    allow_credentials=True,  # Necessário para cookies/sessões se houver
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
