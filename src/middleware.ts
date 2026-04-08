@@ -42,7 +42,8 @@ export async function middleware(request: NextRequest) {
   }
 
   // Usuário autenticado mas e-mail não permitido
-  if (user && ALLOWED_EMAIL && user.email !== ALLOWED_EMAIL) {
+  const allowedEmail = ALLOWED_EMAIL.trim().toLowerCase();
+  if (user && allowedEmail && user.email?.toLowerCase() !== allowedEmail) {
     await supabase.auth.signOut();
     const url = request.nextUrl.clone();
     url.pathname = "/login";
