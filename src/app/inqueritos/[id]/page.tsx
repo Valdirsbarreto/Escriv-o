@@ -243,6 +243,9 @@ export default function InqueritoDetalhePage() {
   const [pecaViewer, setPecaViewer] = useState<{ open: boolean; peca: any | null; loading: boolean }>({ open: false, peca: null, loading: false });
   const [reextrahindo, setReextrahindo] = useState<string | null>(null);
   const [extractProgress, setExtractProgress] = useState<number>(0);
+  const [editandoNumero, setEditandoNumero] = useState(false);
+  const [novoNumero, setNovoNumero] = useState("");
+  const [salvandoNumero, setSalvandoNumero] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sintesePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const searchParams = useSearchParams();
@@ -668,15 +671,13 @@ export default function InqueritoDetalhePage() {
                     Nº provisório
                   </Badge>
                 )}
-                {inquerito.numero.startsWith("TEMP-") && (
-                  <button
-                    onClick={() => { setNovoNumero(""); setEditandoNumero(true); }}
-                    className="text-zinc-500 hover:text-zinc-300 transition-colors"
-                    title="Corrigir número"
-                  >
-                    <Pencil size={14} />
-                  </button>
-                )}
+                <button
+                  onClick={() => { setNovoNumero(inquerito.numero); setEditandoNumero(true); }}
+                  className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                  title="Editar número do inquérito"
+                >
+                  <Pencil size={14} />
+                </button>
               </div>
             )}
             {inquerito.redistribuido && (
