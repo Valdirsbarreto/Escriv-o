@@ -1,14 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { FolderOpen, LayoutDashboard, UserSearch, Bot, UploadCloud, CalendarDays, ShieldAlert, ChevronRight } from "lucide-react";
+import { FolderOpen, UserSearch, Bot, UploadCloud, CalendarDays, ShieldAlert, ChevronRight, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 export function Sidebar() {
   const { toggleCopiloto, sidebarCollapsed } = useAppStore();
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
 
   return (
     <div
@@ -77,6 +85,17 @@ export function Sidebar() {
           )}
         </button>
         <NavItem href="/admin" icon={<ShieldAlert size={18} />} label="Administrativo" active={pathname === "/admin"} collapsed={sidebarCollapsed} />
+        <button
+          onClick={handleLogout}
+          title="Sair"
+          className={cn(
+            "w-full flex items-center gap-3 rounded-md font-medium text-sm transition-colors text-zinc-500 hover:text-red-400 hover:bg-red-500/10",
+            sidebarCollapsed ? "px-2 py-2 justify-center" : "px-3 py-2"
+          )}
+        >
+          <LogOut size={18} className="shrink-0" />
+          {!sidebarCollapsed && <span>Sair</span>}
+        </button>
       </div>
     </div>
   );
