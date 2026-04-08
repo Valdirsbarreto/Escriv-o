@@ -225,9 +225,6 @@ export default function InqueritoDetalhePage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
   const [gerandoSintese, setGerandoSintese] = useState(false);
-  const [editandoNumero, setEditandoNumero] = useState(false);
-  const [novoNumero, setNovoNumero] = useState("");
-  const [salvandoNumero, setSalvandoNumero] = useState(false);
   const [intimacoes, setIntimacoes] = useState<any[]>([]);
   const [showIntimacaoModal, setShowIntimacaoModal] = useState(false);
   const [docViewer, setDocViewer] = useState<{ open: boolean; doc: any; conteudo: any | null; loading: boolean }>({ open: false, doc: null, conteudo: null, loading: false });
@@ -409,7 +406,7 @@ export default function InqueritoDetalhePage() {
     try {
       await api.post(`/inqueritos/${inqId}/reextrair-pecas-lote`);
       alert("Catalogação iniciada. As peças aparecerão em alguns minutos.");
-      await fetchPecas();
+      await fetchPecasExtraidas();
     } catch {
       alert("Erro ao iniciar catalogação.");
     } finally {
