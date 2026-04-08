@@ -229,3 +229,15 @@ export const osintConsultasInquerito = async (inqueritoId: string) => {
   const response = await api.get(`/agentes/osint/consultas/${inqueritoId}`);
   return response.data;
 };
+
+export const osintAnalisePreliminar = async (
+  inqueritoId: string,
+  pessoaId: string,
+  aprimorar = false
+) => {
+  const response = await api.get(
+    `/agentes/osint/preliminar/${inqueritoId}/${pessoaId}`,
+    { params: { aprimorar }, timeout: 45000 }
+  );
+  return response.data;
+};

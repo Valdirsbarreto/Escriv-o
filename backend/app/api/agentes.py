@@ -93,6 +93,35 @@ async def gerar_ficha_empresa(
         raise HTTPException(status_code=500, detail=f"Erro ao gerar ficha: {str(e)[:200]}")
 
 
+# ── Análise Preliminar (LLM gratuita, automática) ────────────────────────────
+
+@router.get(
+    "/osint/preliminar/{inquerito_id}/{pessoa_id}",
+    summary="Análise preliminar OSINT (LLM interna, sem APIs pagas)",
+)
+async def analise_preliminar_pessoa(
+    inquerito_id: uuid.UUID,
+    pessoa_id: uuid.UUID,
+    aprimorar: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Gera análise investigativa baseada nos dados internos dos autos.
+    aprimorar=false → Groq/Llama (gratuito, automático ao expandir card)
+    aprimorar=true  → Gemini Flash (por demanda, melhor qualidade)
+    """
+    agente = AgenteFicha()
+    try:
+        analise = await agente.gerar_analise_preliminar_pessoa(
+            db, inquerito_id, pessoa_id, aprimorar=aprimorar
+        )
+        return {"status": "concluido", "analise": analise, "aprimorada": aprimorar}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro na análise preliminar: {str(e)[:200]}")
+
+
 # ── OSINT — Consultas brutas (sem LLM) ───────────────────────────────────────
 
 @router.post(

@@ -9,7 +9,8 @@ import {
   AlertTriangle, CheckCircle, XCircle, MinusCircle,
   ExternalLink, Play, UserSearch,
 } from "lucide-react";
-import { osintSugestao, osintLote } from "@/lib/api";
+import { osintSugestao, osintLote, osintAnalisePreliminar } from "@/lib/api";
+import { Sparkles, Zap } from "lucide-react";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -96,6 +97,136 @@ function TipoPessoa({ tipo }: { tipo: string }) {
     : "border-zinc-700 text-zinc-400";
   return (
     <Badge variant="outline" className={`text-[10px] capitalize ${cor}`}>{tipo}</Badge>
+  );
+}
+
+// ── Card de Personagem ────────────────────────────────────────────────────────
+
+// ── Componente de análise preliminar ─────────────────────────────────────────
+
+function AnalisePreliminarPanel({
+  inqueritoId, pessoaId,
+}: { inqueritoId: string; pessoaId: string }) {
+  const [analise, setAnalise] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [aprimorando, setAprimorando] = useState(false);
+  const [erro, setErro] = useState(false);
+
+  useEffect(() => {
+    osintAnalisePreliminar(inqueritoId, pessoaId, false)
+      .then(r => setAnalise(r.analise))
+      .catch(() => setErro(true))
+      .finally(() => setLoading(false));
+  }, [inqueritoId, pessoaId]);
+
+  const handleAprimorar = async () => {
+    setAprimorando(true);
+    try {
+      const r = await osintAnalisePreliminar(inqueritoId, pessoaId, true);
+      setAnalise(r.analise);
+    } catch { /* silencioso */ } finally { setAprimorando(false); }
+  };
+
+  const corRisco = (nivel: string) =>
+    nivel === "critico" ? "text-red-400 border-red-700/40 bg-red-500/5"
+    : nivel === "alto"   ? "text-orange-400 border-orange-700/40 bg-orange-500/5"
+    : nivel === "medio"  ? "text-yellow-400 border-yellow-700/40 bg-yellow-500/5"
+    : "text-green-400 border-green-700/40 bg-green-500/5";
+
+  return (
+    <div className="rounded-lg border border-zinc-700/50 bg-zinc-900/60 overflow-hidden">
+      {/* Cabeçalho da seção */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 bg-zinc-900/80">
+        <div className="flex items-center gap-1.5">
+          <Zap size={11} className="text-emerald-400" />
+          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+            Análise Preliminar
+          </span>
+          <span className="text-[9px] text-zinc-600">(LLM gratuita)</span>
+        </div>
+        {analise && (
+          <button
+            onClick={handleAprimorar}
+            disabled={aprimorando}
+            className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded border border-blue-700/30 text-blue-400 bg-blue-500/5 hover:bg-blue-500/10 transition-colors disabled:opacity-50"
+          >
+            {aprimorando
+              ? <><Loader2 size={9} className="animate-spin" /> Aprimorando...</>
+              : <><Sparkles size={9} /> Aprimorar (Gemini Flash)</>}
+          </button>
+        )}
+      </div>
+
+      {/* Conteúdo */}
+      <div className="px-3 py-3 space-y-2.5">
+        {loading ? (
+          <div className="flex items-center gap-2 text-zinc-500 text-xs py-2">
+            <Loader2 size={12} className="animate-spin text-emerald-400" />
+            Analisando dados dos autos...
+          </div>
+        ) : erro ? (
+          <p className="text-xs text-zinc-600 italic">Análise não disponível — dados insuficientes nos autos.</p>
+        ) : analise ? (
+          <>
+            {/* Resumo + risco */}
+            <div className="flex items-start gap-2">
+              {analise.nivel_risco && (
+                <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${corRisco(analise.nivel_risco)}`}>
+                  {analise.nivel_risco}
+                </span>
+              )}
+              <p className="text-xs text-zinc-300 leading-relaxed">{analise.resumo}</p>
+            </div>
+
+            {/* Fatos conhecidos */}
+            {analise.fatos_conhecidos?.length > 0 && (
+              <div>
+                <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1">Fatos nos autos</p>
+                <ul className="space-y-0.5">
+                  {analise.fatos_conhecidos.slice(0, 4).map((f: string, i: number) => (
+                    <li key={i} className="text-[10px] text-zinc-400 flex gap-1.5">
+                      <span className="text-emerald-600 shrink-0 mt-0.5">▸</span>{f}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Pontos de atenção */}
+            {analise.pontos_de_atencao?.length > 0 && (
+              <div>
+                <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1">Pontos de atenção</p>
+                <ul className="space-y-0.5">
+                  {analise.pontos_de_atencao.slice(0, 3).map((pt: string, i: number) => (
+                    <li key={i} className="text-[10px] text-orange-300/80 flex gap-1.5">
+                      <span className="text-orange-500 shrink-0 mt-0.5">⚠</span>{pt}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Lacunas → justifica OSINT pago */}
+            {analise.lacunas?.length > 0 && (
+              <div className="border-t border-zinc-800 pt-2">
+                <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1">Lacunas → justificam consulta externa</p>
+                <ul className="space-y-0.5">
+                  {analise.lacunas.slice(0, 3).map((l: string, i: number) => (
+                    <li key={i} className="text-[10px] text-zinc-500 flex gap-1.5">
+                      <span className="text-zinc-700 shrink-0">→</span>{l}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {analise._fonte && (
+              <p className="text-[9px] text-zinc-700 text-right">via {analise._fonte}</p>
+            )}
+          </>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -197,6 +328,9 @@ function CardPersonagem({
               "{p.justificativa}"
             </p>
           )}
+
+          {/* Análise preliminar automática (Groq — gratuita) */}
+          <AnalisePreliminarPanel inqueritoId={inqueritoId} pessoaId={p.pessoa_id} />
 
           {/* Cross-inquérito com links + tooltip de síntese */}
           {temCross && (

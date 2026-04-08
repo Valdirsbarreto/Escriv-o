@@ -597,6 +597,32 @@ Produza a minuta completa e formal, em linguagem jurídico-policial brasileira, 
 - Espaço para assinatura da autoridade
 """
 
+PROMPT_ANALISE_PRELIMINAR = """Você é um agente de inteligência policial.
+Com base EXCLUSIVAMENTE nos dados internos extraídos dos autos do inquérito e no histórico cruzado (outros IPs), elabore uma análise investigativa PRELIMINAR e GRATUITA da pessoa "{nome}".
+Não há dados externos (direct.data) disponíveis — analise apenas o que consta nos documentos.
+
+=== DADOS EXTRAÍDOS DOS AUTOS ===
+{dados_consolidados}
+
+=== HISTÓRICO EM OUTROS INQUÉRITOS (base interna) ===
+{historico_inqueritos}
+
+Retorne EXCLUSIVAMENTE um JSON com a estrutura:
+{{
+  "resumo": "síntese em 2-3 frases do que se sabe sobre o indivíduo com base nos autos",
+  "nivel_risco": "baixo|medio|alto|critico",
+  "justificativa_risco": "por que esse nível de risco, citando evidências dos autos",
+  "fatos_conhecidos": ["fatos objetivos extraídos dos documentos — cite a peça quando possível"],
+  "pontos_de_atencao": ["alertas, inconsistências ou flags investigativas baseadas nos autos"],
+  "lacunas": ["informações que estão ausentes nos autos e justificariam uma consulta externa paga (ex: endereço atual, vínculos empregatícios)"]
+}}
+
+REGRAS:
+- NÃO invente dados. Se não há informação nos autos, diga "não identificado nos autos".
+- nivel_risco deve refletir EVIDÊNCIAS dos autos: crítico=participação direta comprovada, alto=conexões fortes, medio=presença sem envolvimento claro, baixo=menção periférica.
+- lacunas é o campo mais importante: liste o que falta e que a consulta paga poderia resolver.
+"""
+
 PROMPT_ANALISE_EXTRATO = """Você é um analista financeiro forense especializado em detecção de lavagem de dinheiro e fraudes.
 Analise o extrato bancário abaixo e extraia as informações estruturadas.
 

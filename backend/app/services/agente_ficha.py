@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.llm_service import LLMService
-from app.core.prompts import PROMPT_FICHA_PESSOA, PROMPT_FICHA_EMPRESA
+from app.core.prompts import PROMPT_FICHA_PESSOA, PROMPT_FICHA_EMPRESA, PROMPT_ANALISE_PRELIMINAR
 from app.models.pessoa import Pessoa
 from app.models.empresa import Empresa
 from app.models.endereco import Endereco
@@ -174,6 +174,131 @@ Eventos/Cronologia:
         except Exception as e:
             logger.error(f"[AGENTE-FICHA] Erro ao gerar ficha de pessoa: {e}")
             raise
+
+    async def gerar_analise_preliminar_pessoa(
+        self,
+        db: AsyncSession,
+        inquerito_id: uuid.UUID,
+        pessoa_id: uuid.UUID,
+        aprimorar: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Análise investigativa PRELIMINAR usando apenas dados internos dos autos.
+        aprimorar=False → tier='resumo' (Groq — gratuito, automático)
+        aprimorar=True  → tier='standard' (Gemini Flash — por demanda)
+        Não persiste em DocumentoGerado. Cache de 24h em ResultadoAgente.
+        """
+        from app.models.resultado_agente import ResultadoAgente
+        from datetime import timedelta
+        from sqlalchemy import and_
+
+        tipo_cache = "preliminar_pessoa_aprimorada" if aprimorar else "preliminar_pessoa"
+
+        # ── Cache: retorna se análise recente já existe (< 24h) ─────────────────
+        cache_stmt = (
+            select(ResultadoAgente)
+            .where(
+                and_(
+                    ResultadoAgente.inquerito_id == inquerito_id,
+                    ResultadoAgente.tipo_agente == tipo_cache,
+                    ResultadoAgente.referencia_id == pessoa_id,
+                )
+            )
+            .order_by(ResultadoAgente.created_at.desc())
+            .limit(1)
+        )
+        cache_res = await db.execute(cache_stmt)
+        cached = cache_res.scalar_one_or_none()
+        if cached:
+            age = datetime.utcnow() - cached.created_at.replace(tzinfo=None)
+            if age < timedelta(hours=24):
+                logger.info(f"[AGENTE-FICHA] Cache hit '{tipo_cache}' para {pessoa_id}")
+                return cached.resultado_json
+
+        # ── Buscar dados da pessoa ───────────────────────────────────────────────
+        pessoa = await db.get(Pessoa, pessoa_id)
+        if not pessoa:
+            raise ValueError(f"Pessoa {pessoa_id} não encontrada")
+
+        result_contatos = await db.execute(
+            select(Contato)
+            .where(Contato.inquerito_id == inquerito_id)
+            .where(Contato.pessoa_id == pessoa_id)
+        )
+        contatos = result_contatos.scalars().all()
+
+        result_end = await db.execute(
+            select(Endereco)
+            .where(Endereco.inquerito_id == inquerito_id)
+            .where(Endereco.pessoa_id == pessoa_id)
+        )
+        enderecos = result_end.scalars().all()
+
+        result_eventos = await db.execute(
+            select(EventoCronologico).where(EventoCronologico.inquerito_id == inquerito_id)
+        )
+        eventos = result_eventos.scalars().all()
+
+        dados = f"""
+Nome: {pessoa.nome}
+CPF: {pessoa.cpf or 'Não informado'}
+Tipo: {pessoa.tipo_pessoa or 'Não classificado'}
+Observações: {pessoa.observacoes or 'Nenhuma'}
+
+Contatos:
+{chr(10).join(f"- {c.tipo_contato}: {c.valor}" for c in contatos) or "Nenhum"}
+
+Endereços:
+{chr(10).join(f"- {e.endereco_completo} ({e.cidade}/{e.estado})" for e in enderecos) or "Nenhum"}
+
+Eventos/Cronologia:
+{chr(10).join(f"- {ev.data_fato_str or str(ev.data_fato or '')}: {ev.descricao}" for ev in eventos[:15]) or "Nenhum"}
+        """.strip()
+
+        historico_str = "Nenhum registro em outros inquéritos."
+        if pessoa.cpf:
+            try:
+                historico = await buscar_historico_pessoa(db, pessoa.cpf, inquerito_id)
+                if historico:
+                    historico_str = "\n".join(
+                        f"- IP {h['numero']} ({h['ano'] or '?'}): {h['tipo_pessoa']} — {h['descricao'] or 'sem descrição'}"
+                        for h in historico
+                    )
+            except Exception as e:
+                logger.warning(f"[AGENTE-FICHA] Histórico cruzado falhou: {e}")
+
+        prompt = PROMPT_ANALISE_PRELIMINAR.format(
+            nome=pessoa.nome,
+            dados_consolidados=dados,
+            historico_inqueritos=historico_str,
+        )
+
+        tier = "standard" if aprimorar else "resumo"
+        result = await self.llm.chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            tier=tier,
+            temperature=0.2,
+            max_tokens=1200,
+            json_mode=True,
+            agente="AnalisePreliminar",
+        )
+
+        analise_json = json.loads(result["content"].strip())
+        analise_json["_fonte"] = "gemini-flash" if aprimorar else "groq"
+
+        # Persistir cache
+        registro = ResultadoAgente(
+            inquerito_id=inquerito_id,
+            tipo_agente=tipo_cache,
+            referencia_id=pessoa_id,
+            resultado_json=analise_json,
+            modelo_llm=result.get("model"),
+        )
+        db.add(registro)
+        await db.commit()
+
+        logger.info(f"[AGENTE-FICHA] Análise preliminar ({tier}) gerada para {pessoa.nome}")
+        return analise_json
 
     async def gerar_ficha_empresa(
         self,
