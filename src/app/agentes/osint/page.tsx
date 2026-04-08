@@ -286,14 +286,27 @@ function ResultadoAvulso({ dados }: { dados: any }) {
   const receita = dados.receita_federal;
   const mandadosNome = dados.mandados_por_nome;
 
+  const semDados = !dados.fontes_consultadas?.length && dados.fontes_sem_dados?.length > 0;
+
   return (
     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      {semDados && (
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 flex gap-3 text-yellow-400 text-sm">
+          <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold">Nenhuma fonte retornou dados.</p>
+            <p className="text-xs text-yellow-500/70 mt-1">
+              {dados.fontes_sem_dados[0]?.motivo || "Verifique o token da API ou tente novamente."}
+            </p>
+          </div>
+        </div>
+      )}
       <div className="flex flex-wrap gap-1.5">
         {dados.fontes_consultadas?.map((f: string) => (
           <Badge key={f} variant="outline" className="text-xs border-green-700/40 text-green-400 bg-green-500/5">{f}</Badge>
         ))}
         {dados.fontes_sem_dados?.map((f: any) => (
-          <Badge key={f.fonte} variant="outline" className="text-xs border-red-700/40 text-red-400 bg-red-500/5">{f.fonte}</Badge>
+          <Badge key={f.fonte} variant="outline" className="text-xs border-red-700/40 text-red-400 bg-red-500/5" title={f.motivo}>{f.fonte}</Badge>
         ))}
       </div>
       
