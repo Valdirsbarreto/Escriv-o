@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 import { useAppStore } from "@/store/app";
 
 const PDFViewer = dynamic(() => import("@/components/PDFViewer"), { ssr: false });
-import { api, getDocsGerados, getDocGerado, deleteDocGerado, getPecasExtraidas, getPecaExtraida, reextrairPecas } from "@/lib/api";
+import { api, getDocsGerados, getDocGerado, deleteDocGerado, getPecasExtraidas, getPecaExtraida, reextrairPecas, osintConsultasInquerito } from "@/lib/api";
 import { deleteInquerito } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +21,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check, CalendarPlus, Clock, MapPin, ExternalLink, BookOpen, Quote, ChevronDown, ChevronRight, Bot, Eye } from "lucide-react";
+import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check, CalendarPlus, Clock, MapPin, ExternalLink, BookOpen, Quote, ChevronDown, ChevronRight, Bot, Eye, UserSearch } from "lucide-react";
 import { IntimacaoUploadModal } from "@/components/IntimacaoUploadModal";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -244,6 +244,8 @@ export default function InqueritoDetalhePage() {
   const [novoNumero, setNovoNumero] = useState("");
   const [salvandoNumero, setSalvandoNumero] = useState(false);
   const [catalogando, setCatalogando] = useState(false);
+  const [consultasOsint, setConsultasOsint] = useState<any[]>([]);
+  const [osintAbertos, setOsintAbertos] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sintesePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const searchParams = useSearchParams();
@@ -285,6 +287,7 @@ export default function InqueritoDetalhePage() {
       setInqueritoAtivoId(inqId);
       fetchDocsGerados();
       fetchPecasExtraidas();
+      osintConsultasInquerito(inqId).then(r => setConsultasOsint(r.consultas || [])).catch(() => {});
 
       // Se veio de intimação (?sintese=1), abre a síntese automaticamente
       if (searchParams.get("sintese") === "1") {
@@ -837,6 +840,61 @@ export default function InqueritoDetalhePage() {
               </div>
             )}
           </div>
+
+          {/* Consultas OSINT do Inquérito */}
+          {consultasOsint.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-4">
+                <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
+                  <UserSearch size={18} className="text-purple-400" /> Consultas OSINT
+                </h2>
+                <span className="text-sm text-zinc-500">{consultasOsint.length} alvo(s)</span>
+              </div>
+              <div className="space-y-2">
+                {consultasOsint.map((grupo: any) => {
+                  const aberto = osintAbertos[grupo.documento_hash] ?? false;
+                  const modOk = grupo.modulos.filter((m: any) => m.status === "ok");
+                  const modErro = grupo.modulos.filter((m: any) => m.status !== "ok");
+                  return (
+                    <div key={grupo.documento_hash} className="border border-zinc-800 rounded-xl bg-zinc-900/40 overflow-hidden">
+                      <button
+                        onClick={() => setOsintAbertos(p => ({ ...p, [grupo.documento_hash]: !aberto }))}
+                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/40 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="p-1.5 rounded border bg-zinc-950 text-purple-400 border-zinc-800">
+                            <UserSearch size={14} />
+                          </div>
+                          <div className="text-left">
+                            <p className="text-sm font-medium text-zinc-200">{grupo.nome}</p>
+                            <p className="text-xs text-zinc-500 mt-0.5">
+                              {modOk.length} módulo(s) consultado(s) · {new Date(grupo.ultima_consulta).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {modErro.length > 0 && <span className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full">{modErro.length} sem dados</span>}
+                          <ChevronDown size={14} className={`text-zinc-500 transition-transform ${aberto ? "rotate-180" : ""}`} />
+                        </div>
+                      </button>
+                      {aberto && (
+                        <div className="border-t border-zinc-800 px-4 py-3 space-y-1">
+                          {grupo.modulos.map((m: any, i: number) => (
+                            <div key={i} className="flex items-center justify-between text-xs py-1">
+                              <span className={m.status === "ok" ? "text-zinc-300" : "text-zinc-600"}>{m.tipo}</span>
+                              <span className={`px-2 py-0.5 rounded-full border text-[10px] ${m.status === "ok" ? "border-green-700/40 text-green-400 bg-green-500/5" : "border-zinc-700 text-zinc-600"}`}>
+                                {m.status === "ok" ? "ok" : m.status}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Peças Individuais Extraídas */}
           <div>

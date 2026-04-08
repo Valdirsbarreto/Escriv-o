@@ -218,3 +218,8 @@ export const osintConsultaAvulsa = async (params: {
   });
   return response.data;
 };
+
+export const osintConsultasInquerito = async (inqueritoId: string) => {
+  const response = await api.get(`/agentes/osint/consultas/${inqueritoId}`);
+  return response.data;
+};

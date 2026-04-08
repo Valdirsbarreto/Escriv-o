@@ -9,9 +9,12 @@ from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.models.consulta_externa import ConsultaExterna
+from app.models.pessoa import Pessoa
 from app.services.agente_ficha import AgenteFicha
 from app.services.agente_cautelar import AgenteCautelar
 from app.services.agente_extrato import AgenteExtrato
@@ -343,6 +346,65 @@ async def osint_custo_inquerito(
         return {"status": "ok", "resumo": resumo}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao calcular custo: {str(e)[:200]}")
+
+
+@router.get(
+    "/osint/consultas/{inquerito_id}",
+    summary="Lista consultas OSINT realizadas para o inquérito, agrupadas por pessoa",
+)
+async def osint_consultas_inquerito(
+    inquerito_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Retorna todas as ConsultaExterna do inquérito, cruzando documento_hash
+    com Pessoa.cpf para exibir nomes no frontend.
+    Agrupa por pessoa (hash), cada grupo lista os módulos consultados.
+    """
+    # Busca consultas do inquérito
+    result = await db.execute(
+        select(ConsultaExterna)
+        .where(ConsultaExterna.inquerito_id == inquerito_id)
+        .order_by(ConsultaExterna.created_at.desc())
+    )
+    consultas = result.scalars().all()
+
+    if not consultas:
+        return {"consultas": []}
+
+    # Monta dicionário hash → nome cruzando com pessoas do inquérito
+    pessoas_result = await db.execute(
+        select(Pessoa).where(Pessoa.inquerito_id == inquerito_id)
+    )
+    pessoas = pessoas_result.scalars().all()
+
+    hash_para_nome: Dict[str, str] = {}
+    for p in pessoas:
+        if p.cpf:
+            cpf_limpo = p.cpf.replace(".", "").replace("-", "").strip()
+            h = ConsultaExterna.hash_documento(cpf_limpo)
+            hash_para_nome[h] = p.nome
+
+    # Agrupa por documento_hash
+    grupos: Dict[str, Any] = {}
+    for c in consultas:
+        h = c.documento_hash
+        if h not in grupos:
+            grupos[h] = {
+                "documento_hash": h,
+                "nome": hash_para_nome.get(h, "Alvo desconhecido"),
+                "modulos": [],
+                "ultima_consulta": c.created_at.isoformat(),
+            }
+        grupos[h]["modulos"].append({
+            "tipo": c.tipo_consulta,
+            "status": c.status,
+            "custo": float(c.custo_estimado or 0),
+            "resultado": c.resultado_json,
+            "data": c.created_at.isoformat(),
+        })
+
+    return {"consultas": list(grupos.values())}
 
 
 # ── Cautelar ──────────────────────────────────────────────────────────────────
