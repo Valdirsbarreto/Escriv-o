@@ -1029,6 +1029,12 @@ export default function InqueritoDetalhePage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
+                          {doc.status_processamento === "concluido" && !isSintetico && (
+                            <span
+                              title={pecasDoDoc.length > 0 ? `${pecasDoDoc.length} peça(s) catalogada(s)` : "Aguardando catalogação de peças"}
+                              className={`w-2 h-2 rounded-full shrink-0 ${pecasDoDoc.length > 0 ? "bg-green-400" : "bg-amber-400 animate-pulse"}`}
+                            />
+                          )}
                           {doc.status_processamento === "concluido" && (
                             <button
                               onClick={(e) => handleVerCitacoes(doc, e)}
