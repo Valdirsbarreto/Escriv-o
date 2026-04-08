@@ -987,10 +987,14 @@ export default function InqueritoDetalhePage() {
 
                 const renderDocCard = (doc: any) => {
                   const isSintetico = doc.status_processamento === "sintetico";
+                  const pecasDoDoc = pecasExtraidas.filter((p: any) => p.documento_id === doc.id);
                   return (
-                    <div key={doc.id} onClick={() => handleAbrirDoc(doc)}
-                      className={`flex flex-col p-3 rounded-lg border transition-colors cursor-pointer ${isSintetico ? "bg-blue-500/5 border-blue-500/20 hover:border-blue-500/40" : "bg-zinc-900/60 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/60"}`}>
-                      <div className="flex justify-between items-center w-full">
+                    <div key={doc.id} className={`flex flex-col rounded-lg border transition-colors ${isSintetico ? "bg-blue-500/5 border-blue-500/20" : "bg-zinc-900/60 border-zinc-800"}`}>
+                      {/* Cabeçalho do documento */}
+                      <div
+                        onClick={() => handleAbrirDoc(doc)}
+                        className={`flex justify-between items-center p-3 cursor-pointer rounded-lg ${isSintetico ? "hover:border-blue-500/40" : "hover:bg-zinc-800/60"} transition-colors`}
+                      >
                         <div className="flex items-center gap-3 min-w-0">
                           <div className={`p-1.5 rounded border shrink-0 ${isSintetico ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-zinc-950 text-blue-400 border-zinc-800"}`}>
                             {isSintetico ? <Sparkles size={16}/> : <FileText size={16}/>}
@@ -1019,7 +1023,7 @@ export default function InqueritoDetalhePage() {
                               title="Extrair peças individuais deste PDF"
                             >
                               {reextrahindo === doc.id ? <Loader2 size={11} className="animate-spin"/> : <FileText size={11}/>}
-                              Extrair peças
+                              {pecasDoDoc.length > 0 ? `${pecasDoDoc.length} peça(s)` : "Extrair peças"}
                             </button>
                           )}
                           {isSintetico ? (
@@ -1041,9 +1045,10 @@ export default function InqueritoDetalhePage() {
                           )}
                         </div>
                       </div>
-                      
+
+                      {/* Barra de progresso de extração */}
                       {reextrahindo === doc.id && (
-                        <div className="mt-3 w-full animate-in fade-in slide-in-from-top-1">
+                        <div className="mx-3 mb-3 animate-in fade-in slide-in-from-top-1">
                           <div className="flex justify-between items-center mb-1 w-full">
                             <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-semibold flex items-center gap-1">
                               <Loader2 size={10} className="animate-spin text-amber-500"/>
@@ -1052,11 +1057,50 @@ export default function InqueritoDetalhePage() {
                             <span className="text-[10px] text-zinc-500 font-mono">{extractProgress}%</span>
                           </div>
                           <div className="h-1 bg-zinc-950/80 rounded-full overflow-hidden w-full border border-black/50">
-                            <div 
-                              className="h-full bg-gradient-to-r from-amber-500 to-amber-300 rounded-full transition-all duration-500 ease-out" 
-                              style={{ width: `${extractProgress}%` }} 
+                            <div
+                              className="h-full bg-gradient-to-r from-amber-500 to-amber-300 rounded-full transition-all duration-500 ease-out"
+                              style={{ width: `${extractProgress}%` }}
                             />
                           </div>
+                        </div>
+                      )}
+
+                      {/* Peças extraídas deste documento */}
+                      {pecasDoDoc.length > 0 && (
+                        <div className="border-t border-zinc-800/60 divide-y divide-zinc-800/40">
+                          {pecasDoDoc.map((peca: any) => (
+                            <div key={peca.id} className="flex items-center justify-between px-3 py-2 hover:bg-zinc-800/30 transition-colors">
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <span className="text-[10px] text-zinc-600 font-mono shrink-0 w-14 text-right">
+                                  {peca.pagina_inicial != null
+                                    ? `fls. ${peca.pagina_inicial}${peca.pagina_final && peca.pagina_final !== peca.pagina_inicial ? `–${peca.pagina_final}` : ""}`
+                                    : ""}
+                                </span>
+                                <span className="text-xs text-zinc-300 truncate">{peca.titulo}</span>
+                                {peca.tipo && (
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full border shrink-0 ${TIPO_PECA_COLOR[peca.tipo] || TIPO_PECA_COLOR["outro"]}`}>
+                                    {TIPO_PECA_LABEL[peca.tipo] || peca.tipo}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0 ml-2">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleAbrirPecaNoPDF(peca); }}
+                                  title="Abrir no PDF original"
+                                  className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-blue-400 px-2 py-1 rounded border border-zinc-800 hover:border-blue-500/40 transition-colors"
+                                >
+                                  <Eye size={10}/> PDF
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleAbrirPeca(peca); }}
+                                  title="Ver texto extraído"
+                                  className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-amber-400 px-2 py-1 rounded border border-zinc-800 hover:border-amber-500/40 transition-colors"
+                                >
+                                  <FileText size={10}/> Texto
+                                </button>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>

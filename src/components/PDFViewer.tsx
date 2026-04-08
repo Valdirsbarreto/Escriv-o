@@ -4,9 +4,6 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, ExternalLink, X, Loader2, FileText, ZoomIn, ZoomOut } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Worker via CDN — evita incompatibilidade webpack/App Router
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-
 interface PDFViewerProps {
   url: string;
   initialPage: number;
@@ -24,6 +21,11 @@ export default function PDFViewer({ url, initialPage, titulo, onClose }: PDFView
   const [zoom, setZoom] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+
+  // Configura worker via CDN (deve rodar só no browser)
+  useEffect(() => {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+  }, []);
 
   // Carrega o documento PDF
   useEffect(() => {
