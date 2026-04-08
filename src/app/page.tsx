@@ -48,7 +48,7 @@ export default function Home() {
     setSalvando(true);
     try {
       // Atualiza apenas o número do inquérito
-      await api.patch(`/inqueritos/${editInquerito.id}`, { numero: novoNumero });
+      await api.patch(`/inqueritos/${editInquerito.id}/numero`, { numero: novoNumero });
       setEditInquerito(null);
       fetchInqueritos();
     } catch (e) {
