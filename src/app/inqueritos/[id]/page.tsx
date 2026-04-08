@@ -7,6 +7,7 @@ import { useAppStore } from "@/store/app";
 
 const PDFViewer = dynamic(() => import("@/components/PDFViewer"), { ssr: false });
 import { api, getDocsGerados, getDocGerado, deleteDocGerado, getPecasExtraidas, getPecaExtraida, reextrairPecas, osintConsultasInquerito } from "@/lib/api";
+import { PainelInvestigacao } from "@/components/osint/PainelInvestigacao";
 import { deleteInquerito } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -215,7 +216,7 @@ export default function InqueritoDetalhePage() {
   const router = useRouter();
   const inqId = params.id as string;
   const { setInqueritoAtivoId, setCopilotoOpen, docsGeradosVersion, setSidebarCollapsed, pdfViewer, setPdfViewer, closePdfViewer, pecaParaAbrir, setPecaParaAbrir } = useAppStore();
-  const [activeTab, setActiveTab] = useState<"workspace" | "autos">("workspace");
+  const [activeTab, setActiveTab] = useState<"workspace" | "autos" | "investigacao">("workspace");
 
   const [inquerito, setInq] = useState<any>(null);
   const [documentos, setDocumentos] = useState<any[]>([]);
@@ -773,7 +774,8 @@ export default function InqueritoDetalhePage() {
         {([
           { id: "workspace", label: "Área de Trabalho" },
           { id: "autos", label: `Autos Físicos Digitalizados (${documentos.length})` },
-        ] as const).map(tab => (
+          { id: "investigacao", label: "Investigação OSINT" },
+        ] as { id: "workspace" | "autos" | "investigacao"; label: string }[]).map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
@@ -1293,6 +1295,18 @@ export default function InqueritoDetalhePage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* ── ABA: INVESTIGAÇÃO OSINT ── */}
+      {activeTab === "investigacao" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-4">
+            <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
+              <UserSearch size={18} className="text-purple-400" /> Investigação OSINT
+            </h2>
+          </div>
+          <PainelInvestigacao inqueritoId={inqId} />
         </div>
       )}
 

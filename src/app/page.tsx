@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Search, FolderOpen, AlertCircle, Clock, UploadCloud, 
-  ArrowRight, FilePlus, Filter, LayoutGrid, Edit2 
+import {
+  Search, FolderOpen, AlertCircle, Clock, UploadCloud,
+  ArrowRight, FilePlus, Filter, LayoutGrid, Edit2, FileSearch
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -138,6 +138,11 @@ export default function Home() {
           <Button variant="outline" className="border-zinc-800 text-zinc-400 gap-2 h-14 px-6 rounded-2xl hover:bg-zinc-900">
             <Filter size={16} /> Filtros
           </Button>
+          <Link href="/agentes/osint?avulsa=1">
+            <Button variant="outline" className="border-zinc-700 text-zinc-300 gap-2 h-14 px-6 rounded-2xl hover:bg-zinc-900 hover:border-blue-500/40">
+              <FileSearch size={16} /> Consulta Avulsa
+            </Button>
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">

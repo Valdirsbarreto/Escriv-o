@@ -1,0 +1,416 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  User, Building, ChevronDown, ChevronRight, Loader2,
+  AlertTriangle, CheckCircle, XCircle, MinusCircle,
+  ExternalLink, Play, UserSearch,
+} from "lucide-react";
+import { osintSugestao, osintLote } from "@/lib/api";
+
+// ── Tipos ─────────────────────────────────────────────────────────────────────
+
+type Staleness = "fresco" | "desatualizado" | "ausente";
+
+interface DadoCampo {
+  presente: boolean;
+  staleness: Staleness;
+  data_doc?: string | null;
+  data_doc_fmt?: string | null;
+  texto?: string | null;
+}
+
+interface HistoricoInquerito {
+  inquerito_id: string;
+  numero: string;
+  ano?: number | null;
+  descricao?: string;
+  tipo_pessoa: string;
+}
+
+interface PersonagemAnalise {
+  pessoa_id: string;
+  nome: string;
+  tipo_pessoa: string;
+  cpf?: string | null;
+  cnpj?: string | null;
+  perfil_sugerido: number | null;
+  justificativa: string;
+  dados_nos_autos: {
+    cpf: DadoCampo;
+    telefone: DadoCampo;
+    endereco: DadoCampo;
+  };
+  historico_inqueritos: HistoricoInquerito[];
+  osint_realizado: boolean;
+}
+
+// ── Constantes ────────────────────────────────────────────────────────────────
+
+const OSINT_MODULOS = [
+  { id: "cadastro_pf_plus",      label: "Cadastro Plus",         custo: 2.50, color: "text-green-400" },
+  { id: "vinculo_empregaticio",  label: "Vínculo CLT / RH",      custo: 3.10, color: "text-green-400" },
+  { id: "historico_veiculos_pf", label: "Histórico Veicular",    custo: 0.90, color: "text-lime-400" },
+  { id: "bpc",                   label: "Benefícios BPC",        custo: 1.50, color: "text-blue-400" },
+  { id: "mandados_prisao",       label: "Mandados de Prisão",    custo: 1.20, color: "text-red-400" },
+  { id: "pep",                   label: "Pessoa Exposta (PEP)",  custo: 0.72, color: "text-yellow-400" },
+  { id: "aml",                   label: "AML / Lavagem",         custo: 0.72, color: "text-orange-400" },
+  { id: "ceis",                  label: "CEIS (Inidôneas)",      custo: 0.36, color: "text-orange-400" },
+  { id: "cnep",                  label: "CNEP (Punidas)",        custo: 0.36, color: "text-orange-400" },
+  { id: "processos_tj",          label: "Processos TJ",         custo: 2.00, color: "text-red-400" },
+  { id: "ofac",                  label: "Lista OFAC",            custo: 0.36, color: "text-red-400" },
+  { id: "lista_onu",             label: "Lista ONU",             custo: 0.36, color: "text-red-400" },
+];
+
+const initSugestao = (perfil: number | null): string[] => {
+  if (perfil === 1) return ["cadastro_pf_plus", "historico_veiculos_pf"];
+  if (perfil === 2) return ["cadastro_pf_plus", "historico_veiculos_pf", "mandados_prisao", "pep"];
+  if (perfil === 3) return ["cadastro_pf_plus", "historico_veiculos_pf", "mandados_prisao", "aml", "ceis"];
+  if (perfil === 4) return ["cadastro_pf_plus", "vinculo_empregaticio", "historico_veiculos_pf", "mandados_prisao", "aml", "processos_tj"];
+  return [];
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function DadosBadge({ campo, label }: { campo: DadoCampo; label: string }) {
+  const cor = campo.staleness === "fresco"
+    ? "border-green-700/40 text-green-400 bg-green-500/5"
+    : campo.staleness === "desatualizado"
+    ? "border-yellow-700/40 text-yellow-400 bg-yellow-500/5"
+    : "border-zinc-700 text-zinc-600";
+  return (
+    <span title={campo.texto ? `${label}: "${campo.texto}"` : label}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border cursor-default ${cor}`}>
+      {label}
+    </span>
+  );
+}
+
+function TipoPessoa({ tipo }: { tipo: string }) {
+  const cor = tipo === "investigado" ? "border-red-700/40 text-red-400"
+    : tipo === "vitima" ? "border-blue-700/40 text-blue-400"
+    : tipo === "testemunha" ? "border-yellow-700/40 text-yellow-400"
+    : "border-zinc-700 text-zinc-400";
+  return (
+    <Badge variant="outline" className={`text-[10px] capitalize ${cor}`}>{tipo}</Badge>
+  );
+}
+
+// ── Card de Personagem ────────────────────────────────────────────────────────
+
+function CardPersonagem({
+  p, inqueritoId, modulos, onToggleModulo, resultado, executando,
+}: {
+  p: PersonagemAnalise;
+  inqueritoId: string;
+  modulos: string[];
+  onToggleModulo: (modId: string) => void;
+  resultado: any;
+  executando: boolean;
+}) {
+  const [expandido, setExpandido] = useState(false);
+  const [execIndividual, setExecIndividual] = useState(false);
+  const [resIndividual, setResIndividual] = useState<any>(resultado);
+
+  const custo = modulos.reduce((sum, m) => sum + (OSINT_MODULOS.find(x => x.id === m)?.custo || 0), 0);
+  const temCross = p.historico_inqueritos?.length > 0;
+  const statusFinal = resIndividual || resultado;
+
+  const handleExecutar = async () => {
+    setExecIndividual(true);
+    try {
+      const res = await osintLote(inqueritoId, [{ pessoa_id: p.pessoa_id, modulos }]);
+      const r = res.resultados?.find((x: any) => x.pessoa_id === p.pessoa_id);
+      if (r) setResIndividual(r);
+    } catch { /* silencioso */ } finally { setExecIndividual(false); }
+  };
+
+  return (
+    <div className={`border rounded-xl overflow-hidden transition-colors ${
+      expandido ? "border-zinc-700 bg-zinc-900/60" : "border-zinc-800 bg-zinc-900/30 hover:border-zinc-700"
+    }`}>
+      {/* ── Cabeçalho do card ── */}
+      <button
+        onClick={() => setExpandido(e => !e)}
+        className="w-full flex items-center gap-3 px-4 py-3 text-left"
+      >
+        <span className="text-zinc-500 shrink-0">
+          {expandido ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </span>
+
+        {/* Ícone tipo */}
+        <div className={`p-1.5 rounded border shrink-0 ${
+          p.tipo_pessoa === "investigado" ? "bg-red-500/10 border-red-700/30 text-red-400"
+          : p.tipo_pessoa === "vitima" ? "bg-blue-500/10 border-blue-700/30 text-blue-400"
+          : "bg-zinc-900 border-zinc-700 text-zinc-400"
+        }`}>
+          {p.cnpj ? <Building size={13} /> : <User size={13} />}
+        </div>
+
+        {/* Nome + identificador */}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-zinc-200 truncate">{p.nome}</p>
+          <p className="text-[10px] text-zinc-600 mt-0.5 font-mono">
+            {p.cpf || p.cnpj || "Sem documento"}
+          </p>
+        </div>
+
+        {/* Badges de dados */}
+        <div className="hidden sm:flex items-center gap-1 shrink-0">
+          <DadosBadge campo={p.dados_nos_autos.cpf}     label="CPF" />
+          <DadosBadge campo={p.dados_nos_autos.telefone} label="Tel" />
+          <DadosBadge campo={p.dados_nos_autos.endereco} label="End" />
+        </div>
+
+        {/* Tipo da pessoa */}
+        <TipoPessoa tipo={p.tipo_pessoa} />
+
+        {/* Cross-inquérito */}
+        {temCross && (
+          <span className="shrink-0 text-[10px] px-2 py-0.5 rounded border border-orange-700/40 text-orange-400 bg-orange-500/5">
+            ⚠ {p.historico_inqueritos.length} IP(s)
+          </span>
+        )}
+
+        {/* Status OSINT */}
+        {execIndividual || executando ? (
+          <Loader2 size={14} className="animate-spin text-blue-400 shrink-0" />
+        ) : statusFinal?.status === "concluido" ? (
+          <CheckCircle size={14} className="text-green-400 shrink-0" />
+        ) : statusFinal?.status === "ignorado" ? (
+          <MinusCircle size={14} className="text-zinc-600 shrink-0" />
+        ) : statusFinal?.status === "erro" ? (
+          <XCircle size={14} className="text-red-400 shrink-0" />
+        ) : null}
+      </button>
+
+      {/* ── Conteúdo expandido ── */}
+      {expandido && (
+        <div className="border-t border-zinc-800 px-4 py-4 space-y-4">
+
+          {/* Justificativa */}
+          {p.justificativa && (
+            <p className="text-xs text-zinc-500 italic leading-relaxed">
+              "{p.justificativa}"
+            </p>
+          )}
+
+          {/* Cross-inquérito com links */}
+          {temCross && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] text-orange-400 font-medium">Aparece em:</span>
+              {p.historico_inqueritos.map((h) => (
+                <Link
+                  key={h.inquerito_id}
+                  href={`/inqueritos/${h.inquerito_id}`}
+                  className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border border-orange-700/30 text-orange-300 bg-orange-500/5 hover:border-orange-500/50 hover:text-orange-200 transition-colors"
+                >
+                  IP {h.numero}
+                  <span className="text-orange-500/60">({h.tipo_pessoa})</span>
+                  <ExternalLink size={9} />
+                </Link>
+              ))}
+            </div>
+          )}
+
+          {/* Módulos OSINT */}
+          <div>
+            <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2">Módulos OSINT</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              {OSINT_MODULOS.map(mod => {
+                const ativo = modulos.includes(mod.id);
+                return (
+                  <label key={mod.id} className="flex items-center gap-2 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={ativo}
+                      onChange={() => onToggleModulo(mod.id)}
+                      className="w-3 h-3 cursor-pointer accent-blue-500 rounded-sm"
+                    />
+                    <span className={`text-[10px] truncate ${ativo ? mod.color : "text-zinc-600"} group-hover:text-zinc-400`}>
+                      {mod.label}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Rodapé: custo + botão */}
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-xs text-zinc-500">
+              {modulos.length > 0
+                ? <>Custo estimado: <span className="text-zinc-300 font-mono">R$ {custo.toFixed(2)}</span></>
+                : <span className="text-zinc-700">Nenhum módulo selecionado</span>}
+            </span>
+            <Button
+              onClick={handleExecutar}
+              disabled={modulos.length === 0 || execIndividual}
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 h-7 text-xs gap-1.5"
+            >
+              {execIndividual
+                ? <><Loader2 size={12} className="animate-spin" /> Consultando...</>
+                : <><Play size={11} /> Executar OSINT</>}
+            </Button>
+          </div>
+
+          {/* Resultado inline */}
+          {statusFinal?.status === "concluido" && statusFinal?.dados && (
+            <div className="border-t border-zinc-800 pt-3 space-y-1.5">
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Resultado</p>
+              <div className="flex flex-wrap gap-1">
+                {statusFinal.dados.apis_executadas?.map((a: string) => (
+                  <Badge key={a} variant="outline" className="text-[10px] border-green-700/30 text-green-400">{a}</Badge>
+                ))}
+              </div>
+              {statusFinal.dados.cadastro?.nome && (
+                <p className="text-xs text-zinc-300">{statusFinal.dados.cadastro.nome}</p>
+              )}
+              {statusFinal.dados.mandados_prisao?.possuiMandado !== undefined && (
+                <p className={`text-xs ${statusFinal.dados.mandados_prisao.possuiMandado ? "text-red-400" : "text-green-400"}`}>
+                  {statusFinal.dados.mandados_prisao.possuiMandado ? "⚠ Mandado de prisão ativo" : "✓ Sem mandados"}
+                </p>
+              )}
+            </div>
+          )}
+          {statusFinal?.status === "erro" && (
+            <div className="border-t border-zinc-800 pt-3 text-xs text-red-400 flex gap-2">
+              <AlertTriangle size={12} className="shrink-0 mt-0.5" /> {statusFinal.mensagem || "Erro na consulta"}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Painel principal ──────────────────────────────────────────────────────────
+
+export function PainelInvestigacao({ inqueritoId }: { inqueritoId: string }) {
+  const [analise, setAnalise] = useState<any | null>(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [modulos, setModulos] = useState<Record<string, string[]>>({});
+  const [resultados, setResultados] = useState<Record<string, any>>({});
+  const [executandoLote, setExecutandoLote] = useState(false);
+
+  useEffect(() => {
+    setAnalise(null); setErro(null); setResultados({}); setModulos({});
+    setCarregando(true);
+    osintSugestao(inqueritoId)
+      .then(res => {
+        const a = res.analise;
+        setAnalise(a);
+        const init: Record<string, string[]> = {};
+        (a.personagens || []).forEach((p: PersonagemAnalise) => {
+          init[p.pessoa_id] = initSugestao(p.perfil_sugerido);
+        });
+        setModulos(init);
+      })
+      .catch(e => setErro(e?.response?.data?.detail || "Erro ao analisar personagens."))
+      .finally(() => setCarregando(false));
+  }, [inqueritoId]);
+
+  const personagens: PersonagemAnalise[] = analise?.personagens || [];
+
+  const toggleModulo = (pessoaId: string, moduloId: string) => {
+    setModulos(prev => {
+      const atuais = prev[pessoaId] || [];
+      return {
+        ...prev,
+        [pessoaId]: atuais.includes(moduloId)
+          ? atuais.filter(m => m !== moduloId)
+          : [...atuais, moduloId],
+      };
+    });
+  };
+
+  const custoTotal = personagens.reduce((acc, p) => {
+    return acc + (modulos[p.pessoa_id] || []).reduce((s, m) => s + (OSINT_MODULOS.find(x => x.id === m)?.custo || 0), 0);
+  }, 0);
+
+  const handleExecutarTodos = async () => {
+    const itens = personagens
+      .filter(p => (modulos[p.pessoa_id] || []).length > 0)
+      .map(p => ({ pessoa_id: p.pessoa_id, modulos: modulos[p.pessoa_id] }));
+    if (!itens.length) return;
+    setExecutandoLote(true);
+    try {
+      const res = await osintLote(inqueritoId, itens);
+      const mapa: Record<string, any> = {};
+      (res.resultados || []).forEach((r: any) => { mapa[r.pessoa_id] = r; });
+      setResultados(mapa);
+    } catch { /* silencioso */ } finally { setExecutandoLote(false); }
+  };
+
+  if (carregando) return (
+    <div className="flex items-center justify-center h-48 gap-3 text-zinc-400">
+      <Loader2 size={20} className="animate-spin text-blue-500" />
+      Analisando personagens nos autos...
+    </div>
+  );
+
+  if (erro) return (
+    <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex gap-3 text-red-400 text-sm">
+      <AlertTriangle size={16} className="shrink-0 mt-0.5" /> {erro}
+    </div>
+  );
+
+  if (!personagens.length) return (
+    <div className="flex flex-col items-center justify-center h-48 text-zinc-500 text-center">
+      <UserSearch className="w-12 h-12 mb-3 text-zinc-800" />
+      <p className="text-sm">Nenhum personagem indexado neste inquérito.</p>
+      <p className="text-xs mt-1 text-zinc-600">Inicie a ingestão de documentos para detectar pessoas automaticamente.</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Header com classificação e ação em lote */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs">
+          {analise?.crime_complexo
+            ? <Badge variant="outline" className="border-red-700/40 text-red-400 bg-red-500/5">Crime complexo</Badge>
+            : <Badge variant="outline" className="border-zinc-700 text-zinc-500">Crime simples</Badge>}
+          <span className="text-zinc-600">{personagens.length} personagem(ns)</span>
+        </div>
+        <div className="flex items-center gap-3">
+          {custoTotal > 0 && (
+            <span className="text-xs text-zinc-500">
+              Total selecionado: <span className="text-zinc-300 font-mono">R$ {custoTotal.toFixed(2)}</span>
+            </span>
+          )}
+          <Button
+            onClick={handleExecutarTodos}
+            disabled={executandoLote || custoTotal === 0}
+            size="sm"
+            className="bg-blue-600 hover:bg-blue-700 h-8 text-xs gap-1.5"
+          >
+            {executandoLote
+              ? <><Loader2 size={12} className="animate-spin" /> Executando...</>
+              : <><Play size={11} /> Executar todos</>}
+          </Button>
+        </div>
+      </div>
+
+      {/* Cards de personagens */}
+      <div className="space-y-2">
+        {personagens.map(p => (
+          <CardPersonagem
+            key={p.pessoa_id}
+            p={p}
+            inqueritoId={inqueritoId}
+            modulos={modulos[p.pessoa_id] || []}
+            onToggleModulo={(modId) => toggleModulo(p.pessoa_id, modId)}
+            resultado={resultados[p.pessoa_id]}
+            executando={executandoLote}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
