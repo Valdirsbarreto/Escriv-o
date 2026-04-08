@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, ExternalLink, X, Loader2, FileText, ZoomIn, ZoomOut } from 'lucide-react';
-import * as pdfjsLib from 'pdfjs-dist';
 
 interface PDFViewerProps {
   url: string;
@@ -14,6 +13,7 @@ interface PDFViewerProps {
 export default function PDFViewer({ url, initialPage, titulo, onClose }: PDFViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const renderTaskRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [pdfDoc, setPdfDoc] = useState<any>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
@@ -22,29 +22,29 @@ export default function PDFViewer({ url, initialPage, titulo, onClose }: PDFView
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  // Configura worker via CDN (deve rodar só no browser)
-  useEffect(() => {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-  }, []);
-
-  // Carrega o documento PDF
+  // Carrega pdfjs-dist dinamicamente (browser only) e depois carrega o PDF
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(false);
     setPdfDoc(null);
 
-    pdfjsLib.getDocument({ url, withCredentials: false }).promise
-      .then(doc => {
-        if (cancelled) return;
-        setPdfDoc(doc);
-        setTotalPages(doc.numPages);
-        const safePage = Math.min(Math.max(1, initialPage), doc.numPages);
-        setCurrentPage(safePage);
-        setPageInput(String(safePage));
-      })
-      .catch(() => { if (!cancelled) setError(true); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+    import('pdfjs-dist').then((lib) => {
+      if (cancelled) return;
+      lib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${lib.version}/build/pdf.worker.min.mjs`;
+      return lib.getDocument({ url, withCredentials: false }).promise;
+    }).then((doc) => {
+      if (!doc || cancelled) return;
+      setPdfDoc(doc);
+      setTotalPages(doc.numPages);
+      const safePage = Math.min(Math.max(1, initialPage), doc.numPages);
+      setCurrentPage(safePage);
+      setPageInput(String(safePage));
+    }).catch(() => {
+      if (!cancelled) setError(true);
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
 
     return () => { cancelled = true; };
   }, [url, initialPage]);
