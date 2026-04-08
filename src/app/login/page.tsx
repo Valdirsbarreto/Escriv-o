@@ -7,7 +7,14 @@ import { createClient } from "@/lib/supabase/client";
 function LoginContent() {
   const searchParams = useSearchParams();
   const erro = searchParams.get("erro");
+  const code = searchParams.get("code");
   const [carregando, setCarregando] = useState(false);
+
+  // Se o Supabase redirecionou o code para /login em vez de /auth/callback,
+  // troca para o callback correto
+  if (code && typeof window !== "undefined") {
+    window.location.href = `/auth/callback?code=${code}`;
+  }
 
   const handleGoogleLogin = async () => {
     setCarregando(true);
