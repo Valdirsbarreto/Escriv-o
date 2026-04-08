@@ -171,6 +171,49 @@ class PDFExtractorService:
         result["texto_completo"] = "\n\n".join(textos)
         return result
 
+    def extract_any_file(self, content: bytes, content_type: str) -> Dict:
+        """
+        Extrai texto de qualquer tipo de arquivo suportado (PDF, TIFF, JPG, PNG).
+        Retorna o mesmo formato de extract_with_ocr().
+        """
+        if content_type in ("image/tiff", "image/jpeg", "image/png", "image/jpg"):
+            return self._extract_image(content, content_type)
+        return self.extract_with_ocr(content)
+
+    def _extract_image(self, content: bytes, content_type: str) -> Dict:
+        """Extrai texto de imagem via OCR direto (TIFF, JPEG, PNG)."""
+        try:
+            import pytesseract
+            from PIL import Image
+            import io as _io
+
+            img = Image.open(_io.BytesIO(content))
+            frames = []
+            try:
+                while True:
+                    frames.append(img.copy().convert("RGB"))
+                    img.seek(img.tell() + 1)
+            except EOFError:
+                pass
+            if not frames:
+                frames = [img.convert("RGB")]
+
+            paginas = []
+            textos = []
+            for i, frame in enumerate(frames, start=1):
+                texto = pytesseract.image_to_string(frame, lang="por+eng")
+                paginas.append({"numero": i, "texto": texto, "origem": "ocr", "precisa_ocr": False})
+                textos.append(texto)
+
+            return {
+                "total_paginas": len(paginas),
+                "texto_completo": "\n\n".join(textos),
+                "paginas": paginas,
+            }
+        except Exception as e:
+            logger.error(f"[OCR-IMAGE] Erro: {e}")
+            return {"total_paginas": 1, "texto_completo": "", "paginas": []}
+
     def chunk_text(
         self,
         paginas: List[Dict],
