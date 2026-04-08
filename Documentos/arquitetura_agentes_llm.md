@@ -1,16 +1,17 @@
 # Escrivão AI — Arquitetura de Agentes, Tarefas e LLMs
 
-> Atualizado em: 2026-04-04
+> Atualizado em: 2026-04-08
 
 ---
 
-## 1. Mapa de Tiers LLM
+## 1. Tiers LLM
 
 | Tier | Provedor | Modelo | Custo | Uso |
 |------|----------|--------|-------|-----|
-| **Econômico** | OpenAI | `gpt-4.1-nano` | Mínimo | Classificação, NER, resumos |
-| **Standard** | Google | `gemini-2.0-flash` | Médio | Análise balanceada, extração estruturada |
-| **Premium** | Google | `gemini-2.0-flash` | Alto | Análise jurídica crítica, síntese, geração de documentos |
+| **Resumo / Auditoria** | Groq | `llama-3.3-70b-versatile` | **Gratuito** | Análise preliminar automática OSINT, auditoria factual |
+| **Econômico** | OpenAI | `gpt-4.1-nano` | Mínimo | Classificação de peças, resumos hierárquicos |
+| **Standard** | Google | `gemini-1.5-flash` | Médio | NER, extrato bancário, copiloto RAG, análise OSINT aprimorada |
+| **Premium** | Google | `gemini-1.5-pro` | Alto | Fichas completas com dados externos, cautelares, síntese investigativa |
 | **Vision** | Google | `gemini-flash-latest` | Variável | OCR de intimações, processamento de imagens |
 | **Embedding** | Google | `text-embedding-004` | Baixo | Vetores 768-dim para RAG |
 
@@ -20,7 +21,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  DELEGADO FAZ UPLOAD                                                        │
+│  AGENTE POLICIAL FAZ UPLOAD                                                        │
 │  POST /ingestao/iniciar  (PDF, PNG, JPG, TIFF)                              │
 └────────────────────────────────┬────────────────────────────────────────────┘
                                  │
@@ -108,17 +109,37 @@ POST /copiloto/mensagens
 
 ---
 
-### 3.2 Agente Ficha (OSINT Investigativo)
+### 3.2 Agente Ficha / OSINT Investigativo
+
+**Fluxo de 3 camadas para personagem:**
 
 ```
-POST /api/v1/agentes/ficha/pessoa/{pessoa_id}
-POST /api/v1/agentes/ficha/empresa/{empresa_id}
+Ao expandir card na aba "Investigação OSINT"
         │
-        ▼
+        ▼ (automático, gratuito)
 ┌───────────────────────────────────────────────────────┐
-│  [Opcional] OsintService.enriquecer_pessoa()         │
-│  SEM LLM — apenas chamadas REST à direct.data        │
+│  AgenteFicha.gerar_analise_preliminar_pessoa()       │
+│  LLM: RESUMO (Groq llama-3.3-70b — gratuito)        │
+│  Prompt: PROMPT_ANALISE_PRELIMINAR                  │
+│  Cache: 24h em ResultadoAgente                      │
 │                                                       │
+│  Apenas dados internos dos autos:                   │
+│  → resumo, nivel_risco, fatos_conhecidos,           │
+│     pontos_de_atencao, lacunas                      │
+│  (lacunas justificam quais APIs pagas usar)         │
+└───────────────────────────────────────────────────────┘
+        │
+        ▼ (por demanda — botão "Aprimorar")
+┌───────────────────────────────────────────────────────┐
+│  AgenteFicha.gerar_analise_preliminar_pessoa(        │
+│      aprimorar=True)                                │
+│  LLM: STANDARD (Gemini Flash)                       │
+│  Mesmo prompt, melhor raciocínio                    │
+└───────────────────────────────────────────────────────┘
+        │
+        ▼ (por demanda + permissão explícita)
+┌───────────────────────────────────────────────────────┐
+│  OsintService — módulos direct.data (APIs pagas)    │
 │  Perfis de profundidade:                             │
 │  P1 → cadastro_pf_plus, historico_veiculos          │
 │  P2 → P1 + mandados_prisao, pep, obito              │
@@ -126,18 +147,21 @@ POST /api/v1/agentes/ficha/empresa/{empresa_id}
 │  P4 → P3 + processos_tj, ofac, lista_onu           │
 │  Cache: 24h em ConsultaExterna                      │
 └──────────────────────────┬────────────────────────────┘
-                           │ dados externos (opcional)
+                           │ dados externos
                            ▼
 ┌───────────────────────────────────────────────────────┐
 │  AgenteFicha.gerar_ficha_pessoa()                    │
-│  LLM: PREMIUM (gemini-2.0-flash)                    │
+│  LLM: PREMIUM (Gemini Pro)                          │
 │  Prompt: PROMPT_FICHA_PESSOA                        │
-│                                                       │
-│  Consolida: dados internos do banco + externos       │
-│  → Retorna JSON estruturado com:                    │
-│     nome, CPF, tipo_envolvimento, nivel_risco,      │
-│     alertas, sugestoes_diligencias                  │
+│  → Ficha completa salva em DocumentoGerado          │
 └───────────────────────────────────────────────────────┘
+```
+
+**Endpoints:**
+```
+GET  /api/v1/agentes/osint/preliminar/{inquerito_id}/{pessoa_id}?aprimorar=false
+POST /api/v1/agentes/ficha/pessoa/{pessoa_id}?inquerito_id=...
+POST /api/v1/agentes/ficha/empresa/{empresa_id}?inquerito_id=...
 ```
 
 ---
@@ -260,10 +284,12 @@ POST /telegram/webhook
 | `verificar_alertas_intimacoes` | Celery Beat | — | — | — | Agendador 24h |
 | `CopilotoService` | HTTP | gemini-2.0-flash | Premium | `SYSTEM_PROMPT_COPILOTO` | `/copiloto/mensagens` |
 | `CopilotoService` — auditoria | HTTP | gemini-2.0-flash | Premium | `SYSTEM_PROMPT_AUDITORIA_FACTUAL` | Opcional no copiloto |
-| `AgenteFicha` (pessoa) | HTTP | gemini-2.0-flash | Premium | `PROMPT_FICHA_PESSOA` | `/agentes/ficha/pessoa/{id}` |
-| `AgenteFicha` (empresa) | HTTP | gemini-2.0-flash | Premium | `PROMPT_FICHA_EMPRESA` | `/agentes/ficha/empresa/{id}` |
-| `AgenteExtrato` | HTTP | gemini-2.0-flash | Standard | `PROMPT_ANALISE_EXTRATO` | `/agentes/extrato/{id}` |
-| `AgenteCautelar` | HTTP | gemini-2.0-flash | Premium | `PROMPT_CAUTELAR` | `/agentes/cautelar/` |
+| `AgenteFicha` — análise preliminar (auto) | HTTP | Groq llama-3.3-70b | **Resumo (gratuito)** | `PROMPT_ANALISE_PRELIMINAR` | `/agentes/osint/preliminar/{id}/{pid}` |
+| `AgenteFicha` — análise preliminar (aprimorar) | HTTP | gemini-1.5-flash | Standard | `PROMPT_ANALISE_PRELIMINAR` | `/agentes/osint/preliminar/{id}/{pid}?aprimorar=true` |
+| `AgenteFicha` (pessoa completa) | HTTP | gemini-1.5-pro | Premium | `PROMPT_FICHA_PESSOA` | `/agentes/ficha/pessoa/{id}` |
+| `AgenteFicha` (empresa) | HTTP | gemini-1.5-pro | Premium | `PROMPT_FICHA_EMPRESA` | `/agentes/ficha/empresa/{id}` |
+| `AgenteExtrato` | HTTP | gemini-1.5-flash | Standard | `PROMPT_ANALISE_EXTRATO` | `/agentes/extrato/{id}` |
+| `AgenteCautelar` | HTTP | gemini-1.5-pro | Premium | `PROMPT_CAUTELAR` | `/agentes/cautelar/` |
 | `OsintService` | HTTP | — (REST puro) | — | — | `/agentes/osint/enriquecer/*` |
 | `EmbeddingService` | Utilitário | text-embedding-004 | — | — | Ingestão + Copiloto |
 | `Telegram Dispatcher` | HTTP | gemini (FC) | Premium | — | `/telegram/webhook` |
@@ -320,7 +346,8 @@ POST /telegram/webhook
 | `PROMPT_RESUMO_VOLUME` | Econômico | Resumo por volume (max 15 linhas) |
 | `PROMPT_RESUMO_CASO` | Econômico | Síntese executiva do caso (max 20 linhas) |
 | `PROMPT_SINTESE_INVESTIGATIVA` | Premium | Síntese investigativa completa (10 seções) |
-| `PROMPT_FICHA_PESSOA` | Premium | Ficha investigativa de pessoa |
+| `PROMPT_ANALISE_PRELIMINAR` | Resumo/Groq (gratuito) ou Standard | Análise preliminar de personagem — só dados internos |
+| `PROMPT_FICHA_PESSOA` | Premium | Ficha investigativa completa de pessoa (com dados externos) |
 | `PROMPT_FICHA_EMPRESA` | Premium | Ficha investigativa de empresa |
 | `PROMPT_CAUTELAR` | Premium | Minutas de medidas cautelares |
 | `PROMPT_ANALISE_EXTRATO` | Standard | Análise de extrato bancário |
