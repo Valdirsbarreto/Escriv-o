@@ -1015,17 +1015,6 @@ export default function InqueritoDetalhePage() {
                               <Quote size={11}/> Citações
                             </button>
                           )}
-                          {doc.status_processamento === "concluido" && doc.tipo_peca !== "sintese_investigativa" && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleReextrairPecas(doc.id); }}
-                              disabled={reextrahindo === doc.id}
-                              className="text-xs text-zinc-400 hover:text-amber-400 flex items-center gap-1 px-2 py-1 rounded border border-zinc-700 hover:border-amber-500/40 transition-colors disabled:opacity-50"
-                              title="Extrair peças individuais deste PDF"
-                            >
-                              {reextrahindo === doc.id ? <Loader2 size={11} className="animate-spin"/> : <FileText size={11}/>}
-                              {pecasDoDoc.length > 0 ? `${pecasDoDoc.length} peça(s)` : "Extrair peças"}
-                            </button>
-                          )}
                           {isSintetico ? (
                             <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-xs">
                               <Sparkles size={10} className="mr-1 inline"/> IA
