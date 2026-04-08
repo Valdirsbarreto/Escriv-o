@@ -170,17 +170,13 @@ async def osint_consulta_avulsa(
     data_nascimento: str | None = None,
     rg: str | None = None,
     uf: str = "RJ",
+    inquerito_id: uuid.UUID | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Consulta avulsa às APIs da direct.data, sem vínculo com inquérito.
-    Passe qualquer combinação de parâmetros disponíveis:
-
-    - **CPF** → cadastro, mandados, óbito, PEP, AML, veículos, sanções
-    - **CNPJ** → Receita Federal, participação societária, sanções PJ
-    - **Placa** → dados do veículo
-    - **Nome** → mandados de prisão por nome (sem CPF)
-    - **Nome / RG + UF** → antecedentes criminais (UF obrigatório, default RJ)
+    Consulta avulsa às APIs da direct.data.
+    Se `inquerito_id` for informado, os resultados são persistidos em ConsultaExterna
+    (com cache de 24h) e vinculados ao inquérito.
     """
     if not any([cpf, cnpj, placa, nome, rg]):
         raise HTTPException(
@@ -189,23 +185,31 @@ async def osint_consulta_avulsa(
         )
     osint = OsintService()
     try:
-        dados = await osint.consulta_avulsa(
-            cpf=cpf, cnpj=cnpj, placa=placa,
-            nome=nome, data_nascimento=data_nascimento,
-            rg=rg, uf=uf,
-        )
-        
-        # Cruzamento: Verifica se esse CPF ou CNPJ já está fichado no banco local!
+        if inquerito_id:
+            # Consulta com persistência usando o pipeline com cache
+            dados = await osint.consulta_avulsa_vinculada(
+                db=db,
+                inquerito_id=inquerito_id,
+                cpf=cpf, cnpj=cnpj, placa=placa,
+                nome=nome, data_nascimento=data_nascimento,
+                rg=rg, uf=uf,
+            )
+        else:
+            dados = await osint.consulta_avulsa(
+                cpf=cpf, cnpj=cnpj, placa=placa,
+                nome=nome, data_nascimento=data_nascimento,
+                rg=rg, uf=uf,
+            )
+
+        # Cruzamento com inquéritos existentes no banco
         from app.services.copiloto_osint_service import buscar_historico_pessoa, buscar_historico_empresa
-        
         historico = []
         if cpf:
             historico = await buscar_historico_pessoa(db, cpf, None)
         elif cnpj:
             historico = await buscar_historico_empresa(db, cnpj, None)
-            
         dados["historico_inqueritos"] = historico
-        
+
         return {"status": "concluido", "dados": dados}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro na consulta avulsa: {str(e)[:200]}")

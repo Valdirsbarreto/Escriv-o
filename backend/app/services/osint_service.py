@@ -438,6 +438,73 @@ class OsintService:
 
         return resultado
 
+    # ── Consulta Avulsa Vinculada (com inquérito + cache + auditoria) ──────────
+
+    async def consulta_avulsa_vinculada(
+        self,
+        db,
+        inquerito_id: uuid.UUID,
+        cpf: str | None = None,
+        cnpj: str | None = None,
+        placa: str | None = None,
+        nome: str | None = None,
+        data_nascimento: str | None = None,
+        rg: str | None = None,
+        uf: str = "RJ",
+    ) -> Dict[str, Any]:
+        """
+        Igual a consulta_avulsa mas persiste em ConsultaExterna com cache de 24h,
+        vinculando os resultados ao inquérito informado.
+        """
+        resultado: Dict[str, Any] = {"fontes_consultadas": [], "fontes_sem_dados": []}
+
+        async def _tentar_vinculado(chave: str, doc_limpo: str, coro):
+            try:
+                r = await self._consultar(db, inquerito_id, chave, doc_limpo, lambda: coro)
+                if r is not None:
+                    resultado[chave] = r
+                    resultado["fontes_consultadas"].append(chave)
+                else:
+                    resultado[chave] = None
+                    resultado["fontes_sem_dados"].append({"fonte": chave, "motivo": "sem dados"})
+            except Exception as e:
+                resultado[chave] = None
+                resultado["fontes_sem_dados"].append({"fonte": chave, "motivo": str(e)[:120]})
+
+        if cpf:
+            cpf_limpo = _limpar_documento(cpf)
+            await _tentar_vinculado("cadastro",          cpf_limpo, self.dd.cadastro_pf_plus(cpf_limpo))
+            await _tentar_vinculado("mandados_prisao",   cpf_limpo, self.dd.mandados_prisao(cpf_limpo))
+            await _tentar_vinculado("obito",             cpf_limpo, self.dd.obito(cpf_limpo))
+            await _tentar_vinculado("pep",               cpf_limpo, self.dd.pep(cpf_limpo))
+            await _tentar_vinculado("aml",               cpf_limpo, self.dd.aml(cpf_limpo))
+            await _tentar_vinculado("historico_veiculos",cpf_limpo, self.dd.historico_veiculos_pf(cpf_limpo))
+            await _tentar_vinculado("ceis",              cpf_limpo, self.dd.ceis(cpf_limpo))
+            await _tentar_vinculado("cnep",              cpf_limpo, self.dd.cnep(cpf_limpo))
+
+        if cnpj:
+            cnpj_limpo = _limpar_documento(cnpj)
+            await _tentar_vinculado("receita_federal",         cnpj_limpo, self.dd.receita_federal_pj(cnpj_limpo))
+            await _tentar_vinculado("participacao_societaria", cnpj_limpo, self.dd.participacao_societaria(cnpj_limpo))
+            await _tentar_vinculado("ceis_pj",                 cnpj_limpo, self.dd.ceis(cnpj_limpo))
+            await _tentar_vinculado("cnep_pj",                 cnpj_limpo, self.dd.cnep(cnpj_limpo))
+
+        if placa:
+            placa_limpa = placa.upper().strip()
+            await _tentar_vinculado("veiculo", placa_limpa, self.dd.consulta_veicular(placa_limpa))
+
+        if nome and not cpf:
+            await _tentar_vinculado("mandados_por_nome", nome.strip(), self.dd.mandados_prisao_por_nome(nome))
+
+        if (nome or rg) and uf:
+            doc_key = (rg or nome or "").strip()
+            await _tentar_vinculado(
+                "antecedentes_por_nome", doc_key,
+                self.dd.antecedentes_por_nome(nome=nome, rg=rg, data_nascimento=data_nascimento, uf=uf)
+            )
+
+        return resultado
+
     # ── Custo Acumulado do Inquérito ───────────────────────────────────────────
 
     async def custo_total_inquerito(

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAppStore } from "@/store/app";
 import {
   api, getPessoas, getEmpresas, gerarFichaPessoa, gerarFichaEmpresa,
-  osintConsultaAvulsa, osintSugestao, osintLote,
+  osintConsultaAvulsa, osintSugestao, osintLote, getInqueritos, criarInqueritoRapido,
 } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -473,6 +473,13 @@ function ConsultaAvulsaDialog() {
   const [open, setOpen] = useState(false);
   const [modo, setModo] = useState<ModoConsulta>("individual");
 
+  // inquérito vinculado
+  const [inqueritos, setInqueritos] = useState<any[]>([]);
+  const [inqBusca, setInqBusca] = useState("");
+  const [inqSelecionado, setInqSelecionado] = useState<{ id: string; numero: string } | null>(null);
+  const [criandoInq, setCriandoInq] = useState(false);
+  const [novoInqNumero, setNovoInqNumero] = useState("");
+
   // modo individual
   const [form, setForm] = useState({ cpf: "", cnpj: "", placa: "", nome: "", data_nascimento: "", rg: "", uf: "RJ" });
   const [consultando, setConsultando] = useState(false);
@@ -486,13 +493,36 @@ function ConsultaAvulsaDialog() {
   const [loteIdx, setLoteIdx] = useState(0);
   const canceladoRef = useState({ v: false })[0];
 
+  useEffect(() => {
+    if (open) {
+      getInqueritos().then(r => setInqueritos(r.inqueritos || r.data || [])).catch(() => {});
+    }
+  }, [open]);
+
+  const inqFiltrados = inqueritos.filter(i =>
+    i.numero?.toLowerCase().includes(inqBusca.toLowerCase())
+  ).slice(0, 8);
+
+  const handleCriarInquerito = async () => {
+    if (!novoInqNumero.trim()) return;
+    setCriandoInq(true);
+    try {
+      const inq = await criarInqueritoRapido(novoInqNumero.trim());
+      setInqSelecionado({ id: inq.id, numero: inq.numero });
+      setInqueritos(prev => [inq, ...prev]);
+      setNovoInqNumero(""); setInqBusca("");
+    } catch { /* silencioso */ } finally { setCriandoInq(false); }
+  };
+
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   const handleConsultar = async () => {
     if (!Object.entries(form).some(([k, v]) => k !== "uf" && v.trim())) return;
     setConsultando(true); setErro(null); setResultado(null);
     try {
-      const res = await osintConsultaAvulsa(form);
+      const params: any = { ...form };
+      if (inqSelecionado) params.inquerito_id = inqSelecionado.id;
+      const res = await osintConsultaAvulsa(params);
       setResultado(res.dados);
     } catch (e: any) {
       setErro(e?.response?.data?.detail || "Erro na consulta.");
@@ -527,6 +557,7 @@ function ConsultaAvulsaDialog() {
       if (alvo.tipo === "cpf") params.cpf = alvo.raw;
       else if (alvo.tipo === "cnpj") params.cnpj = alvo.raw;
       else if (alvo.tipo === "placa") params.placa = alvo.raw.toUpperCase();
+      if (inqSelecionado) params.inquerito_id = inqSelecionado.id;
 
       try {
         const res = await osintConsultaAvulsa(params);
@@ -557,13 +588,60 @@ function ConsultaAvulsaDialog() {
             <FileSearch size={18} className="text-blue-400" /> Consulta OSINT Avulsa
           </DialogTitle>
           {/* toggle modo */}
-          <div className="flex gap-1 mt-2">
-            {(["individual", "lote"] as ModoConsulta[]).map(m => (
-              <button key={m} onClick={() => setModo(m)}
-                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${modo === m ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-zinc-300 bg-zinc-900 border border-zinc-800"}`}>
-                {m === "individual" ? "Individual" : "Lote"}
-              </button>
-            ))}
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
+            <div className="flex gap-1">
+              {(["individual", "lote"] as ModoConsulta[]).map(m => (
+                <button key={m} onClick={() => setModo(m)}
+                  className={`px-3 py-1 rounded text-xs font-medium transition-colors ${modo === m ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-zinc-300 bg-zinc-900 border border-zinc-800"}`}>
+                  {m === "individual" ? "Individual" : "Lote"}
+                </button>
+              ))}
+            </div>
+            {/* seletor de inquérito */}
+            <div className="flex-1 min-w-[220px]">
+              {inqSelecionado ? (
+                <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded px-2 py-1">
+                  <span className="text-xs text-blue-300 font-mono flex-1">IP {inqSelecionado.numero}</span>
+                  <button onClick={() => setInqSelecionado(null)} className="text-zinc-500 hover:text-red-400">
+                    <X size={12} />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Input
+                    value={inqBusca}
+                    onChange={e => setInqBusca(e.target.value)}
+                    placeholder="Vincular a um inquérito (opcional)..."
+                    className="bg-zinc-900 border-zinc-700 text-zinc-200 text-xs h-7 pr-8"
+                  />
+                  {inqBusca && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl max-h-40 overflow-y-auto">
+                      {inqFiltrados.length > 0 ? inqFiltrados.map((inq: any) => (
+                        <button key={inq.id} onClick={() => { setInqSelecionado({ id: inq.id, numero: inq.numero }); setInqBusca(""); }}
+                          className="w-full text-left px-3 py-2 text-xs text-zinc-300 hover:bg-zinc-800 font-mono">
+                          IP {inq.numero} {inq.ano ? `/${inq.ano}` : ""}
+                        </button>
+                      )) : null}
+                      <button
+                        onClick={() => { setNovoInqNumero(inqBusca); }}
+                        className="w-full text-left px-3 py-2 text-xs text-blue-400 hover:bg-zinc-800 border-t border-zinc-800 flex items-center gap-2">
+                        <span className="text-blue-500">+</span> Criar inquérito "{inqBusca}"
+                      </button>
+                    </div>
+                  )}
+                  {novoInqNumero && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl p-2 flex gap-2">
+                      <Input value={novoInqNumero} onChange={e => setNovoInqNumero(e.target.value)}
+                        placeholder="Número do IP" className="bg-zinc-800 border-zinc-700 text-zinc-200 text-xs h-7 flex-1" />
+                      <Button onClick={handleCriarInquerito} disabled={criandoInq} className="h-7 text-xs bg-blue-600 hover:bg-blue-700 px-3">
+                        {criandoInq ? <Loader2 size={12} className="animate-spin" /> : "Criar"}
+                      </Button>
+                      <button onClick={() => setNovoInqNumero("")} className="text-zinc-500 hover:text-zinc-300 px-1"><X size={12} /></button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </DialogHeader>
 

@@ -24,6 +24,11 @@ export const getInqueritos = async () => {
   return response.data;
 };
 
+export const criarInqueritoRapido = async (numero: string) => {
+  const response = await api.post("/inqueritos", { numero });
+  return response.data;
+};
+
 export const getInquerito = async (id: string) => {
   const response = await api.get(`/inqueritos/${id}`);
   return response.data;
@@ -210,6 +215,7 @@ export const osintConsultaAvulsa = async (params: {
   data_nascimento?: string;
   rg?: string;
   uf?: string;
+  inquerito_id?: string;
 }) => {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => { if (v) query.append(k, v); });
