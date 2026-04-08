@@ -18,7 +18,7 @@ import {
   FileSearch, CheckCircle, XCircle, Phone, Mail, MapPin, Car,
   Shield, Briefcase, ChevronDown, ChevronRight, Loader2, Play,
   TriangleAlert, MinusCircle, Wallet, Coins, ArrowRightLeft,
-  History, Info, ExternalLink,
+  History, Info, ExternalLink, X,
 } from "lucide-react";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -438,14 +438,53 @@ function ResultadoAvulso({ dados }: { dados: any }) {
   );
 }
 
+// ── Helpers de detecção de tipo ──────────────────────────────────────────────
+
+function detectarTipo(valor: string): "cpf" | "cnpj" | "placa" | null {
+  const limpo = valor.replace(/[\.\-\/\s]/g, "");
+  if (/^\d{11}$/.test(limpo)) return "cpf";
+  if (/^\d{14}$/.test(limpo)) return "cnpj";
+  if (/^[A-Z]{3}\d{4}$/.test(limpo.toUpperCase()) || /^[A-Z]{3}\d[A-Z]\d{2}$/.test(limpo.toUpperCase())) return "placa";
+  return null;
+}
+
+function parsearLote(texto: string): Array<{ raw: string; tipo: "cpf" | "cnpj" | "placa" | null }> {
+  return texto
+    .split(/[\n,;]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(raw => ({ raw, tipo: detectarTipo(raw) }));
+}
+
 // ── Consulta Avulsa Dialog ────────────────────────────────────────────────────
+
+type ModoConsulta = "individual" | "lote";
+
+interface AlvoLote {
+  id: string;
+  raw: string;
+  tipo: "cpf" | "cnpj" | "placa" | null;
+  status: "pendente" | "consultando" | "ok" | "erro";
+  resultado?: any;
+  erro?: string;
+}
 
 function ConsultaAvulsaDialog() {
   const [open, setOpen] = useState(false);
+  const [modo, setModo] = useState<ModoConsulta>("individual");
+
+  // modo individual
   const [form, setForm] = useState({ cpf: "", cnpj: "", placa: "", nome: "", data_nascimento: "", rg: "", uf: "RJ" });
   const [consultando, setConsultando] = useState(false);
   const [resultado, setResultado] = useState<any | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+
+  // modo lote
+  const [textoLote, setTextoLote] = useState("");
+  const [alvos, setAlvos] = useState<AlvoLote[]>([]);
+  const [loteRodando, setLoteRodando] = useState(false);
+  const [loteIdx, setLoteIdx] = useState(0);
+  const canceladoRef = useState({ v: false })[0];
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
@@ -460,7 +499,50 @@ function ConsultaAvulsaDialog() {
     } finally { setConsultando(false); }
   };
 
-  const limpar = () => { setForm({ cpf: "", cnpj: "", placa: "", nome: "", data_nascimento: "", rg: "", uf: "RJ" }); setResultado(null); setErro(null); };
+  const limpar = () => {
+    setForm({ cpf: "", cnpj: "", placa: "", nome: "", data_nascimento: "", rg: "", uf: "RJ" });
+    setResultado(null); setErro(null);
+  };
+
+  const alvosParseados = parsearLote(textoLote);
+
+  const handleConsultarLote = async () => {
+    const lista = alvosParseados.filter(a => a.tipo !== null);
+    if (!lista.length) return;
+    canceladoRef.v = false;
+    const inicial: AlvoLote[] = lista.map((a, i) => ({
+      id: `${i}`, raw: a.raw, tipo: a.tipo, status: "pendente",
+    }));
+    setAlvos(inicial);
+    setLoteRodando(true);
+    setLoteIdx(0);
+
+    for (let i = 0; i < lista.length; i++) {
+      if (canceladoRef.v) break;
+      setLoteIdx(i);
+      setAlvos(prev => prev.map((a, idx) => idx === i ? { ...a, status: "consultando" } : a));
+
+      const alvo = lista[i];
+      const params: any = { uf: "RJ" };
+      if (alvo.tipo === "cpf") params.cpf = alvo.raw;
+      else if (alvo.tipo === "cnpj") params.cnpj = alvo.raw;
+      else if (alvo.tipo === "placa") params.placa = alvo.raw.toUpperCase();
+
+      try {
+        const res = await osintConsultaAvulsa(params);
+        setAlvos(prev => prev.map((a, idx) => idx === i ? { ...a, status: "ok", resultado: res.dados } : a));
+      } catch (e: any) {
+        setAlvos(prev => prev.map((a, idx) => idx === i ? { ...a, status: "erro", erro: e?.response?.data?.detail || "Erro" } : a));
+      }
+    }
+    setLoteRodando(false);
+  };
+
+  const handleCancelar = () => { canceladoRef.v = true; };
+
+  const limparLote = () => { setTextoLote(""); setAlvos([]); canceladoRef.v = false; };
+
+  const loteConcluidoCount = alvos.filter(a => a.status === "ok" || a.status === "erro").length;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -469,66 +551,189 @@ function ConsultaAvulsaDialog() {
           <FileSearch size={15} /> Consulta Avulsa
         </Button>
       } />
-      <DialogContent className="bg-zinc-950 border-zinc-800 max-w-4xl w-full max-h-[90vh] flex flex-col" showCloseButton>
+      <DialogContent className="bg-zinc-950 border-zinc-800 max-w-5xl w-full max-h-[90vh] flex flex-col" showCloseButton>
         <DialogHeader>
           <DialogTitle className="text-zinc-100 flex items-center gap-2">
             <FileSearch size={18} className="text-blue-400" /> Consulta OSINT Avulsa
           </DialogTitle>
-          <p className="text-xs text-zinc-500">Preencha ao menos um campo.</p>
-        </DialogHeader>
-        <div className="flex gap-6 flex-1 min-h-0 overflow-hidden mt-2">
-          <div className="w-72 shrink-0 space-y-3">
-            {[
-              { k: "cpf", label: "CPF", ph: "000.000.000-00" },
-              { k: "cnpj", label: "CNPJ", ph: "00.000.000/0001-00" },
-              { k: "placa", label: "Placa", ph: "ABC1D23" },
-            ].map(({ k, label, ph }) => (
-              <div key={k}>
-                <label className="text-xs text-zinc-400 mb-1 block">{label}</label>
-                <Input value={(form as any)[k]} onChange={e => set(k, k === "placa" ? e.target.value.toUpperCase() : e.target.value)}
-                  placeholder={ph} className="bg-zinc-900 border-zinc-700 text-zinc-200 text-sm h-8" />
-              </div>
+          {/* toggle modo */}
+          <div className="flex gap-1 mt-2">
+            {(["individual", "lote"] as ModoConsulta[]).map(m => (
+              <button key={m} onClick={() => setModo(m)}
+                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${modo === m ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-zinc-300 bg-zinc-900 border border-zinc-800"}`}>
+                {m === "individual" ? "Individual" : "Lote"}
+              </button>
             ))}
-            <div className="border-t border-zinc-800 pt-3 space-y-2">
-              <p className="text-xs text-zinc-600">Sem CPF — busca por identificação parcial:</p>
+          </div>
+        </DialogHeader>
+
+        {/* ── MODO INDIVIDUAL ── */}
+        {modo === "individual" && (
+          <div className="flex gap-6 flex-1 min-h-0 overflow-hidden mt-2">
+            <div className="w-72 shrink-0 space-y-3">
               {[
-                { k: "nome", label: "Nome", ph: "Nome completo" },
-                { k: "rg", label: "RG", ph: "0000000" },
-                { k: "data_nascimento", label: "Data Nascimento", ph: "DD/MM/AAAA" },
+                { k: "cpf", label: "CPF", ph: "000.000.000-00" },
+                { k: "cnpj", label: "CNPJ", ph: "00.000.000/0001-00" },
+                { k: "placa", label: "Placa", ph: "ABC1D23" },
               ].map(({ k, label, ph }) => (
                 <div key={k}>
                   <label className="text-xs text-zinc-400 mb-1 block">{label}</label>
-                  <Input value={(form as any)[k]} onChange={e => set(k, e.target.value)}
+                  <Input value={(form as any)[k]} onChange={e => set(k, k === "placa" ? e.target.value.toUpperCase() : e.target.value)}
                     placeholder={ph} className="bg-zinc-900 border-zinc-700 text-zinc-200 text-sm h-8" />
                 </div>
               ))}
-              <div>
-                <label className="text-xs text-zinc-400 mb-1 block">UF</label>
-                <Input value={form.uf} onChange={e => set("uf", e.target.value.toUpperCase())}
-                  placeholder="RJ" maxLength={2} className="bg-zinc-900 border-zinc-700 text-zinc-200 text-sm h-8 w-20" />
+              <div className="border-t border-zinc-800 pt-3 space-y-2">
+                <p className="text-xs text-zinc-600">Sem CPF — busca por identificação parcial:</p>
+                {[
+                  { k: "nome", label: "Nome", ph: "Nome completo" },
+                  { k: "rg", label: "RG", ph: "0000000" },
+                  { k: "data_nascimento", label: "Data Nascimento", ph: "DD/MM/AAAA" },
+                ].map(({ k, label, ph }) => (
+                  <div key={k}>
+                    <label className="text-xs text-zinc-400 mb-1 block">{label}</label>
+                    <Input value={(form as any)[k]} onChange={e => set(k, e.target.value)}
+                      placeholder={ph} className="bg-zinc-900 border-zinc-700 text-zinc-200 text-sm h-8" />
+                  </div>
+                ))}
+                <div>
+                  <label className="text-xs text-zinc-400 mb-1 block">UF</label>
+                  <Input value={form.uf} onChange={e => set("uf", e.target.value.toUpperCase())}
+                    placeholder="RJ" maxLength={2} className="bg-zinc-900 border-zinc-700 text-zinc-200 text-sm h-8 w-20" />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleConsultar} disabled={consultando} className="flex-1 bg-blue-600 hover:bg-blue-700 h-9 text-sm gap-2">
+                  {consultando ? <><Loader2 size={14} className="animate-spin" /> Consultando...</> : <><Search size={14} /> Consultar</>}
+                </Button>
+                {resultado && <Button onClick={limpar} variant="outline" className="border-zinc-700 text-zinc-400 hover:bg-zinc-800 h-9 text-sm px-3">Limpar</Button>}
               </div>
             </div>
-            <div className="flex gap-2">
-              <Button onClick={handleConsultar} disabled={consultando} className="flex-1 bg-blue-600 hover:bg-blue-700 h-9 text-sm gap-2">
-                {consultando ? <><Loader2 size={14} className="animate-spin" /> Consultando...</> : <><Search size={14} /> Consultar</>}
-              </Button>
-              {resultado && <Button onClick={limpar} variant="outline" className="border-zinc-700 text-zinc-400 hover:bg-zinc-800 h-9 text-sm px-3">Limpar</Button>}
+            <div className="flex-1 min-w-0 border-l border-zinc-800 pl-6 overflow-hidden">
+              <ScrollArea className="h-full max-h-[65vh]">
+                {!resultado && !erro && !consultando && (
+                  <div className="flex flex-col items-center justify-center h-48 text-zinc-600 text-center text-sm">
+                    <Search className="w-10 h-10 mb-3 text-zinc-800" />
+                    <p>Preencha os campos e clique em Consultar.</p>
+                  </div>
+                )}
+                {consultando && <div className="flex items-center gap-3 text-zinc-400 text-sm py-8 justify-center"><Loader2 size={18} className="animate-spin text-blue-500" /> Acessando bases de dados...</div>}
+                {erro && <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex gap-3 text-red-400 text-sm"><AlertTriangle size={16} className="shrink-0 mt-0.5" /> {erro}</div>}
+                {resultado && <ResultadoAvulso dados={resultado} />}
+              </ScrollArea>
             </div>
           </div>
-          <div className="flex-1 min-w-0 border-l border-zinc-800 pl-6 overflow-hidden">
-            <ScrollArea className="h-full max-h-[65vh]">
-              {!resultado && !erro && !consultando && (
-                <div className="flex flex-col items-center justify-center h-48 text-zinc-600 text-center text-sm">
-                  <Search className="w-10 h-10 mb-3 text-zinc-800" />
-                  <p>Preencha os campos e clique em Consultar.</p>
+        )}
+
+        {/* ── MODO LOTE ── */}
+        {modo === "lote" && (
+          <div className="flex gap-6 flex-1 min-h-0 overflow-hidden mt-2">
+            <div className="w-72 shrink-0 space-y-3">
+              <div>
+                <label className="text-xs text-zinc-400 mb-1 block">Identificadores (um por linha)</label>
+                <textarea
+                  value={textoLote}
+                  onChange={e => setTextoLote(e.target.value)}
+                  disabled={loteRodando}
+                  placeholder={"123.456.789-00\n12.345.678/0001-99\nABC1D23"}
+                  rows={10}
+                  className="w-full bg-zinc-900 border border-zinc-700 rounded-md text-zinc-200 text-sm px-3 py-2 resize-none focus:outline-none focus:border-blue-500/50 placeholder:text-zinc-600 font-mono disabled:opacity-50"
+                />
+                <p className="text-xs text-zinc-600 mt-1">
+                  Detecta automaticamente CPF (11 dígitos), CNPJ (14) ou Placa.
+                </p>
+              </div>
+              {textoLote.trim() && (
+                <div className="flex flex-wrap gap-1">
+                  {alvosParseados.map((a, i) => (
+                    <span key={i} className={`text-[10px] px-2 py-0.5 rounded border font-mono ${
+                      a.tipo === "cpf" ? "border-blue-700/40 text-blue-400 bg-blue-500/5" :
+                      a.tipo === "cnpj" ? "border-purple-700/40 text-purple-400 bg-purple-500/5" :
+                      a.tipo === "placa" ? "border-amber-700/40 text-amber-400 bg-amber-500/5" :
+                      "border-zinc-700 text-zinc-600"
+                    }`}>
+                      {a.tipo ? a.tipo.toUpperCase() : "?"} · {a.raw.slice(0, 12)}
+                    </span>
+                  ))}
                 </div>
               )}
-              {consultando && <div className="flex items-center gap-3 text-zinc-400 text-sm py-8 justify-center"><Loader2 size={18} className="animate-spin text-blue-500" /> Acessando bases de dados...</div>}
-              {erro && <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 flex gap-3 text-red-400 text-sm"><AlertTriangle size={16} className="shrink-0 mt-0.5" /> {erro}</div>}
-              {resultado && <ResultadoAvulso dados={resultado} />}
-            </ScrollArea>
+              {loteRodando && (
+                <div className="space-y-1">
+                  <div className="flex justify-between text-xs text-zinc-400">
+                    <span>Processando {loteIdx + 1}/{alvos.length}</span>
+                    <span>{loteConcluidoCount} concluído(s)</span>
+                  </div>
+                  <div className="w-full bg-zinc-800 rounded-full h-1.5">
+                    <div className="bg-blue-500 h-1.5 rounded-full transition-all" style={{ width: `${(loteConcluidoCount / alvos.length) * 100}%` }} />
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-2">
+                {!loteRodando ? (
+                  <>
+                    <Button onClick={handleConsultarLote}
+                      disabled={alvosParseados.filter(a => a.tipo).length === 0}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 h-9 text-sm gap-2">
+                      <Search size={14} /> Consultar {alvosParseados.filter(a => a.tipo).length > 0 ? `(${alvosParseados.filter(a => a.tipo).length})` : ""}
+                    </Button>
+                    {alvos.length > 0 && <Button onClick={limparLote} variant="outline" className="border-zinc-700 text-zinc-400 hover:bg-zinc-800 h-9 text-sm px-3">Limpar</Button>}
+                  </>
+                ) : (
+                  <Button onClick={handleCancelar} variant="outline" className="flex-1 border-red-700/40 text-red-400 hover:bg-red-500/10 h-9 text-sm gap-2">
+                    <X size={14} /> Cancelar
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 min-w-0 border-l border-zinc-800 pl-6 overflow-hidden">
+              <ScrollArea className="h-full max-h-[65vh]">
+                {alvos.length === 0 && (
+                  <div className="flex flex-col items-center justify-center h-48 text-zinc-600 text-center text-sm">
+                    <Search className="w-10 h-10 mb-3 text-zinc-800" />
+                    <p>Cole os identificadores e clique em Consultar.</p>
+                    <p className="text-xs mt-1">Um CPF, CNPJ ou placa por linha.</p>
+                  </div>
+                )}
+                {alvos.length > 0 && (
+                  <div className="space-y-4">
+                    {alvos.map((alvo) => (
+                      <div key={alvo.id} className="border border-zinc-800 rounded-xl overflow-hidden">
+                        <div className={`flex items-center gap-3 px-4 py-2.5 ${
+                          alvo.status === "consultando" ? "bg-blue-500/5 border-b border-blue-500/20" :
+                          alvo.status === "ok" ? "bg-zinc-900/60 border-b border-zinc-800" :
+                          alvo.status === "erro" ? "bg-red-500/5 border-b border-red-500/20" :
+                          "bg-zinc-900/40"
+                        }`}>
+                          {alvo.status === "consultando" && <Loader2 size={14} className="animate-spin text-blue-400 shrink-0" />}
+                          {alvo.status === "ok" && <CheckCircle size={14} className="text-green-400 shrink-0" />}
+                          {alvo.status === "erro" && <XCircle size={14} className="text-red-400 shrink-0" />}
+                          {alvo.status === "pendente" && <div className="w-3.5 h-3.5 rounded-full border border-zinc-600 shrink-0" />}
+                          <span className="font-mono text-sm text-zinc-200">{alvo.raw}</span>
+                          <span className={`ml-auto text-[10px] px-2 py-0.5 rounded border ${
+                            alvo.tipo === "cpf" ? "border-blue-700/40 text-blue-400" :
+                            alvo.tipo === "cnpj" ? "border-purple-700/40 text-purple-400" :
+                            "border-amber-700/40 text-amber-400"
+                          }`}>{alvo.tipo?.toUpperCase()}</span>
+                        </div>
+                        {alvo.status === "consultando" && (
+                          <div className="px-4 py-3 text-xs text-zinc-500">Acessando bases de dados...</div>
+                        )}
+                        {alvo.status === "erro" && (
+                          <div className="px-4 py-3 text-xs text-red-400">{alvo.erro}</div>
+                        )}
+                        {alvo.status === "ok" && alvo.resultado && (
+                          <div className="px-4 py-3">
+                            <ResultadoAvulso dados={alvo.resultado} />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </div>
           </div>
-        </div>
+        )}
       </DialogContent>
     </Dialog>
   );
