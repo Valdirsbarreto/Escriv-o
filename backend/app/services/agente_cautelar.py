@@ -45,7 +45,7 @@ class AgenteCautelar:
         inquerito_id: uuid.UUID,
         tipo_cautelar: str,
         instrucoes: str,
-        autoridade: str = "Delegado de Polícia",
+        autoridade: str = "Comissário de Polícia Civil",
     ) -> Dict[str, Any]:
         """
         Gera a minuta de um ato cautelar.

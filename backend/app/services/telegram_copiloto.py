@@ -36,7 +36,7 @@ ESTADO_LABEL = {
 
 # ── System prompt ─────────────────────────────────────────────────────────────
 
-SYSTEM_PROMPT = """Você é o Escrivão AI, copiloto investigativo do Delegado Valdir, da Polícia Civil.
+SYSTEM_PROMPT = """Você é o Escrivão AI, copiloto investigativo do Comissário Valdir, da Polícia Civil.
 Inquérito em foco: {inquerito_atual}
 Última pessoa/CPF pesquisada: {ultimo_alvo}
 Data e hora atual: {data_hoje}

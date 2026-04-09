@@ -453,7 +453,7 @@ class CautelarRequest(BaseModel):
         "oficio_generico",
     ]
     instrucoes: str
-    autoridade: str = "Delegado de Polícia"
+    autoridade: str = "Comissário de Polícia Civil"
     model_config = ConfigDict(from_attributes=True)
 
 

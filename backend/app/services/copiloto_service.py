@@ -312,7 +312,7 @@ class CopilotoService:
         # ── Injetar instrução de ferramenta (OSINT Tool) ─────────
         tool_instruction = (
             "FERRAMENTA OSINT DISPONÍVEL:\n"
-            "Se o Delegado solicitar buscar uma placa, CPF, CNPJ, capivara ou investigar dados que "
+            "Se o Comissário solicitar buscar uma placa, CPF, CNPJ, capivara ou investigar dados que "
             "NÃO CONSTAM nos autos/contexto acima, você PODE usar inteligência externa DirectData.\n"
             "Para isso, sua resposta deve ser EXCLUSIVAMENTE uma tag XML <OSINT_CALL> contendo JSON "
             "com os atributos de busca (cpf, cnpj, placa, ou nome).\n"
@@ -380,7 +380,7 @@ class CopilotoService:
                         messages.append({
                             "role": "user", 
                             "content": f"[RETORNO DA FERRAMENTA OSINT]\n{resultado_osint_texto[:15000]}\n[FIM DO RETORNO]\n"
-                                       f"Analise os dados acima e responda de forma elegante ao Delegado."
+                                       f"Analise os dados acima e responda de forma elegante ao Comissário."
                         })
                         
                         logger.info("[COPILOTO] Enviando resultado OSINT de volta para o LLM")

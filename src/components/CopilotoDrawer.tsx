@@ -1,7 +1,6 @@
 "use client";
 
 import { useAppStore } from "@/store/app";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Send, Bot, User, Save, Paperclip, X, FileText, Image, RefreshCw, PenLine, Wand2, ChevronLeft } from "lucide-react";
@@ -93,7 +92,7 @@ export function CopilotoDrawer() {
 
   const [sessionId] = useState<string>(() => getOrCreateSessionId());
   const [messages, setMessages] = useState<{ role: "user" | "bot"; text: string }[]>([
-    { role: "bot", text: "Olá! Sou o <b>Escrivão AI</b>. Posso buscar nos autos, gerar cautelares, consultar OSINT, despachar inquéritos e muito mais.\n\nDiga <i>'ajuda'</i> para ver o que posso fazer." }
+    { role: "bot", text: "Olá, Comissário! Sou o <b>Escrivão AI</b>. Posso buscar nos autos, gerar cautelares, consultar OSINT, despachar inquéritos e muito mais.\n\nDiga <i>'ajuda'</i> para ver o que posso fazer." }
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -104,6 +103,7 @@ export function CopilotoDrawer() {
   const [existingDocs, setExistingDocs] = useState<any[]>([]);
   const [confirmReplace, setConfirmReplace] = useState<{ index: number; text: string; titulo: string; tipo: string; existingDoc: any } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
 
   // ── Canvas de documento ────────────────────────────────────────────────────
   type CanvasDoc = { titulo: string; tipo: string; htmlOriginal: string; texto: string; modoEdicao: boolean; expandido: boolean; salvando: boolean; savedId: string | null };
@@ -121,7 +121,7 @@ export function CopilotoDrawer() {
     if (trocou) {
       setMessages([{
         role: "bot",
-        text: "🔄 <b>Inquérito alterado.</b> Contexto anterior encerrado.\nComo posso ajudar neste novo caso?"
+        text: "🔄 <b>Inquérito alterado.</b> Contexto anterior encerrado.\nComo posso ajudar neste novo caso, Comissário?"
       }]);
       setSavedMsgs(new Set());
     }
@@ -134,9 +134,10 @@ export function CopilotoDrawer() {
     }
   }, [inqueritoAtivoId]);
 
-  // Auto-scroll para a última mensagem
+  // Auto-scroll dentro do chat — sem mexer no scroll da página
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = chatScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages, loading]);
 
   // Escuta CustomEvent "copiloto:prefill" disparado pela aba Blockchain
@@ -233,7 +234,7 @@ export function CopilotoDrawer() {
 
   const handleNovaConversa = async () => {
     await clearAgentContext(sessionId).catch(() => {});
-    setMessages([{ role: "bot", text: "Conversa reiniciada. Como posso ajudar?" }]);
+    setMessages([{ role: "bot", text: "Conversa reiniciada. Como posso ajudar, Comissário?" }]);
     setSavedMsgs(new Set());
   };
 
@@ -339,7 +340,7 @@ export function CopilotoDrawer() {
           </div>
         </div>
 
-        <ScrollArea className="flex-1 p-6 overscroll-contain">
+        <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-6 overscroll-contain">
           <div className="flex flex-col gap-4 pb-4">
             {messages.map((msg, i) => (
               <div key={i} className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
@@ -389,7 +390,7 @@ export function CopilotoDrawer() {
             )}
             <div ref={bottomRef} />
           </div>
-        </ScrollArea>
+        </div>
 
         <div className="p-4 border-t border-zinc-800 bg-zinc-950 space-y-2">
           {anexo && (
