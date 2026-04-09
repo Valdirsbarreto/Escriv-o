@@ -1489,6 +1489,15 @@ export default function InqueritoDetalhePage() {
         </div>
       )}
 
+      {/* Estilos para o viewer de documentos gerados */}
+      <style>{`
+        .doc-viewer b, .doc-viewer strong { color: #e4e4e7; font-weight: 600; }
+        .doc-viewer i, .doc-viewer em { color: #a1a1aa; font-style: italic; }
+        .doc-viewer code { background: #18181b; border: 1px solid #3f3f46; padding: 1px 6px; border-radius: 4px; font-family: monospace; font-size: 0.8em; color: #d4d4d8; }
+        .doc-viewer pre { background: #18181b; border: 1px solid #3f3f46; border-radius: 6px; padding: 10px 12px; overflow-x: auto; margin: 6px 0; }
+        .doc-viewer a { color: #60a5fa; text-decoration: underline; }
+      `}</style>
+
       {/* Modal de visualização de documento gerado */}
       {docGeradoViewer.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setDocGeradoViewer(v => ({ ...v, open: false }))}>
@@ -1511,11 +1520,20 @@ export default function InqueritoDetalhePage() {
                   <Loader2 size={24} className="animate-spin mr-2" /> Carregando...
                 </div>
               ) : docGeradoViewer.conteudo ? (
-                <div className="prose prose-invert prose-sm max-w-none text-zinc-300">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {docGeradoViewer.conteudo}
-                  </ReactMarkdown>
-                </div>
+                /<[a-z][\s\S]*>/i.test(docGeradoViewer.conteudo) ? (
+                  // Conteúdo HTML (salvo pelo copiloto web)
+                  <div
+                    className="doc-viewer text-zinc-300 text-sm leading-7"
+                    dangerouslySetInnerHTML={{ __html: docGeradoViewer.conteudo.replace(/\n/g, "<br/>") }}
+                  />
+                ) : (
+                  // Conteúdo Markdown (salvo pelo Telegram)
+                  <div className="prose prose-invert prose-sm max-w-none text-zinc-300">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {docGeradoViewer.conteudo}
+                    </ReactMarkdown>
+                  </div>
+                )
               ) : (
                 <div className="text-center py-16 text-zinc-500">
                   <Bot size={32} className="mx-auto mb-3 opacity-30" />
