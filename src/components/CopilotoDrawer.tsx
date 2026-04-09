@@ -85,10 +85,19 @@ export function CopilotoDrawer() {
   const [confirmReplace, setConfirmReplace] = useState<{ index: number; text: string; titulo: string; tipo: string; existingDoc: any } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Sincroniza inquérito ativo no contexto Redis do agente
+  // Sincroniza inquérito ativo no contexto Redis — limpa histórico ao trocar de IP
+  const prevInqueritoId = useRef<string | null>(null);
   useEffect(() => {
-    if (inqueritoAtivoId && sessionId !== "ssr") {
-      setAgentInquerito(sessionId, inqueritoAtivoId).catch(() => {});
+    if (!inqueritoAtivoId || sessionId === "ssr") return;
+    const trocou = prevInqueritoId.current && prevInqueritoId.current !== inqueritoAtivoId;
+    prevInqueritoId.current = inqueritoAtivoId;
+    setAgentInquerito(sessionId, inqueritoAtivoId).catch(() => {});
+    if (trocou) {
+      setMessages([{
+        role: "bot",
+        text: "🔄 <b>Inquérito alterado.</b> Contexto anterior encerrado.\nComo posso ajudar neste novo caso?"
+      }]);
+      setSavedMsgs(new Set());
     }
   }, [inqueritoAtivoId, sessionId]);
 
@@ -124,6 +133,11 @@ export function CopilotoDrawer() {
     setInput("");
     setAnexo(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+
+    // Garante que o contexto do inquérito está sincronizado antes de enviar
+    if (inqueritoAtivoId && sessionId !== "ssr") {
+      await setAgentInquerito(sessionId, inqueritoAtivoId).catch(() => {});
+    }
 
     const userLabel = anexo ? `📎 ${anexo.name}\n${userText}` : userText;
     setMessages(prev => [...prev, { role: "user", text: userLabel }]);
