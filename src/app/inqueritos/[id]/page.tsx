@@ -815,7 +815,17 @@ export default function InqueritoDetalhePage() {
               <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
                 <Bot size={18} className="text-blue-400" /> Documentos Gerados pela IA
               </h2>
-              <span className="text-sm text-zinc-500">{docsGerados.length} documento(s)</span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-zinc-500">{docsGerados.length} documento(s)</span>
+                <button
+                  onClick={fetchDocsGerados}
+                  disabled={docsGeradosLoading}
+                  title="Atualizar lista"
+                  className="text-zinc-600 hover:text-zinc-400 transition-colors disabled:opacity-40"
+                >
+                  <RefreshCw size={14} className={docsGeradosLoading ? "animate-spin" : ""} />
+                </button>
+              </div>
             </div>
             {docsGeradosLoading ? (
               <div className="flex items-center gap-2 text-zinc-500 py-6">

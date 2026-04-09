@@ -181,6 +181,12 @@ export function CopilotoDrawer() {
 
       setMessages(prev => [...prev, { role: "bot", text: removerTagsXML(botText) }]);
 
+      // Agente salvou documento via function calling — atualiza Área de Trabalho
+      if (inqueritoAtivoId && /documento salvo|✅.*salvo/i.test(botText)) {
+        bumpDocsGerados();
+        getDocsGerados(inqueritoAtivoId).then(r => setExistingDocs(r.data || [])).catch(() => {});
+      }
+
       // Abre canvas quando o usuário pediu para criar um documento
       if (pediriaDocumento(userText) && botText.length > 300) {
         const titulo = detectarTitulo(botText);
