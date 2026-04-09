@@ -1,6 +1,6 @@
 # Escrivão AI — Arquitetura de Agentes, Tarefas e LLMs
 
-> Atualizado em: 2026-04-08
+> Atualizado em: 2026-04-09
 
 ---
 
@@ -208,6 +208,38 @@ POST /api/v1/agentes/cautelar/
 
 ---
 
+### 3.5 Canvas de Documento (Frontend)
+
+Quando o agente gera um documento no copiloto web, abre automaticamente um painel canvas lateral:
+
+```
+Copiloto responde com documento (>300 chars + pediriaDocumento) 
+  OU agente retorna "✅ Documento salvo" (function calling)
+        │
+        ▼
+┌───────────────────────────────────────────────────────┐
+│  DocumentCanvas — painel fixed left-0 right-[420px]  │
+│                                                       │
+│  Header: título editável, tipo, toggle edição/preview │
+│  Body:                                                │
+│    • Preview: dangerouslySetInnerHTML (HTML do agente)│
+│    • Edição: textarea com htmlParaTexto()            │
+│                                                       │
+│  Rodapé — refinamento:                               │
+│    Instrução do Comissário                           │
+│    → agentChat("[REFINANDO DOCUMENTO: titulo]\n...")  │
+│    → se resposta >200 chars: atualiza canvas         │
+│    → senão: mostra no chat como mensagem normal      │
+│                                                       │
+│  Salvar: POST /docs-gerados (novo) ou PUT (existente) │
+└───────────────────────────────────────────────────────┘
+```
+
+**Arquivo:** `src/components/CopilotoDrawer.tsx`
+**Detecção de save via FC:** `/documento salvo|✅.*salvo/i` → `bumpDocsGerados()`
+
+---
+
 ## 4. Pipeline de Intimações
 
 ```
@@ -282,8 +314,9 @@ POST /telegram/webhook
 | `generate_summaries_task` | Celery | gpt-4.1-nano | Econômico | `PROMPT_RESUMO_*` (4 níveis) | Pós-ingestão |
 | `processar_intimacao` | Celery | gemini-flash-latest | Vision | `_PROMPT_EXTRACAO_DIRETA` | `/intimacoes/upload` |
 | `verificar_alertas_intimacoes` | Celery Beat | — | — | — | Agendador 24h |
-| `CopilotoService` | HTTP | gemini-2.0-flash | Premium | `SYSTEM_PROMPT_COPILOTO` | `/copiloto/mensagens` |
-| `CopilotoService` — auditoria | HTTP | gemini-2.0-flash | Premium | `SYSTEM_PROMPT_AUDITORIA_FACTUAL` | Opcional no copiloto |
+| `CopilotoService` | HTTP | gemini-2.0-flash | **Standard** | `SYSTEM_PROMPT_COPILOTO` | `/agent/chat` |
+| `CopilotoService` — OSINT loop | HTTP | gemini-2.0-flash | **Standard** | — | Chamada OSINT dentro do chat |
+| `CopilotoService` — cripto | HTTP | gemini-2.0-flash | Premium | `SYSTEM_PROMPT_CRIPTO` | OSINT cripto/blockchain |
 | `AgenteFicha` — análise preliminar (auto) | HTTP | Groq llama-3.3-70b | **Resumo (gratuito)** | `PROMPT_ANALISE_PRELIMINAR` | `/agentes/osint/preliminar/{id}/{pid}` |
 | `AgenteFicha` — análise preliminar (aprimorar) | HTTP | gemini-1.5-flash | Standard | `PROMPT_ANALISE_PRELIMINAR` | `/agentes/osint/preliminar/{id}/{pid}?aprimorar=true` |
 | `AgenteFicha` (pessoa completa) | HTTP | gemini-1.5-pro | Premium | `PROMPT_FICHA_PESSOA` | `/agentes/ficha/pessoa/{id}` |
