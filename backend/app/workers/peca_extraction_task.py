@@ -71,7 +71,13 @@ def _build_sync_engine():
         sync_url = re.sub(r"^postgres(ql)?://", "postgresql://", raw_url)
     else:
         sync_url = raw_url.replace("postgresql+asyncpg://", "postgresql://")
-    return create_engine(_encode_password_in_url(sync_url), pool_pre_ping=True)
+    return create_engine(
+        _encode_password_in_url(sync_url),
+        pool_size=1,
+        max_overflow=1,
+        pool_pre_ping=True,
+        pool_recycle=300,
+    )
 
 
 def _extrair_conteudo_por_ancora(texto_doc: str, pecas_data: list) -> list:

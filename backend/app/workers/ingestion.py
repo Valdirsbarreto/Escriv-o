@@ -23,7 +23,13 @@ from app.services.storage import StorageService
 logger = logging.getLogger(__name__)
 
 # Engine síncrono para uso dentro do worker Celery
-sync_engine = create_engine(settings.DATABASE_URL_SYNC)
+sync_engine = create_engine(
+    settings.DATABASE_URL_SYNC,
+    pool_size=1,
+    max_overflow=1,   # máx 2 conexões por worker — Supabase free tier
+    pool_pre_ping=True,
+    pool_recycle=300,
+)
 
 # Prioridade de tipo de pessoa (maior = mais específico)
 _TIPO_PRIORIDADE = {"investigado": 4, "vitima": 3, "testemunha": 2, "outro": 1}

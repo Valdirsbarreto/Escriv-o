@@ -22,7 +22,13 @@ from app.models.documento import Documento
 from app.core.state_machine import EstadoInquerito
 
 logger = logging.getLogger(__name__)
-sync_engine = create_engine(settings.DATABASE_URL_SYNC)
+sync_engine = create_engine(
+    settings.DATABASE_URL_SYNC,
+    pool_size=1,
+    max_overflow=1,
+    pool_pre_ping=True,
+    pool_recycle=300,
+)
 
 # Padrões comuns de número de IP no RJ: 033-07699-2016, 033.07699/2016, 07699/2016
 _IP_PATTERNS = [

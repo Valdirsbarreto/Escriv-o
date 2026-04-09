@@ -4,8 +4,8 @@ import { useAppStore } from "@/store/app";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Send, Bot, User, Save, Paperclip, X, FileText, Image, RefreshCw } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { Send, Bot, User, Save, Paperclip, X, FileText, Image, RefreshCw, PenLine, Wand2, ChevronLeft } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { agentChat, setAgentInquerito, clearAgentContext, createDocGerado, updateDocGerado, getDocsGerados } from "@/lib/api";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -56,6 +56,26 @@ function pediriaDocumento(texto: string): boolean {
   return verbos.some(v => lower.includes(v)) && objetos.some(o => lower.includes(o));
 }
 
+function htmlParaTexto(html: string): string {
+  return html
+    .replace(/<b>([\s\S]*?)<\/b>/gi, "**$1**")
+    .replace(/<strong>([\s\S]*?)<\/strong>/gi, "**$1**")
+    .replace(/<i>([\s\S]*?)<\/i>/gi, "_$1_")
+    .replace(/<em>([\s\S]*?)<\/em>/gi, "_$1_")
+    .replace(/<code>([\s\S]*?)<\/code>/gi, "`$1`")
+    .replace(/<pre>([\s\S]*?)<\/pre>/gi, "```\n$1\n```")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 // Renderiza resposta do agente (HTML do Telegram) de forma segura
 function AgentBotMessage({ html }: { html: string }) {
   return (
@@ -84,6 +104,12 @@ export function CopilotoDrawer() {
   const [existingDocs, setExistingDocs] = useState<any[]>([]);
   const [confirmReplace, setConfirmReplace] = useState<{ index: number; text: string; titulo: string; tipo: string; existingDoc: any } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // ── Canvas de documento ────────────────────────────────────────────────────
+  type CanvasDoc = { titulo: string; tipo: string; htmlOriginal: string; texto: string; modoEdicao: boolean; expandido: boolean; salvando: boolean; savedId: string | null };
+  const [canvasDoc, setCanvasDoc] = useState<CanvasDoc | null>(null);
+  const [refinamentoInput, setRefinamentoInput] = useState("");
+  const [refinandoCanvas, setRefinandoCanvas] = useState(false);
 
   // Sincroniza inquérito ativo no contexto Redis — limpa histórico ao trocar de IP
   const prevInqueritoId = useRef<string | null>(null);
@@ -154,15 +180,17 @@ export function CopilotoDrawer() {
 
       setMessages(prev => [...prev, { role: "bot", text: removerTagsXML(botText) }]);
 
-      // Auto-salva se o usuário pediu para criar um documento
-      if (inqueritoAtivoId && pediriaDocumento(userText) && botText.length > 300) {
-        try {
-          const titulo = detectarTitulo(botText);
-          const tipo = detectarTipo(botText);
-          await createDocGerado(inqueritoAtivoId, { titulo, tipo, conteudo: botText });
-          setSavedMsgs(prev => new Set(prev).add(newIndex));
-          bumpDocsGerados();
-        } catch {}
+      // Abre canvas quando o usuário pediu para criar um documento
+      if (pediriaDocumento(userText) && botText.length > 300) {
+        const titulo = detectarTitulo(botText);
+        const tipo = detectarTipo(botText);
+        abrirCanvas(botText, titulo, tipo);
+        // Auto-salva em background se houver inquérito
+        if (inqueritoAtivoId) {
+          createDocGerado(inqueritoAtivoId, { titulo, tipo, conteudo: botText })
+            .then(() => { bumpDocsGerados(); setSavedMsgs(prev => new Set(prev).add(newIndex)); })
+            .catch(() => {});
+        }
       }
     } catch {
       setMessages(prev => [...prev, { role: "bot", text: "⚠️ Erro ao se comunicar com o servidor. Tente novamente." }]);
@@ -209,7 +237,68 @@ export function CopilotoDrawer() {
     setSavedMsgs(new Set());
   };
 
-  if (!isCopilotoOpen) return null;
+  // ── Handlers canvas ────────────────────────────────────────────────────────
+
+  const abrirCanvas = useCallback((html: string, titulo: string, tipo: string) => {
+    setCanvasDoc({
+      titulo,
+      tipo,
+      htmlOriginal: html,
+      texto: htmlParaTexto(html),
+      modoEdicao: false,
+      expandido: false,
+      salvando: false,
+      savedId: null,
+    });
+    setRefinamentoInput("");
+  }, []);
+
+  const handleSalvarCanvas = async () => {
+    if (!canvasDoc || !inqueritoAtivoId) return;
+    setCanvasDoc(prev => prev ? { ...prev, salvando: true } : null);
+    try {
+      const conteudo = canvasDoc.modoEdicao ? canvasDoc.texto : canvasDoc.htmlOriginal;
+      if (canvasDoc.savedId) {
+        await updateDocGerado(inqueritoAtivoId, canvasDoc.savedId, { titulo: canvasDoc.titulo, tipo: canvasDoc.tipo, conteudo });
+      } else {
+        const res = await createDocGerado(inqueritoAtivoId, { titulo: canvasDoc.titulo, tipo: canvasDoc.tipo, conteudo });
+        const newId = res?.data?.id ?? null;
+        setCanvasDoc(prev => prev ? { ...prev, savedId: newId } : null);
+        getDocsGerados(inqueritoAtivoId).then(r => setExistingDocs(r.data || [])).catch(() => {});
+      }
+      bumpDocsGerados();
+    } catch {
+      alert("Erro ao salvar documento.");
+    } finally {
+      setCanvasDoc(prev => prev ? { ...prev, salvando: false } : null);
+    }
+  };
+
+  const handleRefinarCanvas = async () => {
+    if (!refinamentoInput.trim() || !canvasDoc || refinandoCanvas) return;
+    const instrucao = refinamentoInput.trim();
+    setRefinamentoInput("");
+    setRefinandoCanvas(true);
+    const conteudoAtual = canvasDoc.modoEdicao ? canvasDoc.texto : htmlParaTexto(canvasDoc.htmlOriginal);
+    const msgContexto = `[REFINANDO DOCUMENTO: ${canvasDoc.titulo}]\n\nDocumento atual:\n---\n${conteudoAtual}\n---\n\nInstrução: ${instrucao}`;
+    try {
+      const data = await agentChat(msgContexto, sessionId, inqueritoAtivoId);
+      const botText = data.resposta;
+      if (botText.length > 200) {
+        const novoTexto = htmlParaTexto(botText);
+        setCanvasDoc(prev => prev ? { ...prev, htmlOriginal: botText, texto: novoTexto } : null);
+        setMessages(prev => [...prev, { role: "user", text: instrucao }, { role: "bot", text: "✏️ Documento refinado e atualizado no canvas." }]);
+      } else {
+        setMessages(prev => [...prev, { role: "user", text: instrucao }, { role: "bot", text: botText }]);
+      }
+    } catch {
+      setMessages(prev => [...prev, { role: "bot", text: "⚠️ Erro ao refinar o documento." }]);
+    } finally {
+      setRefinandoCanvas(false);
+    }
+  };
+
+  if (!isCopilotoOpen && !canvasDoc) return null;
 
   return (
     <>
@@ -392,6 +481,106 @@ export function CopilotoDrawer() {
           </div>
         )}
       </aside>
+
+      {/* ── Canvas de documento ─────────────────────────────────────────── */}
+      {canvasDoc && (
+        <div className={[
+          "fixed inset-y-0 left-0 z-40 bg-zinc-950 border-r border-zinc-800 flex flex-col",
+          canvasDoc.expandido
+            ? "right-0 z-50"
+            : isCopilotoOpen
+              ? "right-[420px]"
+              : "right-0",
+        ].join(" ")}>
+          {/* Header */}
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-800 bg-zinc-900/80 shrink-0">
+            <button
+              onClick={() => setCanvasDoc(null)}
+              title="Fechar canvas"
+              className="text-zinc-500 hover:text-zinc-300 transition-colors p-1 rounded"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <div className="flex-1 min-w-0">
+              <input
+                value={canvasDoc.titulo}
+                onChange={e => setCanvasDoc(prev => prev ? { ...prev, titulo: e.target.value } : null)}
+                className="bg-transparent text-zinc-100 font-semibold text-sm w-full outline-none border-b border-transparent hover:border-zinc-700 focus:border-blue-500 pb-0.5 transition-colors truncate"
+                title="Clique para renomear"
+              />
+            </div>
+            <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full shrink-0">{canvasDoc.tipo.replace("_", " ")}</span>
+            <button
+              onClick={() => setCanvasDoc(prev => prev ? { ...prev, modoEdicao: !prev.modoEdicao } : null)}
+              title={canvasDoc.modoEdicao ? "Visualizar renderizado" : "Editar texto"}
+              className={`p-1.5 rounded transition-colors ${canvasDoc.modoEdicao ? "text-amber-400 bg-amber-500/10" : "text-zinc-500 hover:text-zinc-300"}`}
+            >
+              <PenLine size={14} />
+            </button>
+            <button
+              onClick={() => setCanvasDoc(prev => prev ? { ...prev, expandido: !prev.expandido } : null)}
+              title={canvasDoc.expandido ? "Minimizar" : "Tela cheia"}
+              className="p-1.5 rounded text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              {canvasDoc.expandido ? "⊡" : "⊞"}
+            </button>
+            <button
+              onClick={handleSalvarCanvas}
+              disabled={canvasDoc.salvando || !inqueritoAtivoId}
+              className="flex items-center gap-1.5 text-xs bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-3 py-1.5 rounded-md transition-colors shrink-0"
+            >
+              <Save size={12} />
+              {canvasDoc.salvando ? "Salvando..." : canvasDoc.savedId ? "Atualizar" : "Salvar"}
+            </button>
+          </div>
+
+          {/* Conteúdo — visualização ou edição */}
+          <div className="flex-1 overflow-hidden">
+            {canvasDoc.modoEdicao ? (
+              <textarea
+                value={canvasDoc.texto}
+                onChange={e => setCanvasDoc(prev => prev ? { ...prev, texto: e.target.value } : null)}
+                className="w-full h-full resize-none bg-zinc-950 text-zinc-200 text-sm font-mono p-6 outline-none leading-relaxed"
+                spellCheck={false}
+                placeholder="Conteúdo do documento..."
+              />
+            ) : (
+              <div className="h-full overflow-y-auto p-6 md:p-10">
+                <div
+                  className="max-w-3xl mx-auto agent-response text-zinc-200 text-sm leading-7 prose prose-invert"
+                  dangerouslySetInnerHTML={{ __html: canvasDoc.htmlOriginal.replace(/\n/g, "<br/>") }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Rodapé — refinamento via agente */}
+          <div className="border-t border-zinc-800 p-3 bg-zinc-900/60 shrink-0">
+            <form
+              onSubmit={e => { e.preventDefault(); handleRefinarCanvas(); }}
+              className="flex gap-2"
+            >
+              <div className="flex items-center gap-1.5 text-zinc-500 shrink-0">
+                <Wand2 size={14} />
+              </div>
+              <input
+                value={refinamentoInput}
+                onChange={e => setRefinamentoInput(e.target.value)}
+                placeholder="Peça ao agente para refinar... ex: &quot;adicione perguntas sobre alibi&quot;"
+                disabled={refinandoCanvas}
+                className="flex-1 bg-zinc-800 border border-zinc-700 rounded-md px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 outline-none focus:border-blue-500 transition-colors disabled:opacity-50"
+              />
+              <button
+                type="submit"
+                disabled={!refinamentoInput.trim() || refinandoCanvas}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-md text-xs transition-colors shrink-0"
+              >
+                {refinandoCanvas ? "..." : "Refinar"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -159,7 +159,7 @@ async def admin_reindexa_inquerito(inquerito_id: uuid.UUID):
     from app.models.chunk import Chunk
     from app.workers.ingestion import ingest_document
 
-    sync_engine = create_engine(_s.DATABASE_URL_SYNC)
+    sync_engine = create_engine(_s.DATABASE_URL_SYNC, pool_size=1, max_overflow=0)
     disparados = []
     ignorados = []
 
