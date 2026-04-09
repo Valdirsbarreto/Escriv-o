@@ -78,12 +78,12 @@ const initSugestao = (perfil: number | null): string[] => {
 
 function DadosBadge({ campo, label }: { campo: DadoCampo; label: string }) {
   const cor = campo.staleness === "fresco"
-    ? "border-green-700/40 text-green-400 bg-green-500/5"
+    ? "border-green-600/50 text-green-400 bg-green-500/10"
     : campo.staleness === "desatualizado"
-    ? "border-yellow-700/40 text-yellow-400 bg-yellow-500/5"
-    : "border-zinc-700 text-zinc-600";
+    ? "border-yellow-600/50 text-yellow-400 bg-yellow-500/10"
+    : "border-zinc-600 text-zinc-400 bg-zinc-800/60";
   return (
-    <span title={campo.texto ? `${label}: "${campo.texto}"` : label}
+    <span title={campo.texto ? `${label}: "${campo.texto}"` : `${label}: não informado`}
       className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border cursor-default ${cor}`}>
       {label}
     </span>
@@ -284,8 +284,8 @@ function CardPersonagem({
         {/* Nome + identificador */}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-zinc-200 truncate">{p.nome}</p>
-          <p className="text-[10px] text-zinc-600 mt-0.5 font-mono">
-            {p.cpf || p.cnpj || "Sem documento"}
+          <p className={`text-[10px] mt-0.5 font-mono ${p.cpf || p.cnpj ? "text-zinc-400" : "text-zinc-500 italic"}`}>
+            {p.cpf || p.cnpj || "Sem CPF/CNPJ nos autos"}
           </p>
         </div>
 
