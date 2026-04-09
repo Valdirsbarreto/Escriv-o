@@ -1042,12 +1042,21 @@ class TelegramCopilotoService:
         if tipo not in self._TIPOS_DOC_VALIDOS:
             tipo = "outro"
 
+        import re as _re
+        # Remove tags HTML do Telegram antes de salvar (bold, italic, code, etc.)
+        conteudo_limpo = _re.sub(r"<b>(.*?)</b>", r"**\1**", conteudo, flags=_re.DOTALL)
+        conteudo_limpo = _re.sub(r"<i>(.*?)</i>", r"*\1*", conteudo_limpo, flags=_re.DOTALL)
+        conteudo_limpo = _re.sub(r"<code>(.*?)</code>", r"`\1`", conteudo_limpo, flags=_re.DOTALL)
+        conteudo_limpo = _re.sub(r"<pre>(.*?)</pre>", r"```\n\1\n```", conteudo_limpo, flags=_re.DOTALL)
+        conteudo_limpo = _re.sub(r"<[^>]+>", "", conteudo_limpo)
+        conteudo_limpo = conteudo_limpo.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&").replace("&quot;", '"')
+
         from app.models.documento_gerado import DocumentoGerado
         doc = DocumentoGerado(
             inquerito_id=ip.id,
             titulo=titulo,
             tipo=tipo,
-            conteudo=conteudo,
+            conteudo=conteudo_limpo,
         )
         db.add(doc)
         await db.commit()

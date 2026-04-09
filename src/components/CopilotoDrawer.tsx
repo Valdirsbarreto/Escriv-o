@@ -104,6 +104,19 @@ export function CopilotoDrawer() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
+  // Escuta CustomEvent "copiloto:prefill" disparado pela aba Blockchain
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const texto = (e as CustomEvent<string>).detail;
+      if (texto) {
+        setInput(texto);
+        setCopilotoOpen(true);
+      }
+    };
+    window.addEventListener("copiloto:prefill", handler);
+    return () => window.removeEventListener("copiloto:prefill", handler);
+  }, [setCopilotoOpen]);
+
   const handleSend = async () => {
     if (!input.trim() && !anexo) return;
 
