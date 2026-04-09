@@ -349,13 +349,13 @@ class CopilotoService:
         messages.append({"role": "user", "content": user_content})
 
         # ── 4. Chamar LLM (Loop Agentico) ────────────────────────────────
-        logger.info("[COPILOTO] Enviando para LLM (premium)")
-        
+        logger.info("[COPILOTO] Enviando para LLM (standard)")
+
         resultado_osint_texto = ""
         try:
             llm_result = await self.llm_service.chat_completion(
                 messages=messages,
-                tier="premium",
+                tier="standard",
                 temperature=0.3,
                 max_tokens=3000,
                 agente="Copiloto",
@@ -386,7 +386,7 @@ class CopilotoService:
                         logger.info("[COPILOTO] Enviando resultado OSINT de volta para o LLM")
                         llm_result2 = await self.llm_service.chat_completion(
                             messages=messages,
-                            tier="premium",
+                            tier="standard",
                             temperature=0.4,
                             max_tokens=3000,
                             agente="Copiloto",
