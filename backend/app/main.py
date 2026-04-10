@@ -56,7 +56,9 @@ async def lifespan(app: FastAPI):
     print(f"   Qdrant:   {settings.QDRANT_HOST}:{settings.QDRANT_PORT}")
     print(f"   Redis:    {settings.REDIS_URL}")
     print(f"   Storage:  {settings.S3_ENDPOINT_URL}")
-    print(f"   Serper:   {'✓ configurado' if settings.SERPER_API_KEY else '✗ NAO configurado'}")
+    import os
+    _raw = os.getenv("SERPER_API_KEY", "")
+    print(f"   Serper:   {'✓ configurado' if settings.SERPER_API_KEY else '✗ NAO configurado'} | os.getenv={bool(_raw)} len={len(_raw)}")
     print("   ──────────────────────────────────────────────")
     await _diagnostico_embeddings()
     yield
