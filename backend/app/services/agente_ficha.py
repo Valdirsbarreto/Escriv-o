@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.llm_service import LLMService
-from app.core.prompts import PROMPT_FICHA_PESSOA, PROMPT_FICHA_EMPRESA, PROMPT_ANALISE_PRELIMINAR
+from app.core.prompts import PROMPT_FICHA_PESSOA, PROMPT_FICHA_EMPRESA, PROMPT_ANALISE_PRELIMINAR, PROMPT_OSINT_WEB
 from app.models.pessoa import Pessoa
 from app.models.empresa import Empresa
 from app.models.endereco import Endereco
@@ -299,6 +299,95 @@ Eventos/Cronologia:
 
         logger.info(f"[AGENTE-FICHA] Análise preliminar ({tier}) gerada para {pessoa.nome}")
         return analise_json
+
+    async def gerar_osint_web_pessoa(
+        self,
+        db: AsyncSession,
+        inquerito_id: uuid.UUID,
+        pessoa_id: uuid.UUID,
+    ) -> Dict[str, Any]:
+        """
+        Busca fontes abertas (web) para a pessoa via Serper.dev + consolida com Gemini Flash.
+        Cache de 6h em ResultadoAgente (tipo_agente='osint_web_pessoa').
+        """
+        from datetime import timedelta
+        from sqlalchemy import and_
+
+        # ── Cache 6h ──────────────────────────────────────────────────────────
+        cache_stmt = (
+            select(ResultadoAgente)
+            .where(and_(
+                ResultadoAgente.inquerito_id == inquerito_id,
+                ResultadoAgente.tipo_agente == "osint_web_pessoa",
+                ResultadoAgente.referencia_id == pessoa_id,
+            ))
+            .order_by(ResultadoAgente.created_at.desc())
+            .limit(1)
+        )
+        cached = (await db.execute(cache_stmt)).scalar_one_or_none()
+        if cached:
+            from datetime import datetime as dt
+            age = dt.utcnow() - cached.created_at.replace(tzinfo=None)
+            if age < timedelta(hours=6):
+                logger.info(f"[AGENTE-FICHA] Cache hit 'osint_web_pessoa' para {pessoa_id}")
+                return cached.resultado_json
+
+        pessoa = await db.get(Pessoa, pessoa_id)
+        if not pessoa:
+            raise ValueError(f"Pessoa {pessoa_id} não encontrada")
+
+        # ── Serper: buscas web paralelas ───────────────────────────────────────
+        from app.services.serper_service import SerperService
+        cpf_limpo = pessoa.cpf.replace(".", "").replace("-", "").strip() if pessoa.cpf else None
+        serper = SerperService()
+        dados_web = await serper.buscar_pessoa(nome=pessoa.nome, cpf=cpf_limpo)
+
+        # Formatar snippets para o prompt
+        blocos = []
+        for cat, resultados in dados_web["por_categoria"].items():
+            blocos.append(f"[{cat.upper()}]")
+            for r in resultados[:5]:
+                blocos.append(f"- {r['titulo']}\n  URL: {r['url']}\n  {r['trecho']}")
+        resultados_str = "\n".join(blocos) or "Sem resultados encontrados."
+
+        dados_internos = (
+            f"Nome: {pessoa.nome}\n"
+            f"CPF: {pessoa.cpf or 'não consta'}\n"
+            f"Papel: {getattr(pessoa, 'papel', None) or 'não identificado'}"
+        )
+
+        # ── LLM ───────────────────────────────────────────────────────────────
+        prompt = PROMPT_OSINT_WEB.format(
+            nome=pessoa.nome,
+            resultados_web=resultados_str,
+            dados_internos=dados_internos,
+        )
+        result = await self.llm.chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            tier="standard",
+            temperature=0.1,
+            max_tokens=1500,
+            json_mode=True,
+            agente="OsintWeb",
+        )
+        analise = json.loads(result["content"].strip())
+        analise["_fonte"] = "serper"
+        analise["termos_buscados"] = dados_web["termos_buscados"]
+        analise["total_resultados"] = dados_web["total_resultados"]
+
+        # ── Cache ──────────────────────────────────────────────────────────────
+        registro = ResultadoAgente(
+            inquerito_id=inquerito_id,
+            tipo_agente="osint_web_pessoa",
+            referencia_id=pessoa_id,
+            resultado_json=analise,
+            modelo_llm=result.get("model"),
+        )
+        db.add(registro)
+        await db.commit()
+
+        logger.info(f"[AGENTE-FICHA] OSINT web gerado para {pessoa.nome} ({dados_web['total_resultados']} resultados)")
+        return analise
 
     async def gerar_ficha_empresa(
         self,

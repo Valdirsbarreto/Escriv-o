@@ -84,6 +84,9 @@ class Settings(BaseSettings):
     DIRECTDATA_API_TOKEN: str = ""
     DIRECTDATA_BASE_URL: str = "https://apiv3.directd.com.br"
 
+    # ── Web Search (Serper.dev) ────────────────────────────
+    SERPER_API_KEY: Optional[str] = None
+
     # ── Cripto / Blockchain OSINT ──────────────────────────
     CHAINABUSE_API_KEY: Optional[str] = None
     ETHERSCAN_API_KEY: Optional[str] = None

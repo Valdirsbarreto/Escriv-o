@@ -241,3 +241,11 @@ export const osintAnalisePreliminar = async (
   );
   return response.data;
 };
+
+export const osintBuscaWeb = async (inqueritoId: string, pessoaId: string) => {
+  const response = await api.get(
+    `/agentes/osint/web/${inqueritoId}/${pessoaId}`,
+    { timeout: 60000 }
+  );
+  return response.data;
+};

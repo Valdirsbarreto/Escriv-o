@@ -623,6 +623,36 @@ REGRAS:
 - lacunas é o campo mais importante: liste o que falta e que a consulta paga poderia resolver.
 """
 
+PROMPT_OSINT_WEB = """Você é um analista de inteligência policial especializado em OSINT de fontes abertas.
+Analise os resultados de busca na internet sobre "{nome}" e produza um relatório de inteligência.
+
+=== RESULTADOS DE BUSCA (Google, JusBrasil, Escavador, DOU, notícias) ===
+{resultados_web}
+
+=== DADOS INTERNOS DOS AUTOS (para contexto e cruzamento) ===
+{dados_internos}
+
+Retorne EXCLUSIVAMENTE um JSON:
+{{
+  "resumo_web": "síntese em 2-3 frases do que a internet revela sobre o indivíduo",
+  "presenca_digital": "baixa|moderada|alta",
+  "mencoes_juridicas": ["processos, ações, citações em JusBrasil/Escavador — cite título e URL"],
+  "mencoes_oficiais": ["DOU, nomeações, licitações, contratos com governo — cite fonte"],
+  "alertas": ["menções em notícias policiais, crime, fraude, investigação — cite manchete"],
+  "fontes_relevantes": [
+    {{"titulo": "", "url": "", "trecho": "", "categoria": "juridica|oficial|alerta|geral"}}
+  ],
+  "correlacoes_com_autos": ["cruzamentos entre o que os autos dizem e o que a internet confirma/contradiz"],
+  "sugestoes_diligencias": ["próximas ações com base no que foi encontrado na internet"]
+}}
+
+REGRAS:
+- NÃO invente URLs. Use apenas os resultados fornecidos.
+- Se não há menções jurídicas, retorne lista vazia.
+- fontes_relevantes: máximo 8 itens, priorize alertas > jurídicas > oficiais > geral.
+- correlacoes_com_autos é o campo mais valioso — cruce ativamente os dados.
+"""
+
 PROMPT_ANALISE_EXTRATO = """Você é um analista financeiro forense especializado em detecção de lavagem de dinheiro e fraudes.
 Analise o extrato bancário abaixo e extraia as informações estruturadas.
 

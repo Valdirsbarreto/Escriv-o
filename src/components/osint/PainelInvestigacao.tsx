@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button";
 import {
   User, Building, ChevronDown, ChevronRight, Loader2,
   AlertTriangle, CheckCircle, XCircle, MinusCircle,
-  ExternalLink, Play, UserSearch,
+  ExternalLink, Play, UserSearch, Globe, Scale, Newspaper, FileText,
 } from "lucide-react";
-import { osintSugestao, osintLote, osintAnalisePreliminar } from "@/lib/api";
+import { osintSugestao, osintLote, osintAnalisePreliminar, osintBuscaWeb } from "@/lib/api";
 import { Sparkles, Zap } from "lucide-react";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -101,6 +101,171 @@ function TipoPessoa({ tipo }: { tipo: string }) {
 }
 
 // ── Card de Personagem ────────────────────────────────────────────────────────
+
+// ── Componente OSINT Fontes Abertas (Serper.dev) ──────────────────────────────
+
+function OsintWebPanel({ inqueritoId, pessoaId }: { inqueritoId: string; pessoaId: string }) {
+  const [dados, setDados] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState(false);
+  const [aberto, setAberto] = useState(false);
+
+  const handleBuscar = async () => {
+    if (dados) { setAberto(v => !v); return; }
+    setLoading(true);
+    setAberto(true);
+    try {
+      const r = await osintBuscaWeb(inqueritoId, pessoaId);
+      setDados(r.dados_web);
+    } catch { setErro(true); } finally { setLoading(false); }
+  };
+
+  const presencaCor = (p: string) =>
+    p === "alta" ? "text-red-400" : p === "moderada" ? "text-yellow-400" : "text-zinc-500";
+
+  return (
+    <div className="rounded-lg border border-zinc-700/50 bg-zinc-900/60 overflow-hidden">
+      {/* Cabeçalho / botão */}
+      <button
+        onClick={handleBuscar}
+        className="w-full flex items-center justify-between px-3 py-2 hover:bg-zinc-800/40 transition-colors"
+      >
+        <div className="flex items-center gap-1.5">
+          <Globe size={11} className="text-sky-400" />
+          <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider">Fontes Abertas</span>
+          <span className="text-[9px] text-zinc-600">(web)</span>
+          {dados && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-sky-500/10 border border-sky-700/30 text-sky-400">
+              {dados.total_resultados} resultados
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          {loading && <Loader2 size={10} className="animate-spin text-sky-400" />}
+          {!loading && (aberto ? <ChevronDown size={11} className="text-zinc-600" /> : <ChevronRight size={11} className="text-zinc-600" />)}
+        </div>
+      </button>
+
+      {/* Conteúdo expandido */}
+      {aberto && (
+        <div className="border-t border-zinc-800 px-3 py-3 space-y-3">
+          {loading ? (
+            <div className="flex items-center gap-2 text-zinc-500 text-xs py-2">
+              <Loader2 size={12} className="animate-spin text-sky-400" />
+              Buscando em fontes abertas...
+            </div>
+          ) : erro ? (
+            <p className="text-xs text-zinc-600 italic">Busca não disponível — verifique SERPER_API_KEY.</p>
+          ) : dados ? (
+            <>
+              {/* Resumo */}
+              {dados.resumo_web && (
+                <div className="flex items-start gap-2">
+                  {dados.presenca_digital && (
+                    <span className={`shrink-0 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border border-current/20 ${presencaCor(dados.presenca_digital)}`}>
+                      {dados.presenca_digital}
+                    </span>
+                  )}
+                  <p className="text-xs text-zinc-300 leading-relaxed">{dados.resumo_web}</p>
+                </div>
+              )}
+
+              {/* Alertas */}
+              {dados.alertas?.length > 0 && (
+                <div>
+                  <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <AlertTriangle size={9} className="text-red-400" /> Alertas
+                  </p>
+                  <ul className="space-y-0.5">
+                    {dados.alertas.slice(0, 4).map((a: string, i: number) => (
+                      <li key={i} className="text-[10px] text-red-300/80 flex gap-1.5">
+                        <span className="text-red-500 shrink-0 mt-0.5">⚠</span>{a}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Menções jurídicas */}
+              {dados.mencoes_juridicas?.length > 0 && (
+                <div>
+                  <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <Scale size={9} className="text-blue-400" /> Menções Jurídicas
+                  </p>
+                  <ul className="space-y-0.5">
+                    {dados.mencoes_juridicas.slice(0, 3).map((m: string, i: number) => (
+                      <li key={i} className="text-[10px] text-blue-300/80 flex gap-1.5">
+                        <span className="text-blue-600 shrink-0 mt-0.5">▸</span>{m}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Menções oficiais */}
+              {dados.mencoes_oficiais?.length > 0 && (
+                <div>
+                  <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <FileText size={9} className="text-amber-400" /> Menções Oficiais
+                  </p>
+                  <ul className="space-y-0.5">
+                    {dados.mencoes_oficiais.slice(0, 3).map((m: string, i: number) => (
+                      <li key={i} className="text-[10px] text-amber-300/80 flex gap-1.5">
+                        <span className="text-amber-600 shrink-0 mt-0.5">▸</span>{m}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Correlações com autos */}
+              {dados.correlacoes_com_autos?.length > 0 && (
+                <div>
+                  <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1">Correlações com os autos</p>
+                  <ul className="space-y-0.5">
+                    {dados.correlacoes_com_autos.slice(0, 3).map((c: string, i: number) => (
+                      <li key={i} className="text-[10px] text-emerald-300/80 flex gap-1.5">
+                        <span className="text-emerald-600 shrink-0 mt-0.5">↔</span>{c}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Fontes com links */}
+              {dados.fontes_relevantes?.length > 0 && (
+                <div className="border-t border-zinc-800 pt-2">
+                  <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                    <Newspaper size={9} /> Fontes
+                  </p>
+                  <div className="space-y-1">
+                    {dados.fontes_relevantes.slice(0, 5).map((f: any, i: number) => (
+                      <a
+                        key={i}
+                        href={f.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-start gap-1.5 group"
+                      >
+                        <ExternalLink size={9} className="text-zinc-600 group-hover:text-sky-400 shrink-0 mt-0.5 transition-colors" />
+                        <div className="min-w-0">
+                          <p className="text-[10px] text-zinc-400 group-hover:text-sky-400 truncate transition-colors">{f.titulo}</p>
+                          {f.trecho && <p className="text-[9px] text-zinc-600 line-clamp-1">{f.trecho}</p>}
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <p className="text-[9px] text-zinc-700 text-right">via serper.dev</p>
+            </>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Componente de análise preliminar ─────────────────────────────────────────
 
@@ -331,6 +496,9 @@ function CardPersonagem({
 
           {/* Análise preliminar automática (Groq — gratuita) */}
           <AnalisePreliminarPanel inqueritoId={inqueritoId} pessoaId={p.pessoa_id} />
+
+          {/* OSINT fontes abertas (Serper.dev — sob demanda) */}
+          <OsintWebPanel inqueritoId={inqueritoId} pessoaId={p.pessoa_id} />
 
           {/* Cross-inquérito com links + tooltip de síntese */}
           {temCross && (

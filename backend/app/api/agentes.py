@@ -122,6 +122,37 @@ async def analise_preliminar_pessoa(
         raise HTTPException(status_code=500, detail=f"Erro na análise preliminar: {str(e)[:200]}")
 
 
+# ── OSINT — Fontes Abertas (Serper.dev) ──────────────────────────────────────
+
+@router.get(
+    "/osint/web/{inquerito_id}/{pessoa_id}",
+    summary="OSINT fontes abertas — busca web via Serper.dev",
+)
+async def osint_web_pessoa(
+    inquerito_id: uuid.UUID,
+    pessoa_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Busca o nome/CPF da pessoa em fontes abertas da internet (Google, JusBrasil,
+    Escavador, DOU, notícias policiais) e retorna relatório consolidado pelo LLM.
+    Cache de 6h em ResultadoAgente.
+    Requer SERPER_API_KEY configurado.
+    """
+    from app.core.config import settings
+    if not settings.SERPER_API_KEY:
+        raise HTTPException(status_code=503, detail="SERPER_API_KEY não configurado")
+
+    agente = AgenteFicha()
+    try:
+        dados = await agente.gerar_osint_web_pessoa(db, inquerito_id, pessoa_id)
+        return {"status": "concluido", "dados_web": dados}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro OSINT web: {str(e)[:200]}")
+
+
 # ── OSINT — Consultas brutas (sem LLM) ───────────────────────────────────────
 
 @router.post(
