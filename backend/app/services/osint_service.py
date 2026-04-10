@@ -138,15 +138,20 @@ class OsintService:
             return cached.resultado_json
 
         try:
-            resultado = await fn()
+            resultado = await asyncio.wait_for(fn(), timeout=65.0)
             await self._salvar_auditoria(db, inquerito_id, tipo_consulta, documento_limpo, resultado, "ok")
             logger.info(f"[OSINT] OK: {tipo_consulta} / ***{documento_limpo[-4:]}")
             return resultado
 
+        except asyncio.TimeoutError:
+            await self._salvar_auditoria(db, inquerito_id, tipo_consulta, documento_limpo, None, "timeout")
+            logger.warning(f"[OSINT] timeout: {tipo_consulta} / ***{documento_limpo[-4:]}")
+            return None
         except Exception as e:
-            status = "nao_encontrado" if "404" in str(e) else ("timeout" if "Timeout" in type(e).__name__ else "erro")
+            err_str = str(e)
+            status = "nao_encontrado" if "404" in err_str else ("timeout" if "Timeout" in type(e).__name__ else "erro")
             await self._salvar_auditoria(db, inquerito_id, tipo_consulta, documento_limpo, None, status)
-            logger.warning(f"[OSINT] {status}: {tipo_consulta} / ***{documento_limpo[-4:]} — {e}")
+            logger.warning(f"[OSINT] {status}: {tipo_consulta} / ***{documento_limpo[-4:]} — {err_str[:200]}")
             return None
 
     # ── Enriquecimento de Pessoa ───────────────────────────────────────────────

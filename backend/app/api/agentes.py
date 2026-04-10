@@ -413,19 +413,33 @@ async def osint_consultas_inquerito(
 
     hash_para_nome: Dict[str, str] = {}
     for p in pessoas:
+        # Por CPF
         if p.cpf:
             cpf_limpo = p.cpf.replace(".", "").replace("-", "").strip()
-            h = ConsultaExterna.hash_documento(cpf_limpo)
-            hash_para_nome[h] = p.nome
+            hash_para_nome[ConsultaExterna.hash_documento(cpf_limpo)] = p.nome
+        # Por nome (consultas sem CPF usam nome como documento_hash)
+        if p.nome:
+            hash_para_nome[ConsultaExterna.hash_documento(p.nome.strip())] = p.nome
+            # Variações: maiúsculo/minúsculo
+            hash_para_nome[ConsultaExterna.hash_documento(p.nome.strip().upper())] = p.nome
+            hash_para_nome[ConsultaExterna.hash_documento(p.nome.strip().lower())] = p.nome
 
     # Agrupa por documento_hash
     grupos: Dict[str, Any] = {}
     for c in consultas:
         h = c.documento_hash
         if h not in grupos:
+            # Tenta recuperar nome do resultado JSON quando não há cruzamento com Pessoa
+            nome_fallback = None
+            if c.resultado_json and isinstance(c.resultado_json, dict):
+                nome_fallback = (
+                    c.resultado_json.get("Nome")
+                    or c.resultado_json.get("nome")
+                    or c.resultado_json.get("NomePesquisado")
+                )
             grupos[h] = {
                 "documento_hash": h,
-                "nome": hash_para_nome.get(h, "Alvo desconhecido"),
+                "nome": hash_para_nome.get(h) or nome_fallback or "Alvo desconhecido",
                 "modulos": [],
                 "ultima_consulta": c.created_at.isoformat(),
             }

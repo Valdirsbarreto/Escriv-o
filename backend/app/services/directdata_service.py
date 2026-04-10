@@ -47,8 +47,13 @@ class DirectDataService:
 
     async def _get(self, path: str, campos: Dict[str, str]) -> Dict[str, Any]:
         """Executa GET autenticado e retorna JSON."""
-        async with httpx.AsyncClient(base_url=self.base, timeout=20.0) as client:
+        async with httpx.AsyncClient(base_url=self.base, timeout=60.0) as client:
             resp = await client.get(path, params=self._params(campos))
+            if resp.status_code >= 400:
+                logger.error(
+                    f"[DirectData] HTTP {resp.status_code} em {path} "
+                    f"params={list(campos.keys())} body={resp.text[:300]}"
+                )
             resp.raise_for_status()
             return resp.json()
 
