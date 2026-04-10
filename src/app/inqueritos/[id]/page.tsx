@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useAppStore } from "@/store/app";
@@ -1489,60 +1490,59 @@ export default function InqueritoDetalhePage() {
         </div>
       )}
 
-      {/* Estilos para o viewer de documentos gerados */}
-      <style>{`
-        .doc-viewer b, .doc-viewer strong { color: #e4e4e7; font-weight: 600; }
-        .doc-viewer i, .doc-viewer em { color: #a1a1aa; font-style: italic; }
-        .doc-viewer code { background: #18181b; border: 1px solid #3f3f46; padding: 1px 6px; border-radius: 4px; font-family: monospace; font-size: 0.8em; color: #d4d4d8; }
-        .doc-viewer pre { background: #18181b; border: 1px solid #3f3f46; border-radius: 6px; padding: 10px 12px; overflow-x: auto; margin: 6px 0; }
-        .doc-viewer a { color: #60a5fa; text-decoration: underline; }
-      `}</style>
-
-      {/* Modal de visualização de documento gerado */}
-      {docGeradoViewer.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setDocGeradoViewer(v => ({ ...v, open: false }))}>
-          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
-              <div className="flex items-center gap-3 min-w-0">
-                <Bot size={18} className="text-blue-400 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-zinc-100 truncate">{docGeradoViewer.doc?.titulo}</p>
-                  <p className="text-xs text-zinc-500">{TIPO_GERADO_LABEL[docGeradoViewer.doc?.tipo] || docGeradoViewer.doc?.tipo}</p>
-                </div>
-              </div>
-              <button onClick={() => setDocGeradoViewer(v => ({ ...v, open: false }))} className="text-zinc-500 hover:text-zinc-300 p-1 transition-colors ml-4 shrink-0">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="overflow-y-auto flex-1 px-6 py-4">
-              {docGeradoViewer.loading ? (
-                <div className="flex items-center justify-center py-16 text-zinc-500">
-                  <Loader2 size={24} className="animate-spin mr-2" /> Carregando...
-                </div>
-              ) : docGeradoViewer.conteudo ? (
-                /<[a-z][\s\S]*>/i.test(docGeradoViewer.conteudo) ? (
-                  // Conteúdo HTML (salvo pelo copiloto web)
-                  <div
-                    className="doc-viewer text-zinc-300 text-sm leading-7"
-                    dangerouslySetInnerHTML={{ __html: docGeradoViewer.conteudo.replace(/\n/g, "<br/>") }}
-                  />
-                ) : (
-                  // Conteúdo Markdown (salvo pelo Telegram)
-                  <div className="prose prose-invert prose-sm max-w-none text-zinc-300">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {docGeradoViewer.conteudo}
-                    </ReactMarkdown>
+      {/* Modal de visualização de documento gerado — Portal para escapar de stacking contexts */}
+      {docGeradoViewer.open && typeof window !== "undefined" && createPortal(
+        <>
+          <style>{`
+            .doc-viewer b, .doc-viewer strong { color: #e4e4e7; font-weight: 600; }
+            .doc-viewer i, .doc-viewer em { color: #a1a1aa; font-style: italic; }
+            .doc-viewer code { background: #18181b; border: 1px solid #3f3f46; padding: 1px 6px; border-radius: 4px; font-family: monospace; font-size: 0.8em; color: #d4d4d8; }
+            .doc-viewer pre { background: #18181b; border: 1px solid #3f3f46; border-radius: 6px; padding: 10px 12px; overflow-x: auto; margin: 6px 0; }
+            .doc-viewer a { color: #60a5fa; text-decoration: underline; }
+          `}</style>
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setDocGeradoViewer(v => ({ ...v, open: false }))}>
+            <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Bot size={18} className="text-blue-400 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-zinc-100 truncate">{docGeradoViewer.doc?.titulo}</p>
+                    <p className="text-xs text-zinc-500">{TIPO_GERADO_LABEL[docGeradoViewer.doc?.tipo] || docGeradoViewer.doc?.tipo}</p>
                   </div>
-                )
-              ) : (
-                <div className="text-center py-16 text-zinc-500">
-                  <Bot size={32} className="mx-auto mb-3 opacity-30" />
-                  <p>Conteúdo não disponível.</p>
                 </div>
-              )}
+                <button onClick={() => setDocGeradoViewer(v => ({ ...v, open: false }))} className="text-zinc-500 hover:text-zinc-300 p-1 transition-colors ml-4 shrink-0">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="overflow-y-auto flex-1 px-6 py-4">
+                {docGeradoViewer.loading ? (
+                  <div className="flex items-center justify-center py-16 text-zinc-500">
+                    <Loader2 size={24} className="animate-spin mr-2" /> Carregando...
+                  </div>
+                ) : docGeradoViewer.conteudo ? (
+                  /<[a-zA-Z][^>]*>/.test(docGeradoViewer.conteudo) ? (
+                    <div
+                      className="doc-viewer text-zinc-300 text-sm leading-7"
+                      dangerouslySetInnerHTML={{ __html: docGeradoViewer.conteudo.replace(/\n/g, "<br/>") }}
+                    />
+                  ) : (
+                    <div className="prose prose-invert prose-sm max-w-none text-zinc-300">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {docGeradoViewer.conteudo}
+                      </ReactMarkdown>
+                    </div>
+                  )
+                ) : (
+                  <div className="text-center py-16 text-zinc-500">
+                    <Bot size={32} className="mx-auto mb-3 opacity-30" />
+                    <p>Conteúdo não disponível.</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        </>,
+        document.body
       )}
 
       {/* Modal de visualização de peça extraída */}
