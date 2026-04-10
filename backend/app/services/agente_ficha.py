@@ -283,7 +283,17 @@ Eventos/Cronologia:
             agente="AnalisePreliminar",
         )
 
-        analise_json = json.loads(result["content"].strip())
+        raw_prelim = result["content"].strip()
+        if raw_prelim.startswith("```"):
+            raw_prelim = raw_prelim.split("```", 2)[1]
+            if raw_prelim.startswith("json"):
+                raw_prelim = raw_prelim[4:]
+            raw_prelim = raw_prelim.strip()
+        try:
+            analise_json = json.loads(raw_prelim)
+        except json.JSONDecodeError as e:
+            logger.error(f"[AGENTE-FICHA] JSON inválido na análise preliminar: {e}")
+            raise RuntimeError(f"LLM retornou JSON inválido: {e}") from e
         analise_json["_fonte"] = "gemini-flash" if aprimorar else "groq"
 
         # Persistir cache
@@ -370,7 +380,18 @@ Eventos/Cronologia:
             json_mode=True,
             agente="OsintWeb",
         )
-        analise = json.loads(result["content"].strip())
+        raw = result["content"].strip()
+        # Remove markdown code fences que alguns modelos inserem
+        if raw.startswith("```"):
+            raw = raw.split("```", 2)[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
+        try:
+            analise = json.loads(raw)
+        except json.JSONDecodeError as e:
+            logger.error(f"[AGENTE-FICHA] JSON inválido no OSINT web: {e} | raw={raw[:200]}")
+            raise RuntimeError(f"LLM retornou JSON inválido: {e}") from e
         analise["_fonte"] = "serper"
         analise["termos_buscados"] = dados_web["termos_buscados"]
         analise["total_resultados"] = dados_web["total_resultados"]

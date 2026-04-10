@@ -197,7 +197,7 @@ class LLMService:
                 payload["response_format"] = {"type": "json_object"}
 
             headers = {
-                "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+                "Authorization": f"Bearer {settings.GROQ_API_KEY.strip()}",
                 "Content-Type": "application/json",
             }
 
