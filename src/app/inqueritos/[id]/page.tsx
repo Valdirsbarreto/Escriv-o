@@ -895,14 +895,18 @@ export default function InqueritoDetalhePage() {
                             <UserSearch size={14} />
                           </div>
                           <div className="text-left">
-                            <p className="text-sm font-medium text-zinc-200">{grupo.nome}</p>
+                            <p className="text-sm font-medium text-zinc-200">{grupo.nome || <span className="text-zinc-500 italic">Alvo sem identificação</span>}</p>
                             <p className="text-xs text-zinc-500 mt-0.5">
-                              {modOk.length} módulo(s) consultado(s) · {new Date(grupo.ultima_consulta).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              {grupo.modulos.length} módulo(s) · {modOk.length} ok · {new Date(grupo.ultima_consulta).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          {modErro.length > 0 && <span className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full">{modErro.length} sem dados</span>}
+                          {modErro.length > 0 && (
+                            <span className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full" title={modErro.map((m: any) => `${m.tipo}: ${m.status}`).join(" | ")}>
+                              {modErro.length} falha{modErro.length > 1 ? "s" : ""}
+                            </span>
+                          )}
                           <ChevronDown size={14} className={`text-zinc-500 transition-transform ${aberto ? "rotate-180" : ""}`} />
                         </div>
                       </button>
@@ -911,8 +915,12 @@ export default function InqueritoDetalhePage() {
                           {grupo.modulos.map((m: any, i: number) => (
                             <div key={i} className="flex items-center justify-between text-xs py-1">
                               <span className={m.status === "ok" ? "text-zinc-300" : "text-zinc-600"}>{m.tipo}</span>
-                              <span className={`px-2 py-0.5 rounded-full border text-[10px] ${m.status === "ok" ? "border-green-700/40 text-green-400 bg-green-500/5" : "border-zinc-700 text-zinc-600"}`}>
-                                {m.status === "ok" ? "ok" : m.status}
+                              <span className={`px-2 py-0.5 rounded-full border text-[10px] ${
+                                m.status === "ok" ? "border-green-700/40 text-green-400 bg-green-500/5"
+                                : m.status === "timeout" ? "border-amber-700/40 text-amber-400 bg-amber-500/5"
+                                : "border-red-700/40 text-red-400 bg-red-500/5"
+                              }`}>
+                                {m.status}
                               </span>
                             </div>
                           ))}
