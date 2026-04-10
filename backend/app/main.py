@@ -56,6 +56,7 @@ async def lifespan(app: FastAPI):
     print(f"   Qdrant:   {settings.QDRANT_HOST}:{settings.QDRANT_PORT}")
     print(f"   Redis:    {settings.REDIS_URL}")
     print(f"   Storage:  {settings.S3_ENDPOINT_URL}")
+    print(f"   Serper:   {'✓ configurado' if settings.SERPER_API_KEY else '✗ NAO configurado'}")
     print("   ──────────────────────────────────────────────")
     await _diagnostico_embeddings()
     yield
