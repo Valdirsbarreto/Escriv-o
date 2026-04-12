@@ -201,6 +201,9 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
                 titulo=f"Relatório Inicial de Investigação — {inq.numero}",
                 conteudo=relatorio_texto,
                 modelo_llm=result_llm.get("model"),
+                tokens_prompt=result_llm.get("tokens_prompt"),
+                tokens_resposta=result_llm.get("tokens_resposta"),
+                custo_estimado=result_llm.get("custo_estimado"),
             )
             db.add(doc_gerado)
             await db.flush()

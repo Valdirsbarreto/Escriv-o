@@ -35,12 +35,12 @@ A migração é predominantemente cirúrgica. O codebase já está bem posiciona
 ## Checklist de Execução Ordenada
 
 ```
-[ ] Passo 1 — Verificações pré-trabalho (sem código)
-[ ] Passo 2 — Editar config.py
-[ ] Passo 3 — Refatorar llm_service.py
-[ ] Passo 4 — (Opcional) Ampliar limites de contexto
-[ ] Passo 5 — Push e deploy Railway
-[ ] Passo 6 — Limpar variáveis de ambiente obsoletas
+[x] Passo 1 — Verificações pré-trabalho (sem código)
+[x] Passo 2 — Editar config.py
+[x] Passo 3 — Refatorar llm_service.py
+[x] Passo 4 — (Opcional) Ampliar limites de contexto
+[x] Passo 5 — Push e deploy Railway
+[x] Passo 6 — Limpar variáveis de ambiente obsoletas
 [ ] Passo 7 — Validação funcional
 ```
 

@@ -49,6 +49,7 @@ class DocGeradoListItem(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/inqueritos/{inquerito_id}/docs-gerados", response_model=List[DocGeradoListItem])
+@router.get("/inqueritos/{inquerito_id}/documentos-gerados", response_model=List[DocGeradoListItem], include_in_schema=False)
 async def listar_docs_gerados(
     inquerito_id: str,
     db: AsyncSession = Depends(get_db),
@@ -100,6 +101,7 @@ async def criar_doc_gerado(
 
 
 @router.get("/inqueritos/{inquerito_id}/docs-gerados/{doc_id}", response_model=DocGeradoResponse)
+@router.get("/inqueritos/{inquerito_id}/documentos-gerados/{doc_id}", response_model=DocGeradoResponse, include_in_schema=False)
 async def obter_doc_gerado(
     inquerito_id: str,
     doc_id: str,

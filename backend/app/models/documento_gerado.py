@@ -15,5 +15,12 @@ class DocumentoGerado(Base):
     tipo: Mapped[str] = mapped_column(String(50), nullable=False, default="outro")
     # tipos: roteiro_oitiva | oficio | minuta_cautelar | relatorio | outro
     conteudo: Mapped[str] = mapped_column(Text, nullable=False)
+    
+    # Metadados de IA / Auditoria
+    modelo_llm: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    tokens_prompt: Mapped[Optional[int]] = mapped_column(nullable=True)
+    tokens_resposta: Mapped[Optional[int]] = mapped_column(nullable=True)
+    custo_estimado: Mapped[Optional[float]] = mapped_column(nullable=True)
+    
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
