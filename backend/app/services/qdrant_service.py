@@ -208,6 +208,24 @@ class QdrantService:
         )
         logger.info(f"[QDRANT] Pontos removidos para inquérito {inquerito_id}")
 
+    def delete_by_documento(self, documento_id: str) -> None:
+        """Remove todos os pontos de um documento específico."""
+        try:
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=Filter(
+                    must=[
+                        FieldCondition(
+                            key="documento_id",
+                            match=MatchValue(value=documento_id),
+                        )
+                    ]
+                ),
+            )
+            logger.info(f"[QDRANT] Pontos removidos para documento {documento_id}")
+        except Exception as e:
+            logger.warning(f"[QDRANT] Falha ao remover pontos do documento {documento_id}: {e}")
+
     def set_payload_by_documento(self, documento_id: str, payload_update: Dict[str, Any]) -> None:
         """Atualiza campos do payload em todos os chunks de um documento."""
         try:

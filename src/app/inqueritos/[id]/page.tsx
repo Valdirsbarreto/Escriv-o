@@ -307,6 +307,7 @@ export default function InqueritoDetalhePage() {
   const [docsGeradosLoading, setDocsGeradosLoading] = useState(false);
   const [docGeradoViewer, setDocGeradoViewer] = useState<{ open: boolean; doc: any | null; conteudo: string | null; loading: boolean }>({ open: false, doc: null, conteudo: null, loading: false });
   const [deletingDocGerado, setDeletingDocGerado] = useState<string | null>(null);
+  const [deletingDoc, setDeletingDoc] = useState<string | null>(null);
   const [pecasExtraidas, setPecasExtraidas] = useState<any[]>([]);
   const [pecasLoading, setPecasLoading] = useState(false);
   const [pecaViewer, setPecaViewer] = useState<{ open: boolean; peca: any | null; loading: boolean }>({ open: false, peca: null, loading: false });
@@ -561,6 +562,19 @@ export default function InqueritoDetalhePage() {
       setDocGeradoViewer(prev => ({ ...prev, conteudo: res.data.conteudo, loading: false }));
     } catch {
       setDocGeradoViewer(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  const handleDeletarDoc = async (docId: string, nomeArquivo: string) => {
+    if (!confirm(`Excluir "${nomeArquivo}"?\n\nOs chunks, vetores e peças extraídas deste documento serão removidos permanentemente.`)) return;
+    setDeletingDoc(docId);
+    try {
+      await api.delete(`/inqueritos/${inqId}/documentos/${docId}`);
+      setDocumentos(prev => prev.filter((d: any) => d.id !== docId));
+    } catch {
+      alert("Erro ao excluir documento.");
+    } finally {
+      setDeletingDoc(null);
     }
   };
 
@@ -1225,6 +1239,16 @@ export default function InqueritoDetalhePage() {
                             <Badge variant="outline" className="bg-zinc-800 text-zinc-400 border-zinc-700 text-xs">
                               {doc.status_processamento}
                             </Badge>
+                          )}
+                          {!isSintetico && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleDeletarDoc(doc.id, doc.nome_arquivo); }}
+                              disabled={deletingDoc === doc.id}
+                              title="Excluir documento"
+                              className="p-1 rounded text-zinc-700 hover:text-red-400 transition-colors disabled:opacity-40"
+                            >
+                              {deletingDoc === doc.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                            </button>
                           )}
                         </div>
                       </div>

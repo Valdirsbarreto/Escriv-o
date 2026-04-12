@@ -400,6 +400,42 @@ async def upload_documento(
     )
 
 
+@router.delete("/{inquerito_id}/documentos/{documento_id}", status_code=204)
+async def excluir_documento(
+    inquerito_id: uuid.UUID,
+    documento_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Exclui um documento individual e seus dados (chunks, vetores, peças, logs)."""
+    doc = await db.get(Documento, documento_id)
+    if not doc or doc.inquerito_id != inquerito_id:
+        raise HTTPException(status_code=404, detail="Documento não encontrado")
+
+    did = str(documento_id)
+
+    # Remover arquivo do storage
+    if doc.storage_path:
+        try:
+            storage = StorageService()
+            await storage.delete_file(doc.storage_path)
+        except Exception:
+            pass
+
+    # Remover vetores do Qdrant
+    try:
+        from app.services.qdrant_service import QdrantService
+        QdrantService().delete_by_documento(did)
+    except Exception:
+        pass
+
+    # Deletar dados dependentes e o documento
+    await db.execute(text("DELETE FROM pecas_extraidas WHERE documento_id = :id"), {"id": did})
+    await db.execute(text("DELETE FROM logs_ingestao WHERE documento_id = :id"), {"id": did})
+    await db.execute(text("DELETE FROM chunks WHERE documento_id = :id"), {"id": did})
+    await db.execute(text("DELETE FROM documentos WHERE id = :id"), {"id": did})
+    await db.commit()
+
+
 @router.delete("/{inquerito_id}", status_code=204)
 async def excluir_inquerito(
     inquerito_id: uuid.UUID,
