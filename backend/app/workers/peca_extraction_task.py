@@ -235,6 +235,7 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
 
         except json.JSONDecodeError as e:
             logger.error(f"[PEÇAS] Falha ao parsear JSON da IA: {e}")
+            raise self.retry(exc=RuntimeError(f"JSON inválido da IA: {e}"))
         except Exception as e:
             logger.error(f"[PEÇAS] Erro na extração de peças: {e}", exc_info=True)
             raise self.retry(exc=e)
