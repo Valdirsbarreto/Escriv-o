@@ -107,17 +107,22 @@ function TipoPessoa({ tipo }: { tipo: string }) {
 function OsintWebPanel({ inqueritoId, pessoaId }: { inqueritoId: string; pessoaId: string }) {
   const [dados, setDados] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [erro, setErro] = useState(false);
+  const [erroMsg, setErroMsg] = useState<string | null>(null);
   const [aberto, setAberto] = useState(false);
 
   const handleBuscar = async () => {
     if (dados) { setAberto(v => !v); return; }
     setLoading(true);
     setAberto(true);
+    setErroMsg(null);
     try {
       const r = await osintBuscaWeb(inqueritoId, pessoaId);
       setDados(r.dados_web);
-    } catch { setErro(true); } finally { setLoading(false); }
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || e?.message || "Erro desconhecido";
+      console.error("[OsintWeb] erro:", e?.response?.status, detail);
+      setErroMsg(String(detail));
+    } finally { setLoading(false); }
   };
 
   const presencaCor = (p: string) =>
@@ -154,8 +159,8 @@ function OsintWebPanel({ inqueritoId, pessoaId }: { inqueritoId: string; pessoaI
               <Loader2 size={12} className="animate-spin text-sky-400" />
               Buscando em fontes abertas...
             </div>
-          ) : erro ? (
-            <p className="text-xs text-zinc-600 italic">Busca não disponível — verifique SERPER_API_KEY.</p>
+          ) : erroMsg ? (
+            <p className="text-xs text-red-400/70 italic">Erro: {erroMsg}</p>
           ) : dados ? (
             <>
               {/* Resumo */}
