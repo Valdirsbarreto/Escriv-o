@@ -356,8 +356,9 @@ Eventos/Cronologia:
         blocos = []
         for cat, resultados in dados_web["por_categoria"].items():
             blocos.append(f"[{cat.upper()}]")
-            for r in resultados[:3]:  # max 3 por categoria para não truncar JSON
-                blocos.append(f"- {r['titulo']}\n  URL: {r['url']}\n  {r['trecho']}")
+            for r in resultados[:2]:  # max 2 por categoria
+                trecho = (r['trecho'] or '')[:120]
+                blocos.append(f"- {r['titulo'][:80]}\n  {trecho}")
         resultados_str = "\n".join(blocos) or "Sem resultados encontrados."
 
         dados_internos = (

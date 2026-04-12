@@ -623,36 +623,27 @@ REGRAS:
 - lacunas é o campo mais importante: liste o que falta e que a consulta paga poderia resolver.
 """
 
-PROMPT_OSINT_WEB = """Você é um analista de inteligência policial especializado em OSINT de fontes abertas.
-Analise os resultados de busca na internet sobre "{nome}" e produza um relatório de inteligência.
+PROMPT_OSINT_WEB = """Analise os resultados de busca sobre "{nome}" e retorne SOMENTE o JSON abaixo, sem texto adicional.
 
-=== RESULTADOS DE BUSCA (Google, JusBrasil, Escavador, DOU, notícias) ===
+RESULTADOS:
 {resultados_web}
 
-=== DADOS INTERNOS DOS AUTOS (para contexto e cruzamento) ===
+CONTEXTO DOS AUTOS:
 {dados_internos}
 
-Retorne EXCLUSIVAMENTE um JSON:
+Retorne APENAS este JSON (sem markdown, sem texto antes ou depois):
 {{
-  "resumo_web": "síntese em 2-3 frases do que a internet revela sobre o indivíduo",
+  "resumo_web": "frase curta de 1 linha",
   "presenca_digital": "baixa|moderada|alta",
-  "mencoes_juridicas": ["processos, ações, citações em JusBrasil/Escavador — cite título e URL"],
-  "mencoes_oficiais": ["DOU, nomeações, licitações, contratos com governo — cite fonte"],
-  "alertas": ["menções em notícias policiais, crime, fraude, investigação — cite manchete"],
-  "fontes_relevantes": [
-    {{"titulo": "", "url": "", "trecho": "", "categoria": "juridica|oficial|alerta|geral"}}
-  ],
-  "correlacoes_com_autos": ["cruzamentos entre o que os autos dizem e o que a internet confirma/contradiz"],
-  "sugestoes_diligencias": ["próximas ações com base no que foi encontrado na internet"]
+  "alertas": ["max 2 itens curtos"],
+  "mencoes_juridicas": ["max 2 itens curtos"],
+  "mencoes_oficiais": ["max 2 itens curtos"],
+  "fontes_relevantes": [{{"titulo": "curto", "url": "", "categoria": "juridica|oficial|alerta|geral"}}],
+  "correlacoes_com_autos": ["max 2 itens curtos"],
+  "sugestoes_diligencias": ["max 2 itens curtos"]
 }}
 
-REGRAS:
-- NÃO invente URLs. Use apenas os resultados fornecidos.
-- Se não há menções jurídicas, retorne lista vazia.
-- fontes_relevantes: máximo 5 itens, priorize alertas > jurídicas > oficiais > geral.
-- mencoes_juridicas, mencoes_oficiais, alertas: máximo 3 itens cada.
-- correlacoes_com_autos, sugestoes_diligencias: máximo 3 itens cada. Seja conciso.
-- correlacoes_com_autos é o campo mais valioso — cruce ativamente os dados.
+REGRAS: NÃO invente URLs. Listas vazias [] se não houver dados. Cada string: máx 100 caracteres. fontes_relevantes: máx 3 itens.
 """
 
 PROMPT_ANALISE_EXTRATO = """Você é um analista financeiro forense especializado em detecção de lavagem de dinheiro e fraudes.
