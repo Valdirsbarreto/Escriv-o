@@ -150,8 +150,11 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
             ) or "Nenhum personagem identificado ainda."
 
             # ── 4. Chamar LLM Premium ─────────────────────────────────────────
+            # Gemini 1.5 Pro suporta 2M tokens — usar contexto completo dos autos.
+            # ~400k chars ≈ 100k tokens, bem dentro do limite de 2M.
+            logger.info(f"[REL-INICIAL] Contexto total dos autos: {len(resumos_str)} chars ({len(todos_docs)} docs)")
             prompt = PROMPT_RELATORIO_INICIAL.format(
-                resumos_documentos=resumos_str[:12000],
+                resumos_documentos=resumos_str[:400000],
                 ultimo_aditamento=ultimo_aditamento or "Não disponível.",
                 personagens_raw=personagens_raw,
             )
@@ -161,7 +164,7 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
                 messages=[{"role": "user", "content": prompt}],
                 tier="premium",
                 temperature=0.15,
-                max_tokens=4500,
+                max_tokens=6000,
                 agente="RelatorioInicial",
             )
             relatorio_rascunho = result_llm["content"].strip()
@@ -171,7 +174,7 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
             auditoria_log = ""
             try:
                 prompt_auditoria = PROMPT_AUDITORIA_RELATORIO.format(
-                    fontes_primarias=resumos_str[:10000],
+                    fontes_primarias=resumos_str[:300000],
                     relatorio_gerado=relatorio_rascunho,
                 )
                 result_auditoria = await llm.chat_completion(
