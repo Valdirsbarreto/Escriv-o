@@ -5,6 +5,8 @@ export C_FORCE_ROOT=1
 
 if [ "$SERVICE_ROLE" = "worker" ]; then
     echo "[START] Iniciando EXCLUSIVAMENTE o Celery Worker (SERVICE_ROLE=worker)..."
+    echo "[START] Aplicando migrações de banco antes de iniciar o worker..."
+    PYTHONPATH=/app python -m alembic upgrade head
     exec celery -A app.workers.celery_app worker --loglevel=info --concurrency=4
 elif [ "$SERVICE_ROLE" = "api" ]; then
     echo "[START] Iniciando EXCLUSIVAMENTE a API Uvicorn (SERVICE_ROLE=api)..."
