@@ -720,7 +720,7 @@ export default function InqueritoDetalhePage() {
   if (!inquerito) return null;
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8 h-full flex flex-col">
+    <div className="p-8 max-w-7xl mx-auto space-y-8 min-h-full flex flex-col">
       <div className="flex items-start justify-between">
         <div>
           <button 
@@ -855,7 +855,7 @@ export default function InqueritoDetalhePage() {
           ...(temCripto ? [{ id: "blockchain" as const, label: "Blockchain / Cripto", badge: "auto" }] : []),
         ];
         return (
-          <div className="flex gap-1 border-b border-zinc-800 mb-6 overflow-x-auto">
+          <div className="flex gap-1 border-b border-zinc-800 mb-6 overflow-x-auto flex-shrink-0">
             {tabs.map(tab => (
               <button
                 key={tab.id}
