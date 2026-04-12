@@ -649,7 +649,9 @@ Retorne EXCLUSIVAMENTE um JSON:
 REGRAS:
 - NÃO invente URLs. Use apenas os resultados fornecidos.
 - Se não há menções jurídicas, retorne lista vazia.
-- fontes_relevantes: máximo 8 itens, priorize alertas > jurídicas > oficiais > geral.
+- fontes_relevantes: máximo 5 itens, priorize alertas > jurídicas > oficiais > geral.
+- mencoes_juridicas, mencoes_oficiais, alertas: máximo 3 itens cada.
+- correlacoes_com_autos, sugestoes_diligencias: máximo 3 itens cada. Seja conciso.
 - correlacoes_com_autos é o campo mais valioso — cruce ativamente os dados.
 """
 

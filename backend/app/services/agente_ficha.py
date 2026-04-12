@@ -356,7 +356,7 @@ Eventos/Cronologia:
         blocos = []
         for cat, resultados in dados_web["por_categoria"].items():
             blocos.append(f"[{cat.upper()}]")
-            for r in resultados[:5]:
+            for r in resultados[:3]:  # max 3 por categoria para não truncar JSON
                 blocos.append(f"- {r['titulo']}\n  URL: {r['url']}\n  {r['trecho']}")
         resultados_str = "\n".join(blocos) or "Sem resultados encontrados."
 
@@ -376,7 +376,7 @@ Eventos/Cronologia:
             messages=[{"role": "user", "content": prompt}],
             tier="standard",
             temperature=0.1,
-            max_tokens=1500,
+            max_tokens=2500,
             json_mode=True,
             agente="OsintWeb",
         )
