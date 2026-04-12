@@ -735,11 +735,12 @@ async def progresso_pipeline(
         pecas_count = pecas_result.scalar() or 0
         pecas_ok = pecas_count > 0
 
-    # Análise analítica (tipo_agente='analise')
+    # Análise: verifica se existe ResumoCache de nível "caso" (gerado por generate_summaries_task)
+    from app.models.resumo_cache import ResumoCache
     analise_result = await db.execute(
-        select(ResultadoAgente)
-        .where(ResultadoAgente.inquerito_id == inquerito_id)
-        .where(ResultadoAgente.tipo_agente == "analise")
+        select(ResumoCache)
+        .where(ResumoCache.inquerito_id == inquerito_id)
+        .where(ResumoCache.nivel == "caso")
         .limit(1)
     )
     analise_ok = analise_result.scalar_one_or_none() is not None
