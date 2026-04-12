@@ -162,13 +162,23 @@ async def reextrair_pecas_lote(
 
     from app.workers.peca_extraction_task import extrair_pecas_task
 
+    from sqlalchemy import func
+
+    # Conta peças existentes por documento
+    pecas_count_result = await db.execute(
+        select(PecaExtraida.documento_id, func.count(PecaExtraida.id).label("total"))
+        .where(PecaExtraida.inquerito_id == uuid.UUID(inquerito_id))
+        .group_by(PecaExtraida.documento_id)
+    )
+    docs_com_pecas = {str(row.documento_id) for row in pecas_count_result}
+
     agendados = []
+    pulados = []
     for doc in docs:
-        await db.execute(
-            sa_delete(PecaExtraida).where(PecaExtraida.documento_id == doc.id)
-        )
-        await db.commit()
+        if str(doc.id) in docs_com_pecas:
+            pulados.append(str(doc.id))
+            continue
         extrair_pecas_task.delay(str(doc.id), inquerito_id)
         agendados.append(str(doc.id))
 
-    return {"status": "agendado", "total": len(agendados), "documentos": agendados}
+    return {"status": "agendado", "total": len(agendados), "pulados": len(pulados), "documentos": agendados}
