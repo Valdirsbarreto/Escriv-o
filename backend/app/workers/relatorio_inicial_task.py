@@ -182,17 +182,33 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
                     agente="AuditorRelatorio",
                 )
                 relatorio_auditado = result_auditoria["content"].strip()
-                if relatorio_auditado:
-                    relatorio_texto = relatorio_auditado
-                    # Extrair bloco de auditoria para log
+
+                # Validação: só usa o resultado da auditoria se parecer um relatório
+                # estruturado real (com seções ## esperadas do relatório inicial).
+                # Isso previne que o "raciocínio interno" do modelo contamine o doc.
+                secoes_esperadas = ["## 1.", "## 4.", "## 7."]
+                auditoria_valida = relatorio_auditado and all(
+                    s in relatorio_auditado for s in secoes_esperadas
+                )
+
+                if auditoria_valida:
+                    # Separar o bloco de auditoria do relatório corrigido
                     if "## AUDITORIA FACTUAL" in relatorio_auditado:
-                        auditoria_log = relatorio_auditado.split("## AUDITORIA FACTUAL")[-1].strip()
+                        partes = relatorio_auditado.split("## AUDITORIA FACTUAL")
+                        relatorio_texto = partes[0].rstrip("-").strip()
+                        auditoria_log = partes[-1].strip()
                         logger.info(f"[REL-INICIAL] Auditoria factual:\n{auditoria_log}")
                     else:
+                        relatorio_texto = relatorio_auditado
                         logger.info("[REL-INICIAL] Auditoria concluída — sem marcadores de problema")
+                else:
+                    # Auditoria retornou conteúdo inesperado — manter rascunho original
+                    logger.warning(
+                        f"[REL-INICIAL] Auditoria descartada (output inválido, {len(relatorio_auditado)} chars) "
+                        f"— usando rascunho original"
+                    )
             except Exception as e_audit:
                 logger.warning(f"[REL-INICIAL] Auditoria anti-alucinação falhou (usando rascunho): {e_audit}")
-                relatorio_texto = relatorio_rascunho
 
             # ── 5. Salvar como DocumentoGerado ───────────────────────────────
             doc_gerado = DocumentoGerado(
