@@ -720,6 +720,49 @@ async def progresso_pipeline(
     base_pct = round((concluidos / total) * 90)
     percentual = base_pct + (10 if sintese_pronta else 0)
 
+    # ── Processos em background ───────────────────────────────────────────────
+    from app.models.peca_extraida import PecaExtraida
+    from app.models.resultado_agente import ResultadoAgente
+
+    # Peças extraídas: ok se existe ao menos 1 por documento concluído
+    docs_concluidos_ids = [d.id for d in docs if d.status_processamento == "concluido"]
+    pecas_ok = False
+    if docs_concluidos_ids:
+        pecas_result = await db.execute(
+            select(func.count(PecaExtraida.id))
+            .where(PecaExtraida.inquerito_id == inquerito_id)
+        )
+        pecas_count = pecas_result.scalar() or 0
+        pecas_ok = pecas_count > 0
+
+    # Análise analítica (tipo_agente='analise')
+    analise_result = await db.execute(
+        select(ResultadoAgente)
+        .where(ResultadoAgente.inquerito_id == inquerito_id)
+        .where(ResultadoAgente.tipo_agente == "analise")
+        .limit(1)
+    )
+    analise_ok = analise_result.scalar_one_or_none() is not None
+
+    # Status global de background
+    # 'processando': docs ainda sendo indexados ou bg tasks pendentes
+    # 'concluido': tudo pronto
+    # 'erro': algum doc com erro
+    if erros > 0 and concluidos == 0:
+        bg_status = "erro"
+    elif concluidos == total and sintese_pronta and pecas_ok and analise_ok:
+        bg_status = "concluido"
+    else:
+        bg_status = "processando"
+
+    processos_bg = {
+        "status": bg_status,
+        "indexacao": "concluido" if concluidos == total else "processando",
+        "sintese": "concluido" if sintese_pronta else "pendente",
+        "pecas": "concluido" if pecas_ok else "pendente",
+        "analise": "concluido" if analise_ok else "pendente",
+    }
+
     return {
         "total": total,
         "concluidos": concluidos,
@@ -728,5 +771,6 @@ async def progresso_pipeline(
         "erros": erros,
         "percentual": percentual,
         "sintese_pronta": sintese_pronta,
+        "processos_bg": processos_bg,
         "docs": docs_info,
     }

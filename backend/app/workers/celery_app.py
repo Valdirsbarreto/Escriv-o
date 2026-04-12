@@ -30,6 +30,9 @@ celery_app.conf.update(
     task_track_started=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    # Timeout — impede worker preso indefinidamente em chamadas LLM lentas
+    task_time_limit=600,       # hard kill após 10 min
+    task_soft_time_limit=540,  # SoftTimeLimitExceeded após 9 min (permite cleanup)
     # Retry config
     task_default_retry_delay=30,
     task_max_retries=3,

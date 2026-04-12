@@ -136,10 +136,15 @@ class LLMService:
                 response_mime_type="application/json" if json_mode else None,
             )
 
-            response = await self._genai_client.aio.models.generate_content(
-                model=model,
-                contents=gemini_messages,
-                config=config,
+            # Timeout de 180s — evita worker pendurado indefinidamente em calls lentos
+            timeout_s = 300 if max_tokens >= 3000 else 180
+            response = await asyncio.wait_for(
+                self._genai_client.aio.models.generate_content(
+                    model=model,
+                    contents=gemini_messages,
+                    config=config,
+                ),
+                timeout=timeout_s,
             )
 
             tempo_ms = int((time.time() - t0) * 1000)

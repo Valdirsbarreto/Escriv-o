@@ -212,6 +212,76 @@ function ProgressoPipeline({ inqId, onConcluido }: { inqId: string; onConcluido:
   );
 }
 
+// ── Badge de Processos em Background ─────────────────────────────────────────
+
+function ProcessosBgBadge({ inqId }: { inqId: string }) {
+  const [bg, setBg] = useState<any>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res = await api.get(`/inqueritos/${inqId}/progresso`);
+        const pb = res.data?.processos_bg;
+        if (pb) setBg(pb);
+        if (pb?.status === "concluido" || pb?.status === "erro") {
+          if (intervalRef.current) clearInterval(intervalRef.current);
+        }
+      } catch { /* silencioso */ }
+    };
+    poll();
+    intervalRef.current = setInterval(poll, 15000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [inqId]);
+
+  if (!bg) return null;
+
+  const etapas = [
+    { key: "indexacao", label: "Indexação" },
+    { key: "sintese", label: "Síntese" },
+    { key: "pecas", label: "Peças" },
+    { key: "analise", label: "Análise" },
+  ];
+
+  const cor = bg.status === "concluido"
+    ? "border-green-500/30 bg-green-500/10 text-green-400"
+    : bg.status === "erro"
+    ? "border-red-500/30 bg-red-500/10 text-red-400"
+    : "border-blue-500/30 bg-blue-500/10 text-blue-400";
+
+  const icone = bg.status === "concluido"
+    ? <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />
+    : bg.status === "erro"
+    ? <span className="w-2 h-2 rounded-full bg-red-400 inline-block" />
+    : <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse inline-block" />;
+
+  return (
+    <div className={`group relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-semibold cursor-default ${cor}`}>
+      {icone}
+      <span>
+        {bg.status === "concluido" ? "Processado" : bg.status === "erro" ? "Erro" : "Processando"}
+      </span>
+      {/* Tooltip com detalhe por etapa */}
+      <div className="absolute left-0 top-full mt-2 z-50 hidden group-hover:block bg-zinc-900 border border-zinc-700 rounded-lg p-3 shadow-xl min-w-[180px]">
+        <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-2">Processos internos</p>
+        {etapas.map(({ key, label }) => {
+          const s = bg[key];
+          return (
+            <div key={key} className="flex items-center justify-between py-0.5">
+              <span className="text-[11px] text-zinc-400">{label}</span>
+              <span className={`text-[9px] font-bold uppercase ${
+                s === "concluido" ? "text-green-400" : s === "pendente" ? "text-zinc-600" : "text-blue-400"
+              }`}>
+                {s === "concluido" ? "✓" : s === "pendente" ? "—" : "⟳"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function InqueritoDetalhePage() {
   const params = useParams();
   const router = useRouter();
@@ -709,6 +779,7 @@ export default function InqueritoDetalhePage() {
             <Badge variant="outline" className="bg-zinc-900 border-zinc-700 text-zinc-300">
               {inquerito.estado_atual.toUpperCase()}
             </Badge>
+            <ProcessosBgBadge inqId={inqId} />
             <span className="text-xs text-zinc-500">ID: {inquerito.id.split("-")[0]}...</span>
           </div>
         </div>

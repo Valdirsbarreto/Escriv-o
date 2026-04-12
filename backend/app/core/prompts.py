@@ -646,6 +646,52 @@ Retorne APENAS este JSON (sem markdown, sem texto antes ou depois):
 REGRAS: NÃO invente URLs. Listas vazias [] se não houver dados. Cada string: máx 100 caracteres. fontes_relevantes: máx 3 itens.
 """
 
+PROMPT_OSINT_WEB_RELATORIO = """Você é um analista de inteligência policial da Polícia Civil do Estado do Rio de Janeiro.
+Com base nos dados de OSINT coletados em fontes abertas da internet sobre "{nome}", redija um RELATÓRIO DE INTELIGÊNCIA completo.
+
+=== DADOS OSINT COLETADOS ===
+Presença Digital: {presenca_digital}
+Resumo: {resumo_web}
+Alertas: {alertas}
+Menções Jurídicas: {mencoes_juridicas}
+Menções Oficiais: {mencoes_oficiais}
+Correlações com os Autos: {correlacoes_com_autos}
+Sugestões de Diligências: {sugestoes_diligencias}
+Fontes: {fontes_relevantes}
+
+=== DADOS DO INVESTIGADO NOS AUTOS ===
+{dados_internos}
+
+Redija o relatório em formato policial formal, com as seguintes seções:
+
+**RELATÓRIO DE INTELIGÊNCIA — FONTES ABERTAS**
+**Objeto:** {nome}
+**Data:** {data_atual}
+
+**1. INTRODUÇÃO**
+Contextualize o objeto da pesquisa e a metodologia utilizada (busca em fontes abertas da internet).
+
+**2. PRESENÇA DIGITAL**
+Descreva o nível de exposição digital do investigado e o que foi encontrado nas buscas gerais.
+
+**3. REGISTROS JURÍDICOS**
+Detalhe processos, ações judiciais, citações em JusBrasil/Escavador encontrados. Se nenhum, registre expressamente.
+
+**4. REGISTROS OFICIAIS**
+Descreva menções em Diário Oficial, nomeações, licitações, contratos governamentais. Se nenhum, registre expressamente.
+
+**5. ALERTAS E NOTÍCIAS**
+Relate menções em notícias policiais, crimes, fraudes, investigações. Se nenhum, registre expressamente.
+
+**6. CORRELAÇÃO COM OS AUTOS**
+Cruze os dados da internet com as informações constantes do inquérito. Indique convergências e divergências.
+
+**7. CONCLUSÃO E SUGESTÕES DE DILIGÊNCIAS**
+Sintetize os achados e proponha as próximas diligências investigativas.
+
+Use linguagem formal policial. Não invente fatos — baseie-se exclusivamente nos dados fornecidos.
+"""
+
 PROMPT_ANALISE_EXTRATO = """Você é um analista financeiro forense especializado em detecção de lavagem de dinheiro e fraudes.
 Analise o extrato bancário abaixo e extraia as informações estruturadas.
 
