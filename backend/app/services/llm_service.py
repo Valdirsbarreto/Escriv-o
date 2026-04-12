@@ -15,7 +15,6 @@ import uuid
 from decimal import Decimal
 from typing import List, Dict, Optional, Any
 
-import httpx
 from google import genai
 from google.genai import types as genai_types
 
@@ -40,15 +39,13 @@ class LLMService:
               'Classificacao', 'Orquestrador', 'AgenteCautelar'
     """
 
-    _GROQ_TIERS = {"triagem", "extracao", "resumo", "auditoria"}
-
     def __init__(self):
         if not settings.GEMINI_API_KEY:
             raise RuntimeError(
-                "GEMINI_API_KEY é obrigatório — tiers standard/premium usam Google Gemini"
+                "GEMINI_API_KEY é obrigatório — todos os tiers agora usam Google Gemini"
             )
         self._genai_client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        self.eco_model     = settings.LLM_ECONOMICO_MODEL    # gemini-1.5-flash-8b (legado)
+        self.eco_model     = settings.LLM_ECONOMICO_MODEL    # gemini-1.5-flash-8b
         self.std_model     = settings.LLM_STANDARD_MODEL     # gemini-1.5-flash
         self.premium_model = settings.LLM_PREMIUM_MODEL      # gemini-1.5-pro
 
@@ -75,26 +72,18 @@ class LLMService:
         Returns:
             {content, model, tokens_prompt, tokens_resposta, custo_estimado, tempo_ms}
         """
-        # ── Roteamento por tier ────────────────────────────────────────────────
-        if tier in self._GROQ_TIERS:
-            model_map = {
-                "triagem":   settings.LLM_TRIAGEM_MODEL,
-                "extracao":  settings.LLM_EXTRACAO_MODEL,
-                "resumo":    settings.LLM_RESUMO_MODEL,
-                "auditoria": settings.LLM_AUDITORIA_MODEL,
-            }
-            model = model_map[tier]
-            result = await self._groq_completion(messages, model, temperature, max_tokens, json_mode)
-        elif tier == "economico":
-            # Legado: redireciona para standard Gemini
-            model = self.std_model
-            result = await self._gemini_completion(messages, model, temperature, max_tokens, json_mode)
+        # ── Roteamento Integral Gemini ────────────────────────────────────────
+        if tier in {"triagem", "extracao", "resumo", "auditoria", "economico"}:
+            model = self.eco_model
+            # Para o tier econômico (8b), usamos a temperatura do config se não informada
+            if temperature == 0.3: # default do chat_completion
+                temperature = settings.LLM_ECONOMICO_TEMPERATURE
         elif tier == "standard":
             model = self.std_model
-            result = await self._gemini_completion(messages, model, temperature, max_tokens, json_mode)
-        else:  # "premium" ou qualquer outro
+        else:  # "premium"
             model = self.premium_model
-            result = await self._gemini_completion(messages, model, temperature, max_tokens, json_mode)
+
+        result = await self._gemini_completion(messages, model, temperature, max_tokens, json_mode)
 
         # Registrar consumo (await direto pois roda sob asyncio.run no Celery)
         await self._registrar_consumo(
@@ -177,71 +166,6 @@ class LLMService:
             logger.error(f"[LLM-Gemini] Erro ({model}): {e}")
             raise
 
-    async def _groq_completion(
-        self,
-        messages: List[Dict[str, str]],
-        model: str,
-        temperature: float,
-        max_tokens: int,
-        json_mode: bool,
-    ) -> Dict[str, Any]:
-        """Chamada para a API Groq (compatível com OpenAI)."""
-        if not settings.GROQ_API_KEY:
-            logger.warning("[LLM-Groq] GROQ_API_KEY não configurada — fallback para Gemini Flash")
-            return await self._gemini_completion(messages, self.std_model, temperature, max_tokens, json_mode)
-
-        t0 = time.time()
-        try:
-            payload: Dict[str, Any] = {
-                "model": model,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            }
-            if json_mode:
-                payload["response_format"] = {"type": "json_object"}
-
-            headers = {
-                "Authorization": f"Bearer {settings.GROQ_API_KEY.strip()}",
-                "Content-Type": "application/json",
-            }
-
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                resp = await client.post(
-                    f"{settings.GROQ_BASE_URL}/chat/completions",
-                    json=payload,
-                    headers=headers,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-
-            tempo_ms = int((time.time() - t0) * 1000)
-            content = data["choices"][0]["message"]["content"]
-            usage = data.get("usage", {})
-            tokens_prompt   = usage.get("prompt_tokens", 0)
-            tokens_resposta = usage.get("completion_tokens", 0)
-            custo = self._estimar_custo(model, tokens_prompt, tokens_resposta)
-
-            logger.info(
-                f"[LLM-Groq] {model} — {tokens_prompt}+{tokens_resposta} tokens, "
-                f"{tempo_ms}ms, ~${custo:.4f}"
-            )
-
-            return {
-                "content": content,
-                "model": model,
-                "tokens_prompt": tokens_prompt,
-                "tokens_resposta": tokens_resposta,
-                "custo_estimado": custo,
-                "tempo_ms": tempo_ms,
-            }
-
-        except httpx.HTTPStatusError as e:
-            logger.error(f"[LLM-Groq] HTTP {e.response.status_code} — fallback Gemini Flash")
-            return await self._gemini_completion(messages, self.std_model, temperature, max_tokens, json_mode)
-        except Exception as e:
-            logger.error(f"[LLM-Groq] Erro ({model}): {e} — fallback Gemini Flash")
-            return await self._gemini_completion(messages, self.std_model, temperature, max_tokens, json_mode)
 
     async def _registrar_consumo(
         self,
@@ -325,21 +249,17 @@ class LLMService:
             logger.warning(f"[LLM-Alerta] Falha ao enviar alerta Telegram: {e}")
 
     def _estimar_custo(self, model: str, tokens_in: int, tokens_out: int) -> float:
-        """Estimativa de custo (USD) baseada em preços por 1M tokens."""
+        """Estimativa de custo (USD) baseada em preços por 1M tokens (Target Gemini)."""
         precos = {
-            # Groq (Llama)
-            "llama-3.1-8b-instant":    {"in": 0.05,  "out": 0.08},   # triagem
-            "llama-3.3-70b-versatile": {"in": 0.59,  "out": 0.79},   # extracao/resumo/auditoria
-            "llama-3.1-70b":           {"in": 0.59,  "out": 0.79},   # alias
-            # Google Gemini
-            "gemini-1.5-flash-8b": {"in": 0.0375, "out": 0.15},  # legado econômico
-            "gemini-1.5-flash":    {"in": 0.075,  "out": 0.30},  # standard/vision
-            "gemini-1.5-pro":      {"in": 1.25,   "out": 5.00},  # premium
-            "gemini-2.0-flash":    {"in": 0.10,   "out": 0.40},  # fallback/transição
+            "gemini-1.5-flash-8b": {"in": 0.0375, "out": 0.15},
+            "gemini-1.5-flash":    {"in": 0.075,  "out": 0.30},
+            "gemini-1.5-pro":      {"in": 1.25,   "out": 5.00},
+            "gemini-2.0-flash":    {"in": 0.10,   "out": 0.40},
+            "text-embedding-004":  {"in": 0.00,   "out": 0.00},
         }
 
         model_lower = model.lower()
-        selected_price = {"in": 1.0, "out": 3.0}  # fallback genérico
+        selected_price = {"in": 1.0, "out": 3.0}
 
         for key, prices in precos.items():
             if key in model_lower:

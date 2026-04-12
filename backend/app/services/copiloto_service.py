@@ -355,7 +355,7 @@ class CopilotoService:
         try:
             llm_result = await self.llm_service.chat_completion(
                 messages=messages,
-                tier="standard",
+                tier="premium",
                 temperature=0.3,
                 max_tokens=3000,
                 agente="Copiloto",
@@ -386,7 +386,7 @@ class CopilotoService:
                         logger.info("[COPILOTO] Enviando resultado OSINT de volta para o LLM")
                         llm_result2 = await self.llm_service.chat_completion(
                             messages=messages,
-                            tier="standard",
+                            tier="premium",
                             temperature=0.4,
                             max_tokens=3000,
                             agente="Copiloto",
