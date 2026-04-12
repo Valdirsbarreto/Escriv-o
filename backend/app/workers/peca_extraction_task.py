@@ -160,8 +160,8 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
             # Chama Gemini via httpx (padrão do projeto)
             import httpx
 
-            # Limitar input a 30k chars — documentos grandes geram JSON imenso que trunca
-            texto_limite = doc.texto_extraido[:30000]
+            # Limitar input a 15k chars — reduz tempo de resposta e evita truncamento JSON
+            texto_limite = doc.texto_extraido[:15000]
             prompt = PROMPT_EXTRAIR_PECAS.replace("{texto}", texto_limite)
 
             api_key = settings.GEMINI_API_KEY
@@ -181,7 +181,7 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
                         "response_mime_type": "application/json",
                     },
                 },
-                timeout=180.0,
+                timeout=60.0,
             )
             response.raise_for_status()
 
