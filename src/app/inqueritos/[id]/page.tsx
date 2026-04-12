@@ -297,6 +297,7 @@ export default function InqueritoDetalhePage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
   const [gerandoSintese, setGerandoSintese] = useState(false);
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false);
   const [intimacoes, setIntimacoes] = useState<any[]>([]);
   const [showIntimacaoModal, setShowIntimacaoModal] = useState(false);
   const [docViewer, setDocViewer] = useState<{ open: boolean; doc: any; conteudo: any | null; loading: boolean }>({ open: false, doc: null, conteudo: null, loading: false });
@@ -555,6 +556,38 @@ export default function InqueritoDetalhePage() {
     }
   };
 
+  const handleGerarRelatorioInicial = async (forcar = false) => {
+    setGerandoRelatorio(true);
+    try {
+      await api.post(`/inqueritos/${inqId}/gerar-relatorio-inicial?forcar=${forcar}`);
+      // Polling até o relatório aparecer na lista de documentos gerados (máx ~5 min)
+      let tentativas = 0;
+      const relatorioInterval = setInterval(async () => {
+        tentativas++;
+        try {
+          const res = await api.get(`/inqueritos/${inqId}/documentos-gerados`);
+          if ((res.data || []).some((d: any) => d.tipo === "relatorio_inicial")) {
+            setGerandoRelatorio(false);
+            clearInterval(relatorioInterval);
+            // Recarregar lista de docs gerados
+            const resAll = await api.get(`/inqueritos/${inqId}/documentos-gerados`);
+            setDocsGerados(resAll.data || []);
+            return;
+          }
+        } catch {/* silencioso */}
+        if (tentativas >= 60) { // ~5 min
+          setGerandoRelatorio(false);
+          clearInterval(relatorioInterval);
+          alert("O Relatório Inicial está demorando mais que o esperado. Recarregue a página em alguns minutos.");
+        }
+      }, 5000);
+    } catch (e) {
+      console.error(e);
+      setGerandoRelatorio(false);
+      alert("Erro ao acionar geração do Relatório Inicial.");
+    }
+  };
+
   const handleAbrirDocGerado = async (doc: any) => {
     setDocGeradoViewer({ open: true, doc, conteudo: null, loading: true });
     try {
@@ -688,33 +721,81 @@ export default function InqueritoDetalhePage() {
     }
   };
 
+  // Ordem canônica de exibição das pastas de peças
+  const TIPO_PECA_ORDER = [
+    "portaria", "bo", "registro_aditamento", "relatorio_policial",
+    "informacao_investigacao", "termo_declaracao", "termo_depoimento",
+    "termo_interrogatorio", "auto_qualificacao", "auto_apreensao",
+    "laudo_pericial", "oficio_expedido", "oficio_recebido", "requisicao",
+    "mandado", "representacao", "quebra_sigilo", "extrato_financeiro",
+    "despacho", "peca_processual", "certidao", "notificacao",
+    "procuracao", "outro",
+    // legado (migração)
+    "laudo", "oficio",
+  ];
+
   const TIPO_PECA_LABEL: Record<string, string> = {
-    termo_declaracao: "Declaração",
-    auto_apreensao: "Auto de Apreensão",
+    termo_declaracao:      "Declaração",
+    termo_depoimento:      "Depoimento",
+    termo_interrogatorio:  "Interrogatório",
+    auto_apreensao:        "Auto de Apreensão",
+    auto_qualificacao:     "Auto de Qualificação",
+    oficio_expedido:       "Ofício Expedido",
+    oficio_recebido:       "Ofício Recebido",
+    bo:                    "Boletim de Ocorrência",
+    registro_aditamento:   "Registro de Aditamento",
+    portaria:              "Portaria",
+    despacho:              "Despacho / Decisão",
+    requisicao:            "Requisição",
+    mandado:               "Mandado",
+    informacao_investigacao: "Informação de Investigação",
+    relatorio_policial:    "Relatório Policial",
+    laudo_pericial:        "Laudo Pericial",
+    quebra_sigilo:         "Quebra de Sigilo",
+    extrato_financeiro:    "Extrato / Doc. Financeiro",
+    representacao:         "Representação",
+    certidao:              "Certidão",
+    notificacao:           "Notificação",
+    procuracao:            "Procuração / Substabelecimento",
+    peca_processual:       "Peça Processual (MP/Juiz)",
+    outro:                 "Outro",
+    // legado
+    laudo:  "Laudo",
     oficio: "Ofício",
-    laudo: "Laudo",
-    bo: "Boletim de Ocorrência",
-    despacho: "Despacho",
-    portaria: "Portaria",
-    requisicao: "Requisição",
-    mandado: "Mandado",
-    outro: "Outro",
   };
 
   const TIPO_PECA_COLOR: Record<string, string> = {
-    termo_declaracao: "bg-amber-500/10 text-amber-400 border-amber-500/20",
-    auto_apreensao: "bg-red-500/10 text-red-400 border-red-500/20",
+    termo_declaracao:      "bg-amber-500/10 text-amber-400 border-amber-500/20",
+    termo_depoimento:      "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+    termo_interrogatorio:  "bg-orange-500/10 text-orange-400 border-orange-500/20",
+    auto_apreensao:        "bg-red-500/10 text-red-400 border-red-500/20",
+    auto_qualificacao:     "bg-red-700/10 text-red-300 border-red-700/20",
+    oficio_expedido:       "bg-purple-500/10 text-purple-400 border-purple-500/20",
+    oficio_recebido:       "bg-violet-500/10 text-violet-400 border-violet-500/20",
+    bo:                    "bg-orange-500/10 text-orange-400 border-orange-500/20",
+    registro_aditamento:   "bg-orange-700/10 text-orange-300 border-orange-700/20",
+    portaria:              "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
+    despacho:              "bg-zinc-700/50 text-zinc-400 border-zinc-600",
+    requisicao:            "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    mandado:               "bg-rose-500/10 text-rose-400 border-rose-500/20",
+    informacao_investigacao: "bg-sky-500/10 text-sky-400 border-sky-500/20",
+    relatorio_policial:    "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+    laudo_pericial:        "bg-teal-500/10 text-teal-400 border-teal-500/20",
+    quebra_sigilo:         "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20",
+    extrato_financeiro:    "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    representacao:         "bg-pink-500/10 text-pink-400 border-pink-500/20",
+    certidao:              "bg-slate-500/10 text-slate-400 border-slate-500/20",
+    notificacao:           "bg-lime-500/10 text-lime-400 border-lime-500/20",
+    procuracao:            "bg-stone-500/10 text-stone-400 border-stone-500/20",
+    peca_processual:       "bg-indigo-700/10 text-indigo-300 border-indigo-700/20",
+    outro:                 "bg-zinc-800 text-zinc-400 border-zinc-700",
+    // legado
+    laudo:  "bg-teal-500/10 text-teal-400 border-teal-500/20",
     oficio: "bg-purple-500/10 text-purple-400 border-purple-500/20",
-    laudo: "bg-teal-500/10 text-teal-400 border-teal-500/20",
-    bo: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-    despacho: "bg-zinc-700/50 text-zinc-400 border-zinc-600",
-    portaria: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
-    requisicao: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-    mandado: "bg-rose-500/10 text-rose-400 border-rose-500/20",
-    outro: "bg-zinc-800 text-zinc-400 border-zinc-700",
   };
 
   const TIPO_GERADO_LABEL: Record<string, string> = {
+    relatorio_inicial: "Relatório Inicial de Investigação",
     roteiro_oitiva: "Roteiro de Oitiva",
     oficio: "Ofício",
     minuta_cautelar: "Minuta Cautelar",
@@ -723,6 +804,7 @@ export default function InqueritoDetalhePage() {
   };
 
   const TIPO_GERADO_COLOR: Record<string, string> = {
+    relatorio_inicial: "bg-amber-500/10 text-amber-400 border-amber-500/20",
     roteiro_oitiva: "bg-blue-500/10 text-blue-400 border-blue-500/20",
     oficio: "bg-purple-500/10 text-purple-400 border-purple-500/20",
     minuta_cautelar: "bg-orange-500/10 text-orange-400 border-orange-500/20",
@@ -903,6 +985,22 @@ export default function InqueritoDetalhePage() {
               </h2>
               <div className="flex items-center gap-3">
                 <span className="text-sm text-zinc-500">{docsGerados.length} documento(s)</span>
+                {/* Botão Relatório Inicial — aparece quando há docs indexados */}
+                {documentos.some(d => d.status_processamento === "concluido" && d.tipo_peca !== "sintese_investigativa") && (
+                  <button
+                    onClick={() => {
+                      const temRelatorio = docsGerados.some((d: any) => d.tipo === "relatorio_inicial");
+                      if (temRelatorio && !confirm("Já existe um Relatório Inicial. Deseja regenerar (apagará o atual)?")) return;
+                      handleGerarRelatorioInicial(temRelatorio);
+                    }}
+                    disabled={gerandoRelatorio}
+                    className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors disabled:opacity-50"
+                    title="Gera o Relatório Inicial de Investigação com verificação anti-alucinação"
+                  >
+                    <FileText size={12} className={gerandoRelatorio ? "animate-pulse" : ""}/>
+                    {gerandoRelatorio ? "Gerando relatório..." : docsGerados.some((d: any) => d.tipo === "relatorio_inicial") ? "Regenerar Rel. Inicial" : "Gerar Rel. Inicial"}
+                  </button>
+                )}
                 <button
                   onClick={fetchDocsGerados}
                   disabled={docsGeradosLoading}
@@ -1319,8 +1417,13 @@ export default function InqueritoDetalhePage() {
                     {/* Síntese sempre no topo */}
                     {sintese && renderDocCard(sintese)}
 
-                    {/* Grupos por tipo de peça */}
-                    {Object.entries(grupos).map(([tipo, docs]) => {
+                    {/* Grupos por tipo de peça — ordem canônica */}
+                    {[
+                      ...TIPO_PECA_ORDER.filter(t => grupos[t]),
+                      ...Object.keys(grupos).filter(t => !TIPO_PECA_ORDER.includes(t)),
+                    ].map(tipo => {
+                      const docs = grupos[tipo];
+                      if (!docs) return null;
                       const label = TIPO_LABEL[tipo] || tipo;
                       const aberto = gruposAbertos[tipo] !== false; // aberto por padrão
                       return (

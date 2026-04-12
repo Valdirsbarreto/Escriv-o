@@ -679,6 +679,53 @@ async def gerar_sintese(
     return {"status": "agendado", "mensagem": "Síntese Investigativa em geração. Aguarde alguns minutos."}
 
 
+@router.post("/{inquerito_id}/gerar-relatorio-inicial")
+async def gerar_relatorio_inicial(
+    inquerito_id: uuid.UUID,
+    forcar: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Dispara (ou re-dispara) o Relatório Inicial de Investigação para um inquérito.
+    Útil para inquéritos já indexados antes do deploy deste recurso.
+    Se forcar=true, apaga o relatório existente antes de regerar.
+    """
+    from app.models.documento_gerado import DocumentoGerado
+
+    inq = await db.get(Inquerito, inquerito_id)
+    if not inq:
+        raise HTTPException(status_code=404, detail="Inquérito não encontrado")
+
+    docs_result = await db.execute(
+        select(Documento)
+        .where(Documento.inquerito_id == inquerito_id)
+        .where(Documento.status_processamento == "concluido")
+        .where(Documento.tipo_peca != "sintese_investigativa")
+    )
+    if not docs_result.scalars().all():
+        raise HTTPException(status_code=422, detail="Nenhum documento indexado neste inquérito")
+
+    if forcar:
+        from sqlalchemy import delete as sa_delete
+        await db.execute(
+            sa_delete(DocumentoGerado).where(
+                DocumentoGerado.inquerito_id == inquerito_id,
+                DocumentoGerado.tipo == "relatorio_inicial",
+            )
+        )
+        await db.commit()
+
+    from app.workers.relatorio_inicial_task import gerar_relatorio_inicial_task
+    gerar_relatorio_inicial_task.delay(str(inquerito_id))
+
+    return {
+        "status": "agendado",
+        "inquerito_id": str(inquerito_id),
+        "forcar": forcar,
+        "mensagem": "Relatório Inicial em geração (com auditoria anti-alucinação). Aguarde alguns minutos.",
+    }
+
+
 @router.get("/{inquerito_id}/progresso")
 async def progresso_pipeline(
     inquerito_id: uuid.UUID,

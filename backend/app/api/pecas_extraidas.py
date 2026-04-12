@@ -20,6 +20,29 @@ router = APIRouter(tags=["Peças Extraídas"])
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+TIPOS_VALIDOS = {
+    "termo_declaracao", "termo_depoimento", "termo_interrogatorio", "auto_apreensao",
+    "auto_qualificacao", "oficio_expedido", "oficio_recebido", "bo", "registro_aditamento",
+    "portaria", "despacho", "requisicao", "mandado", "informacao_investigacao",
+    "relatorio_policial", "laudo_pericial", "quebra_sigilo", "extrato_financeiro",
+    "representacao", "certidao", "notificacao", "procuracao", "peca_processual", "outro",
+}
+
+
+class PecaUpdateRequest(BaseModel):
+    tipo: str
+
+    def validate_tipo(self) -> "PecaUpdateRequest":
+        if self.tipo not in TIPOS_VALIDOS:
+            raise ValueError(f"Tipo inválido: {self.tipo}")
+        return self
+
+
+class ReclassificarLoteRequest(BaseModel):
+    de: str
+    para: str
+
+
 class PecaListItem(BaseModel):
     id: str
     inquerito_id: str
@@ -104,6 +127,70 @@ async def obter_peca(
         conteudo_texto=peca.conteudo_texto,
         created_at=peca.created_at.isoformat() if peca.created_at else "",
     )
+
+
+@router.patch("/inqueritos/{inquerito_id}/pecas-extraidas/{peca_id}", response_model=PecaListItem)
+async def reclassificar_peca(
+    inquerito_id: str,
+    peca_id: str,
+    body: PecaUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Atualiza o tipo de uma peça individual sem re-extrair o texto."""
+    if body.tipo not in TIPOS_VALIDOS:
+        raise HTTPException(status_code=422, detail=f"Tipo inválido: '{body.tipo}'. Use um dos tipos definidos.")
+
+    result = await db.execute(
+        select(PecaExtraida, Documento.nome_arquivo)
+        .join(Documento, PecaExtraida.documento_id == Documento.id, isouter=True)
+        .where(
+            PecaExtraida.id == uuid.UUID(peca_id),
+            PecaExtraida.inquerito_id == uuid.UUID(inquerito_id),
+        )
+    )
+    row = result.one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Peça não encontrada.")
+
+    peca, nome_arquivo = row
+    peca.tipo = body.tipo
+    await db.commit()
+
+    return PecaListItem(
+        id=str(peca.id),
+        inquerito_id=str(peca.inquerito_id),
+        documento_id=str(peca.documento_id),
+        documento_nome=nome_arquivo,
+        titulo=peca.titulo,
+        tipo=peca.tipo,
+        pagina_inicial=peca.pagina_inicial,
+        pagina_final=peca.pagina_final,
+        resumo=peca.resumo,
+        created_at=peca.created_at.isoformat() if peca.created_at else "",
+    )
+
+
+@router.post("/inqueritos/{inquerito_id}/pecas-extraidas/reclassificar-lote", status_code=200)
+async def reclassificar_lote(
+    inquerito_id: str,
+    body: ReclassificarLoteRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Reclassifica todas as peças de um tipo para outro no inquérito (migração em lote)."""
+    if body.para not in TIPOS_VALIDOS:
+        raise HTTPException(status_code=422, detail=f"Tipo de destino inválido: '{body.para}'.")
+
+    from sqlalchemy import update as sa_update
+    result = await db.execute(
+        sa_update(PecaExtraida)
+        .where(
+            PecaExtraida.inquerito_id == uuid.UUID(inquerito_id),
+            PecaExtraida.tipo == body.de,
+        )
+        .values(tipo=body.para)
+    )
+    await db.commit()
+    return {"status": "ok", "atualizadas": result.rowcount, "de": body.de, "para": body.para}
 
 
 @router.post("/inqueritos/{inquerito_id}/documentos/{documento_id}/reextrair-pecas", status_code=202)

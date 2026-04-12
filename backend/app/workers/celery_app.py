@@ -18,6 +18,7 @@ celery_app = Celery(
         "app.workers.telegram_alertas",
         "app.workers.casos_gold_task",
         "app.workers.peca_extraction_task",
+        "app.workers.relatorio_inicial_task",
     ],
 )
 

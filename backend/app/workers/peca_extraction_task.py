@@ -22,42 +22,56 @@ logger = logging.getLogger(__name__)
 
 # Pedimos apenas METADADOS + uma frase-âncora para localizar o texto no doc original.
 # Isso evita o estouro de maxOutputTokens que ocorre quando o Gemini copia o texto completo.
-PROMPT_EXTRAIR_PECAS = """Você é um assistente jurídico especializado em inquéritos policiais brasileiros.
+PROMPT_EXTRAIR_PECAS = """Você é um assistente jurídico especializado em inquéritos policiais brasileiros da Polícia Civil do Rio de Janeiro.
 
-Analise o texto a seguir, que foi extraído de um arquivo PDF de autos de inquérito policial.
-Um único PDF pode conter muitas peças distintas: termos de declaração, ofícios, laudos, boletins de ocorrência, autos de apreensão, portarias, despachos, etc.
-
-SUA TAREFA:
-Identifique CADA peça individual dentro deste texto e retorne um JSON com a lista de peças.
+Analise o texto extraído de um PDF de autos de inquérito policial e identifique CADA peça individual.
 
 Para cada peça, forneça:
-- "titulo": nome descritivo e específico, incluindo nomes de pessoas quando relevante
-  (ex: "Termo de Declaração de João da Silva", "Ofício nº 123/2024 ao ICCE", "Laudo de Exame de Local de Crime")
-- "tipo": uma das categorias: termo_declaracao | auto_apreensao | oficio | laudo | bo | despacho | portaria | requisicao | mandado | outro
-- "trecho_inicio": copie ipsis litteris os primeiros 120 caracteres do texto desta peça (será usado para localizar o texto no documento)
-- "pagina_inicial": número de página aproximado onde esta peça começa (se identificável), ou null
-- "pagina_final": número de página aproximado onde esta peça termina (se identificável), ou null
-- "resumo": resumo em 1 frase curta (máx 120 caracteres)
+- "titulo": nome descritivo e específico com nomes de pessoas quando relevante
+  (ex: "Termo de Declaração de João da Silva", "Ofício nº 123/2024 ao ICCE", "Laudo Pericial Contábil")
+- "tipo": OBRIGATORIAMENTE um dos valores abaixo — sem variações, sem tradução:
+  termo_declaracao | termo_depoimento | termo_interrogatorio | auto_apreensao | auto_qualificacao |
+  oficio_expedido | oficio_recebido | bo | registro_aditamento | portaria | despacho |
+  requisicao | mandado | informacao_investigacao | relatorio_policial | laudo_pericial |
+  quebra_sigilo | extrato_financeiro | representacao | certidao | notificacao |
+  procuracao | peca_processual | outro
+- "trecho_inicio": primeiros 120 caracteres ipsis litteris (âncora para localização)
+- "pagina_inicial": número de página onde começa, ou null
+- "pagina_final": número de página onde termina, ou null
+- "resumo": 1 frase curta (máx 100 caracteres)
 
-REGRAS:
-- NÃO reproduza o texto completo das peças — apenas o "trecho_inicio" de 120 chars
-- Use nomes completos das pessoas nos títulos sempre que possível
-- Se o texto for muito curto ou homogêneo (apenas uma peça), retorne um único item
+REGRAS DE DESAMBIGUAÇÃO (críticas):
+1. bo vs registro_aditamento vs informacao_investigacao:
+   - "bo": Boletim de Ocorrência com número de registro, data/hora do fato, vítima e autor declarados
+   - "registro_aditamento": documento que complementa ou corrige um BO existente; título contém "aditamento"
+   - "informacao_investigacao": relatório interno de inteligência policial SEM número de crime; tipicamente intitulado "Informação nº..." ou "Info. Invest..."
+2. relatorio_policial vs informacao_investigacao:
+   - "relatorio_policial": documento conclusivo (relatório final, relatório de diligência, relatório circunstanciado)
+   - "informacao_investigacao": parecer analítico intermediário, não conclusivo
+3. termo_declaracao vs termo_depoimento vs termo_interrogatorio:
+   - "termo_declaracao": vítima ou testemunha voluntária (não intimada)
+   - "termo_depoimento": testemunha formalmente intimada
+   - "termo_interrogatorio": investigado, indiciado ou autuado
+4. oficio_expedido vs oficio_recebido:
+   - "oficio_expedido": enviado pela delegacia para outro órgão
+   - "oficio_recebido": recebido de outro órgão pela delegacia
+   - Se ambíguo, use "oficio_expedido"
+5. quebra_sigilo vs extrato_financeiro:
+   - "quebra_sigilo": decisão judicial ou representação que autoriza a quebra; também inclui dados telefônicos recebidos por ordem judicial
+   - "extrato_financeiro": extrato bancário ou financeiro recebido via requisição comum
+
+REGRAS GERAIS:
+- NÃO reproduza o texto completo — apenas o trecho_inicio de 120 chars
+- Use nomes completos nos títulos sempre que possível
+- Se o texto for homogêneo (uma só peça), retorne um único item
 - Não invente conteúdo; baseie-se exclusivamente no texto fornecido
-- Retorne APENAS o JSON, sem explicações adicionais
-- Máximo 30 peças por documento
+- Retorne APENAS o JSON, sem explicações
+- Máximo 25 peças por documento
 
-Formato da resposta:
+Formato:
 {
   "pecas": [
-    {
-      "titulo": "...",
-      "tipo": "...",
-      "trecho_inicio": "...",
-      "pagina_inicial": null,
-      "pagina_final": null,
-      "resumo": "..."
-    }
+    {"titulo": "...", "tipo": "...", "trecho_inicio": "...", "pagina_inicial": null, "pagina_final": null, "resumo": "..."}
   ]
 }
 

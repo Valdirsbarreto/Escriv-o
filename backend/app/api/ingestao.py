@@ -194,3 +194,87 @@ async def admin_reindexa_inquerito(inquerito_id: uuid.UUID):
         "documentos_disparados": len(disparados),
         "ids": disparados,
     }
+
+
+# ── Admin: Relatório Inicial em Lote ──────────────────────────────────────────
+
+@router.post("/admin/gerar-relatorio-inicial-lote", tags=["Admin"], status_code=200)
+async def admin_gerar_relatorio_inicial_lote(forcar: bool = False):
+    """
+    Varre TODOS os inquéritos com documentos indexados e dispara o Relatório Inicial
+    para aqueles que ainda não possuem um (ou todos, se forcar=true).
+
+    Uso: POST /ingestao/admin/gerar-relatorio-inicial-lote?forcar=false
+    Ideal para os inquéritos já ingeridos antes da implantação deste recurso.
+    """
+    from sqlalchemy import create_engine, select as sa_select, delete as sa_delete
+    from sqlalchemy.orm import Session
+    from app.core.config import settings as _s
+    from app.core.database import _encode_password_in_url
+    from app.models.inquerito import Inquerito
+    from app.models.documento import Documento
+    from app.models.documento_gerado import DocumentoGerado
+    from app.workers.relatorio_inicial_task import gerar_relatorio_inicial_task
+    import re as _re
+
+    raw_url = _s.DATABASE_URL
+    sync_url = _re.sub(r"^postgres(ql)?(\+asyncpg)?://", "postgresql://", raw_url)
+    engine = create_engine(_encode_password_in_url(sync_url), pool_size=1, max_overflow=0)
+
+    agendados = []
+    pulados = []
+    sem_docs = []
+
+    with Session(engine) as db:
+        # Todos os inquéritos
+        inqueritos = db.execute(sa_select(Inquerito)).scalars().all()
+
+        for inq in inqueritos:
+            inq_id = inq.id
+
+            # Verifica se tem documentos indexados
+            docs = db.execute(
+                sa_select(Documento)
+                .where(Documento.inquerito_id == inq_id)
+                .where(Documento.status_processamento == "concluido")
+                .where(Documento.tipo_peca != "sintese_investigativa")
+            ).scalars().all()
+
+            if not docs:
+                sem_docs.append(str(inq_id))
+                continue
+
+            # Verifica se já tem relatório inicial
+            existente = db.execute(
+                sa_select(DocumentoGerado)
+                .where(DocumentoGerado.inquerito_id == inq_id)
+                .where(DocumentoGerado.tipo == "relatorio_inicial")
+                .limit(1)
+            ).scalar_one_or_none()
+
+            if existente and not forcar:
+                pulados.append(str(inq_id))
+                continue
+
+            # Apaga o existente se forcar=true
+            if existente and forcar:
+                db.execute(
+                    sa_delete(DocumentoGerado).where(
+                        DocumentoGerado.inquerito_id == inq_id,
+                        DocumentoGerado.tipo == "relatorio_inicial",
+                    )
+                )
+                db.commit()
+
+            gerar_relatorio_inicial_task.delay(str(inq_id))
+            agendados.append({"inquerito_id": str(inq_id), "numero": inq.numero})
+
+    engine.dispose()
+
+    return {
+        "status": "concluido",
+        "agendados": len(agendados),
+        "pulados_ja_tem": len(pulados),
+        "sem_documentos": len(sem_docs),
+        "inquéritos_agendados": agendados,
+    }

@@ -644,7 +644,11 @@ export function PainelInvestigacao({ inqueritoId }: { inqueritoId: string }) {
       .finally(() => setCarregando(false));
   }, [inqueritoId]);
 
-  const personagens: PersonagemAnalise[] = analise?.personagens || [];
+  // OSINT só para suspeitos e coautores — vítimas, testemunhas e policiais são excluídos
+  const PAPEIS_OSINT = new Set(["suspeito_principal", "coautor", "investigado"]);
+  const personagens: PersonagemAnalise[] = (analise?.personagens || []).filter(
+    (p: PersonagemAnalise) => !p.tipo_pessoa || PAPEIS_OSINT.has(p.tipo_pessoa)
+  );
 
   const toggleModulo = (pessoaId: string, moduloId: string) => {
     setModulos(prev => {
@@ -689,11 +693,19 @@ export function PainelInvestigacao({ inqueritoId }: { inqueritoId: string }) {
     </div>
   );
 
+  const totalPersonagens = (analise?.personagens || []).length;
   if (!personagens.length) return (
     <div className="flex flex-col items-center justify-center h-48 text-zinc-500 text-center">
       <UserSearch className="w-12 h-12 mb-3 text-zinc-800" />
-      <p className="text-sm">Nenhum personagem indexado neste inquérito.</p>
-      <p className="text-xs mt-1 text-zinc-600">Inicie a ingestão de documentos para detectar pessoas automaticamente.</p>
+      {totalPersonagens > 0
+        ? <>
+            <p className="text-sm">Nenhum suspeito ou coautor identificado ainda.</p>
+            <p className="text-xs mt-1 text-zinc-600">{totalPersonagens} personagem(ns) nos autos (vítimas, testemunhas, policiais) — OSINT não aplicável.</p>
+          </>
+        : <>
+            <p className="text-sm">Nenhum personagem indexado neste inquérito.</p>
+            <p className="text-xs mt-1 text-zinc-600">Inicie a ingestão de documentos para detectar pessoas automaticamente.</p>
+          </>}
     </div>
   );
 
@@ -705,7 +717,7 @@ export function PainelInvestigacao({ inqueritoId }: { inqueritoId: string }) {
           {analise?.crime_complexo
             ? <Badge variant="outline" className="border-red-700/40 text-red-400 bg-red-500/5">Crime complexo</Badge>
             : <Badge variant="outline" className="border-zinc-700 text-zinc-500">Crime simples</Badge>}
-          <span className="text-zinc-600">{personagens.length} personagem(ns)</span>
+          <span className="text-zinc-600">{personagens.length} suspeito(s)/coautor(es)</span>
         </div>
         <div className="flex items-center gap-3">
           {custoTotal > 0 && (

@@ -512,13 +512,13 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
                         db.add(transicao)
                         logger.info("[INGESTÃO] Inquérito transitou para TRIAGEM")
 
-                    # Disparar análise analítica automática quando todos os docs estão prontos
+                    # Disparar Relatório Inicial (que por sua vez dispara a síntese)
                     try:
-                        from app.workers.summary_task import generate_analise_task
-                        generate_analise_task.delay(inquerito_id)
-                        logger.info(f"[INGESTÃO] Análise analítica agendada — inquerito={inquerito_id}")
+                        from app.workers.relatorio_inicial_task import gerar_relatorio_inicial_task
+                        gerar_relatorio_inicial_task.delay(inquerito_id)
+                        logger.info(f"[INGESTÃO] Relatório Inicial agendado — inquerito={inquerito_id}")
                     except Exception as e:
-                        logger.warning(f"[INGESTÃO] Falha ao agendar análise analítica: {e}")
+                        logger.warning(f"[INGESTÃO] Falha ao agendar Relatório Inicial: {e}")
 
                 db.commit()
 

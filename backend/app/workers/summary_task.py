@@ -166,6 +166,7 @@ def generate_analise_task(self, inquerito_id: str):
         from app.models.pessoa import Pessoa
         from app.models.empresa import Empresa
         from app.models.evento_cronologico import EventoCronologico
+        from app.models.documento_gerado import DocumentoGerado
         from app.services.summary_service import SummaryService
         from app.services.llm_service import LLMService
         from app.core.prompts import PROMPT_SINTESE_INVESTIGATIVA
@@ -313,6 +314,22 @@ def generate_analise_task(self, inquerito_id: str):
             ]
             cronologia_str = "\n".join(cronologia_linhas) if cronologia_linhas else "Nenhum evento cronológico identificado."
 
+            # ── 3b. Relatório Inicial (contexto estruturado prévio) ────────────
+            relatorio_inicial_texto = ""
+            try:
+                rel_result = await db.execute(
+                    select(DocumentoGerado)
+                    .where(DocumentoGerado.inquerito_id == inq_uuid)
+                    .where(DocumentoGerado.tipo == "relatorio_inicial")
+                    .limit(1)
+                )
+                rel_doc = rel_result.scalar_one_or_none()
+                if rel_doc and rel_doc.conteudo:
+                    relatorio_inicial_texto = rel_doc.conteudo[:6000]
+                    logger.info("[SINTESE-TASK] Relatório Inicial injetado como contexto")
+            except Exception as _e:
+                logger.warning(f"[SINTESE-TASK] Falha ao buscar Relatório Inicial (não crítico): {_e}")
+
             # ── 4. Montar prompt e chamar LLM premium ──────────────────────────
             numero = inq.numero or inquerito_id
             # Few-shot: buscar casos históricos similares (Banco de Casos Gold)
@@ -339,6 +356,7 @@ def generate_analise_task(self, inquerito_id: str):
 
             prompt = PROMPT_SINTESE_INVESTIGATIVA.format(
                 numero_inquerito=numero,
+                relatorio_inicial=relatorio_inicial_texto or "Relatório Inicial ainda não gerado — use os resumos dos documentos abaixo.",
                 casos_historicos=casos_historicos_str or "Nenhum caso histórico similar disponível.",
                 resumos_documentos=resumos_str,
                 personagens=personagens_str,
