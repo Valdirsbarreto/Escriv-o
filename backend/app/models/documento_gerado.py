@@ -1,7 +1,8 @@
 """Escrivão AI — Modelo: Documento Gerado pela IA"""
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Text, DateTime, ForeignKey, func
+from typing import Optional
+from sqlalchemy import String, Text, DateTime, ForeignKey, func, Float, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
