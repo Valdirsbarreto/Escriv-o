@@ -37,7 +37,7 @@ Para cada peça, forneça:
 - "trecho_inicio": copie ipsis litteris os primeiros 120 caracteres do texto desta peça (será usado para localizar o texto no documento)
 - "pagina_inicial": número de página aproximado onde esta peça começa (se identificável), ou null
 - "pagina_final": número de página aproximado onde esta peça termina (se identificável), ou null
-- "resumo": resumo de 2-3 linhas descrevendo o conteúdo e relevância desta peça
+- "resumo": resumo em 1 frase curta (máx 120 caracteres)
 
 REGRAS:
 - NÃO reproduza o texto completo das peças — apenas o "trecho_inicio" de 120 chars
@@ -45,6 +45,7 @@ REGRAS:
 - Se o texto for muito curto ou homogêneo (apenas uma peça), retorne um único item
 - Não invente conteúdo; baseie-se exclusivamente no texto fornecido
 - Retorne APENAS o JSON, sem explicações adicionais
+- Máximo 30 peças por documento
 
 Formato da resposta:
 {
@@ -159,7 +160,8 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
             # Chama Gemini via httpx (padrão do projeto)
             import httpx
 
-            texto_limite = doc.texto_extraido[:80000]  # até 80k chars de entrada
+            # Limitar input a 30k chars — documentos grandes geram JSON imenso que trunca
+            texto_limite = doc.texto_extraido[:30000]
             prompt = PROMPT_EXTRAIR_PECAS.replace("{texto}", texto_limite)
 
             api_key = settings.GEMINI_API_KEY
@@ -175,11 +177,11 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
                     "contents": [{"parts": [{"text": prompt}]}],
                     "generationConfig": {
                         "temperature": 0.1,
-                        "maxOutputTokens": 4096,
+                        "maxOutputTokens": 8192,
                         "response_mime_type": "application/json",
                     },
                 },
-                timeout=120.0,
+                timeout=180.0,
             )
             response.raise_for_status()
 
