@@ -144,7 +144,7 @@ class CopilotoService:
                 from app.models.documento import Documento
 
                 docs_result = await db.execute(
-                    sa_select(Documento.nome_arquivo, Documento.tipo_peca, Documento.num_paginas)
+                    sa_select(Documento.nome_arquivo, Documento.tipo_peca, Documento.total_paginas)
                     .where(Documento.inquerito_id == uuid.UUID(inquerito_id))
                     .where(Documento.status_processamento == "concluido")
                     .order_by(Documento.tipo_peca, Documento.nome_arquivo)
@@ -153,9 +153,9 @@ class CopilotoService:
 
                 if docs_autos:
                     bloco_idx = ["### Índice das Peças dos Autos (documentos indexados)\n"]
-                    for nome, tipo, pgs in docs_autos:
+                    for nome, tipo, total_pgs in docs_autos:
                         tipo_label = tipo or "outro"
-                        pgs_label = f" ({pgs} pgs)" if pgs else ""
+                        pgs_label = f" ({total_pgs} pgs)" if total_pgs else ""
                         bloco_idx.append(f"- [{tipo_label.upper()}] {nome}{pgs_label}")
                     bloco_idx.append("\n---")
                     contexto_partes.append("\n".join(bloco_idx))
