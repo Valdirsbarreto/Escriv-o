@@ -263,7 +263,10 @@ class TelegramCopilotoService:
     def _get_fc_client(self):
         if self._fc_client is None:
             from google import genai as _genai
-            self._fc_client = _genai.Client(api_key=settings.GEMINI_API_KEY)
+            self._fc_client = _genai.Client(
+                api_key=settings.GEMINI_API_KEY,
+                http_options={"api_version": "v1"},
+            )
         return self._fc_client
 
     # ── Redis ─────────────────────────────────────────────────────────────────

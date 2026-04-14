@@ -44,7 +44,10 @@ class LLMService:
             raise RuntimeError(
                 "GEMINI_API_KEY é obrigatório — todos os tiers agora usam Google Gemini"
             )
-        self._genai_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        self._genai_client = genai.Client(
+            api_key=settings.GEMINI_API_KEY,
+            http_options={"api_version": "v1"},
+        )
         self.eco_model     = settings.LLM_ECONOMICO_MODEL    # gemini-1.5-flash-8b
         self.std_model     = settings.LLM_STANDARD_MODEL     # gemini-1.5-flash
         self.premium_model = settings.LLM_PREMIUM_MODEL      # gemini-1.5-pro
