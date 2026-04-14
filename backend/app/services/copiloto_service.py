@@ -357,7 +357,7 @@ class CopilotoService:
                 messages=messages,
                 tier="premium",
                 temperature=0.3,
-                max_tokens=3000,
+                max_tokens=4000,
                 agente="Copiloto",
             )
             resposta = llm_result["content"]
