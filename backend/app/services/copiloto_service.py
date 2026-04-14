@@ -135,6 +135,34 @@ class CopilotoService:
             except Exception as e:
                 logger.warning(f"[COPILOTO] Falha ao buscar resumo do caso: {e}")
 
+        # Injetar índice das peças dos autos (tabela de conteúdo do inquérito)
+        # Permite ao LLM saber o que existe nos autos sem busca vetorial,
+        # especialmente útil quando o Comissário menciona peças pelo tipo ou andamento processual.
+        if db is not None:
+            try:
+                from sqlalchemy import select as sa_select  # noqa: F811
+                from app.models.documento import Documento
+
+                docs_result = await db.execute(
+                    sa_select(Documento.nome_arquivo, Documento.tipo_peca, Documento.num_paginas)
+                    .where(Documento.inquerito_id == uuid.UUID(inquerito_id))
+                    .where(Documento.status_processamento == "concluido")
+                    .order_by(Documento.tipo_peca, Documento.nome_arquivo)
+                )
+                docs_autos = docs_result.all()
+
+                if docs_autos:
+                    bloco_idx = ["### Índice das Peças dos Autos (documentos indexados)\n"]
+                    for nome, tipo, pgs in docs_autos:
+                        tipo_label = tipo or "outro"
+                        pgs_label = f" ({pgs} pgs)" if pgs else ""
+                        bloco_idx.append(f"- [{tipo_label.upper()}] {nome}{pgs_label}")
+                    bloco_idx.append("\n---")
+                    contexto_partes.append("\n".join(bloco_idx))
+                    logger.info(f"[COPILOTO] Índice de peças injetado: {len(docs_autos)} documentos")
+            except Exception as e:
+                logger.warning(f"[COPILOTO] Falha ao buscar índice de peças: {e}")
+
         # Injetar índice estruturado de pessoas e empresas (consulta direta ao banco)
         if db is not None:
             try:
