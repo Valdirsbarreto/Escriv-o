@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "gemini-embedding-001"
 DEFAULT_VECTOR_SIZE = 768
-_EMBED_URL = "https://generativelanguage.googleapis.com/v1/models/{model}:embedContent"
-_BATCH_URL = "https://generativelanguage.googleapis.com/v1/models/{model}:batchEmbedContents"
+_EMBED_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:embedContent"
+_BATCH_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:batchEmbedContents"
 
 
 class EmbeddingService:
