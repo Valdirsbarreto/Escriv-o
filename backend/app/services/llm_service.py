@@ -251,11 +251,14 @@ class LLMService:
     def _estimar_custo(self, model: str, tokens_in: int, tokens_out: int) -> float:
         """Estimativa de custo (USD) baseada em preços por 1M tokens (Target Gemini)."""
         precos = {
-            "gemini-1.5-flash-8b": {"in": 0.0375, "out": 0.15},
-            "gemini-1.5-flash":    {"in": 0.075,  "out": 0.30},
-            "gemini-1.5-pro":      {"in": 1.25,   "out": 5.00},
-            "gemini-2.0-flash":    {"in": 0.10,   "out": 0.40},
-            "text-embedding-004":  {"in": 0.00,   "out": 0.00},
+            "gemini-1.5-flash-8b":   {"in": 0.0375, "out": 0.15},
+            "gemini-1.5-flash":      {"in": 0.075,  "out": 0.30},
+            "gemini-1.5-pro":        {"in": 1.25,   "out": 5.00},
+            "gemini-2.0-flash-lite": {"in": 0.075,  "out": 0.30},
+            "gemini-2.0-flash":      {"in": 0.10,   "out": 0.40},
+            "gemini-2.5-pro":        {"in": 1.25,   "out": 10.00},
+            "text-embedding-004":    {"in": 0.00,   "out": 0.00},
+            "gemini-embedding":      {"in": 0.00,   "out": 0.00},
         }
 
         model_lower = model.lower()
