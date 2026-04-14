@@ -7,14 +7,13 @@ Backend FastAPI + Celery + Redis + Qdrant + PostgreSQL. Frontend Next.js no Verc
 ---
 
 ## Ao iniciar uma sessão — leia primeiro
-Verifique os arquivos abaixo antes de fazer qualquer sugestão:
-- `Documentos/plano_migracao_gemini_full.md` — status das tarefas concluídas e pendentes
 - `backend/app/core/prompts.py` — todos os system prompts (editá-los aqui, não inline)
 - `backend/app/services/llm_service.py` — roteamento de tiers LLM
+- Memória `project_sessao_13_04_2026.md` — **estado ao encerrar 13/04, pendências e próximas ações**
 
 ---
 
-## Stack atual (atualizado 2026-04-12)
+## Stack atual (atualizado 2026-04-13)
 | Camada | Tecnologia |
 |--------|-----------|
 | Frontend | Next.js, Tailwind, @base-ui/react |
@@ -36,34 +35,28 @@ Verifique os arquivos abaixo antes de fazer qualquer sugestão:
 2. Extração de texto nativo (pypdf) + OCR seletivo nas páginas sem texto
 3. Chunking (600 words, overlap 100)
 4. **Embeddings:** `text-embedding-004` → PostgreSQL + Qdrant
-5. **Agente Classificador** (`tier=triagem` → `gemini-1.5-flash-8b`):
-   - Classifica tipo de peça: `boletim_ocorrencia`, `laudo_pericial`, `quebra_sigilo`, etc.
-6. **Agente NER** (`tier=extracao` → `gemini-1.5-flash-8b`):
-   - Extrai pessoas, empresas, endereços, telefones, emails, cronologia
-   - Upsert no banco (deduplicação por CPF > nome normalizado)
+5. **Agente Classificador** (`tier=triagem` → `gemini-1.5-flash-8b`): classifica tipo de peça
+6. **Agente NER** (`tier=extracao` → `gemini-1.5-flash-8b`): extrai pessoas, empresas, cronologia
 7. Dispara `generate_summaries_task` e `extrair_pecas_task`
 
 ### Etapa 2 — Resumos Hierárquicos (`generate_summaries_task`)
-- **Agente Resumo Página** (`tier=resumo` → `gemini-1.5-flash-8b`): resumo de cada página
-- **Agente Resumo Documento** (`tier=resumo`): consolida páginas → resumo por documento
-- **Agente Resumo Volume** (`tier=resumo`): consolida documentos → resumo por volume
+- Página → Documento → Volume (`tier=resumo` → `gemini-1.5-flash-8b`)
 
 ### Etapa 3 — Relatório Inicial (`gerar_relatorio_inicial_task`)
 Disparado quando **todos** os documentos do inquérito estão com `status=concluido`.
 
 - **Agente RelatorioInicial** (`tier=premium` → `gemini-1.5-pro`):
-  - Contexto: até **400.000 chars** de resumos de TODOS os documentos do inquérito
-  - max_tokens: 6.000 tokens de saída
-  - Gera 8 seções estruturadas (fato, suspeitos, coautores, vítimas, testemunhas, servidores, timeline, lacunas)
+  - Contexto: até **2.800.000 chars** (~700k tokens) de `texto_extraido` direto, ordenados por prioridade pericial
+  - max_tokens: 8.000 | temperature: 0.1
+  - Gera **9 seções** com metodologia 5W criminal (v3)
+  - **Seção 1 preenche `Inquerito.descricao`** — único lugar onde o campo "Fato" é preenchido
 - **Agente AuditorRelatorio** (`tier=standard` → `gemini-1.5-flash`):
-  - Contexto: até 300.000 chars das fontes primárias
-  - Verifica alucinações e adiciona marcadores `[⚠ NÃO CONFIRMADO]`
-  - O resultado **só substitui** o rascunho se contiver seções `## 1.`, `## 4.`, `## 7.`
-  - O bloco `## AUDITORIA FACTUAL` é removido do conteúdo salvo (vai apenas para o log)
+  - Verifica alucinações; substitui rascunho só se output contém `## 1.`, `## 4.`, `## 7.`
 
 ### Etapa 4 — Síntese Investigativa (`generate_analise_task`)
-Disparada automaticamente após o Relatório Inicial ser salvo.
+Disparada automaticamente após Relatório Inicial salvo.
 - **Agente Síntese** (`tier=premium` → `gemini-1.5-pro`): 10 seções com Chain-of-Thought
+- **ATENÇÃO:** se o Relatório Inicial for regenerado com `forcar=true`, a Síntese também deve ser regenerada via `POST /inqueritos/{id}/gerar-sintese` — ela não é atualizada automaticamente neste caso
 
 ---
 
@@ -72,65 +65,119 @@ Disparada automaticamente após o Relatório Inicial ser salvo.
 |------|--------|----------|
 | `triagem` | `gemini-1.5-flash-8b` | Classificação de tipo de peça |
 | `extracao` | `gemini-1.5-flash-8b` | NER — pessoas/empresas/endereços |
-| `resumo` | `gemini-1.5-flash-8b` | Resumos hierárquicos (página/doc/volume) |
+| `resumo` | `gemini-1.5-flash-8b` | Resumos hierárquicos |
 | `economico` | `gemini-1.5-flash-8b` | Genérico barato |
 | `auditoria` | `gemini-1.5-flash-8b` | Auditoria factual do Copiloto |
-| `standard` | `gemini-1.5-flash` | Orquestrador, auditoria de relatório, extrato bancário |
+| `standard` | `gemini-1.5-flash` | Orquestrador, auditoria de relatório |
 | `premium` | `gemini-1.5-pro` | Copiloto RAG, fichas, cautelares, relatório inicial, síntese |
 
 ---
 
-## Correções aplicadas em 2026-04-12
+## Prompt do Relatório Inicial — v3 (atual)
+**Localização:** `backend/app/core/prompts.py` → `PROMPT_RELATORIO_INICIAL` (linha ~844)
 
-| Bug | Causa raiz | Correção |
-|-----|-----------|---------|
-| `NameError: Optional not defined` | Faltava `from typing import Optional` | Adicionado em `documento_gerado.py` |
-| `TypeError: modelo_llm invalid keyword` | Colunas `modelo_llm`, `tokens_*`, `custo_estimado` não existiam na tabela | Adicionadas ao modelo + migração Alembic `e8bab0d91b2a` |
-| Worker não subia no Railway | `DocumentoGerado` falhava no import | Resolvido pelo fix acima |
-| Migração não rodava no worker | `start.sh` não chamava `alembic upgrade head` no modo `worker` | Corrigido no `start.sh` |
-| Relatório corrompido com texto de auditoria | Auditor retornava raciocínio interno; código substituía sem validar | Agora valida se output contém seções antes de substituir |
-| Relatório baseado em só 1 PDF | Contexto limitado a 12.000 chars truncava os demais docs | Expandido para 400.000 chars (relatório) e 300.000 chars (auditoria) |
-| Endpoint `/documentos-gerados` retornava 404 | Alias não registrado na API | Adicionado alias em `documentos_gerados.py` |
+Role: **Analista de Inteligência Criminal Multidomínio**.
+
+### Metodologia 5W
+| W | Pergunta | Função |
+|---|---------|--------|
+| O QUÊ | Qual o crime? | Tipificação jurídica + concurso + qualificadoras |
+| QUANDO | Marco Zero ★ | Nexo temporal, álibi, prescrição |
+| ONDE | Local do crime | Competência territorial + contexto pericial |
+| QUEM | Autores / vítimas / testemunhas | Derivado das PROVAS, não da lista de envolvidos |
+| POR QUÊ | Motivação / dolo | Agrava pena, orienta tipificação |
+
+**Ordem analítica:** Materialidade → Autoria → Cronologia → Conclusão.
+
+### 9 Seções
+| Seção | Título | Auto-parse |
+|-------|--------|-----------|
+| ## 1. | OBJETO E TIPIFICAÇÃO | preenche `Inquerito.descricao` |
+| ## 2. | SUSPEITOS PRINCIPAIS | `mapa_papel[2] = suspeito_principal` |
+| ## 3. | COAUTORES / PARTÍCIPES | `mapa_papel[3] = coautor` |
+| ## 4. | VÍTIMAS | `mapa_papel[4] = vitima` |
+| ## 5. | TESTEMUNHAS RELEVANTES | `mapa_papel[5] = testemunha` |
+| ## 6. | ANÁLISE DE MATERIALIDADE | — |
+| ## 7. | ANÁLISE DE AUTORIA E VÍNCULOS | — |
+| ## 8. | CRONOLOGIA DOS FATOS | — |
+| ## 9. | CONCLUSÃO TÉCNICA E LACUNAS | — |
+
+**Seção Servidores: REMOVIDA** — inquérito é impessoal, servidores não são objeto de análise.
+
+### Arquitetura de contexto
+- Fonte: `texto_extraido` direto. Fallback ao resumo só se `len < 200 chars`
+- Limite: `LIMITE_CHARS = 2_800_000`
+- Prioridade: `quebra_sigilo/extrato(0)` → `laudo/interrogatorio(1)` → `depoimento/declaracao(2)` → `relatorio/informacao/aditamento(3)` → `bo/auto(4)` → `oficio(5)`
 
 ---
 
-## Prompt do Relatório Inicial — Diretriz Mestra (v2)
-**Localização:** `backend/app/core/prompts.py` → `PROMPT_RELATORIO_INICIAL`
+## Copiloto — Arquitetura de contexto (atualizado 2026-04-13)
 
-O prompt deve seguir o modelo de **Analista de Inteligência Criminal Multidomínio**:
+O Copiloto monta seu contexto na seguinte ordem:
 
-**Passo 1:** Identificar tipo penal e Marco Zero (data/hora/local do fato principal).
+1. **DocumentoGerado** (relatorio_inicial completo; outros truncados em 3000 chars)
+   - `TIPOS_COMPLETOS = {"relatorio_inicial", "relatorio_complementar"}` — sem truncar
+   - `sintese_investigativa` **NÃO está em TIPOS_COMPLETOS** — pode estar obsoleta
+2. **Índice de peças dos autos** (`tipo_peca + nome_arquivo` de todos os Documentos indexados)
+3. **Resumo executivo do caso** (`SummaryService.obter_resumo_caso`)
+4. **Índice de pessoas e empresas** (com `tipo_pessoa`)
+5. **Contatos e cronologia**
+6. **Chunks RAG** (Qdrant + busca híbrida texto)
 
-**Passo 2:** Extrair entidades por categoria de prova:
-- Provas testemunhais: oitivas, depoimentos, interrogatórios  `[NOME] | [STATUS] | [PONTO CHAVE]`
-- Provas técnicas/periciais: laudos ICCE/IML, autos de apreensão, quebras de sigilo
-- Provas digitais/telemáticas: terminais, IMEIs, IPs, contas bancárias
+**Comportamento esperado:**
+- Referências processuais do usuário ("foi relatado", "MP pediu X") → trata como verdade e busca corroboração nos autos
+- Pedido de documento formal → gera completo com conteúdo real (não síntese de 5 linhas)
+- `max_tokens = 4000`
 
-**Passo 3:** Estrutura obrigatória do relatório:
-1. **OBJETO E TIPIFICAÇÃO** — Nº inquérito, artigo CP/CPP, resumo do fato
-2. **ANÁLISE DE MATERIALIDADE** — O crime existiu? Listar documentos que provam a existência
-3. **ANÁLISE DE AUTORIA E VÍNCULOS** — Vínculos diretos e indiretos; contradições entre oitivas
-4. **CRONOLOGIA DOS FATOS** — Timeline desde preparação até última diligência
-5. **CONCLUSÃO TÉCNICA E LACUNAS** — Força probatória atual + o que ainda falta provar
+**NÃO auto-salva respostas** — o usuário salva explicitamente pelo botão "Salvar" no canvas.
 
-**Rastreabilidade:** Cada afirmação deve citar a fonte (`conforme fls. 45`, `Termo de Oitiva de [Nome]`).
+---
 
-**Volume de contexto necessário:** Para inquéritos complexos (10+ volumes, interceptações, quebras de sigilo), o Gemini 1.5 Pro precisa de 500k-700k tokens. O limite atual de 400k chars (~100k tokens) pode ser insuficiente para o IP 911-00209/2019. Considerar alimentar o relatório com `texto_extraido` direto dos documentos além dos resumos.
+## Correções aplicadas em 2026-04-13
+
+| Bug | Causa raiz | Correção |
+|-----|-----------|---------|
+| Copiloto retornava síntese genérica "Não especificados" | `sintese_investigativa` antiga (contexto pré-v3) injetada completa; LLM a reproduzia | Removida de TIPOS_COMPLETOS; `relatorio_inicial` injetado completo |
+| Copiloto auto-salvava documentos ruins silenciosamente | `CopilotoDrawer.tsx` chamava `createDocGerado` em background quando `pediriaDocumento()` era verdadeiro | Auto-save removido — só salva via clique explícito |
+| Campo "Fato" preenchido com descrição NER precoce | `orchestrator.py` setava `descricao=fato_resumo` na criação do inquérito | `descricao=""` na criação; preenchido somente pela Seção 1 do Relatório Inicial |
+
+---
+
+## Pendências abertas
+
+1. **Síntese do IP 911-00209/2019** — regenerar após limpeza das sínteses ruins:
+   ```
+   POST /inqueritos/c38991d7-e669-435e-b54e-64df6ed6c429/gerar-sintese
+   ```
+
+2. **Lote de relatórios iniciais** nos demais inquéritos:
+   ```
+   POST /ingestao/admin/gerar-relatorio-inicial-lote?forcar=false
+   ```
+
+3. **Alembic migration `j0k1l2m3n4o5`** no Railway — remap tipos de peças:
+   `laudo → laudo_pericial` | `oficio → oficio_expedido` | `termo_oitiva → termo_depoimento`
+
+4. **OSINT Web (Serper.dev)** — plano completo em `reflective-meandering-sky.md`:
+   - `serper_service.py`, endpoint `/agentes/osint/web/`, `OsintWebPanel` — NÃO criados
+   - `SERPER_API_KEY` já está no `.env.local` e hardcoded em `config.py`
 
 ---
 
 ## Restrições críticas (não violar)
 - **UI:** usa `@base-ui/react`, NÃO `@radix-ui`. Nunca importar ShadCN sem verificar existência.
 - **Railway:** imports pesados (gRPC, Qdrant, torch) devem ser lazy dentro dos routers FastAPI.
-- **Railway deploy:** NUNCA commitar durante ingestão ativa — rolling deploy mata tasks Celery em andamento.
+- **Railway deploy:** NUNCA commitar durante ingestão ativa — rolling deploy mata tasks Celery.
 - **Celery workers:** engines async precisam de `postgresql+asyncpg://` (não `postgresql://`).
 - **Gemini SDK:** não usar `aio.models.embed_content` — tem bug 404. Usar `asyncio.to_thread` para embeddings.
 - **Next.js:** pdfjs-dist só via `dynamic` import em `useEffect`.
 - **Git:** sempre `git push` após `git commit`. Nunca deixar commits locais.
-- **SERPER_API_KEY:** Railway não injeta esta variável — está hardcoded como default em `config.py`. Não remover.
-- **LLM JSON output:** sempre usar `max_tokens` ≥ 2500 para JSON com múltiplos campos.
+- **SERPER_API_KEY:** hardcoded como default em `config.py` — não remover.
+- **LLM JSON output:** sempre `max_tokens` ≥ 2500 para JSON com múltiplos campos.
 - **Alembic:** no Railway, usar `python -m alembic upgrade head` (não `alembic` direto).
-- **`max_retries` nas tasks Celery:** `gerar_relatorio_inicial_task` tem `max_retries=2` — se esgotar antes do fix chegar, deve ser disparada novamente via frontend.
+- **Inquérito é impessoal:** servidores policiais não são objeto de análise — nunca incluir como suspeitos ou alvos OSINT.
+- **Campo "Fato":** preenchido SOMENTE pela Seção 1 do Relatório Inicial. Não setar em outros lugares.
+- **Síntese Investigativa:** derivada do Relatório Inicial — fica obsoleta se o relatório for regenerado. Sempre regenerar a síntese depois de `forcar=true` no relatório.
 
 ---
 
@@ -139,12 +186,13 @@ O prompt deve seguir o modelo de **Analista de Inteligência Criminal Multidomí
 |---------|--------|
 | `backend/app/core/prompts.py` | Todos os prompts do sistema |
 | `backend/app/services/llm_service.py` | Roteamento de tiers LLM |
+| `backend/app/services/copiloto_service.py` | RAG conversacional — contexto, injeção de docs, tool calling |
 | `backend/app/workers/ingestion.py` | Pipeline de ingestão |
-| `backend/app/workers/relatorio_inicial_task.py` | Geração do Relatório Inicial |
+| `backend/app/workers/relatorio_inicial_task.py` | Geração do Relatório Inicial (contexto 2.8M chars) |
 | `backend/app/workers/summary_task.py` | Resumos hierárquicos + Síntese |
-| `backend/app/models/documento_gerado.py` | Modelo DocumentoGerado (com metadados IA) |
-| `backend/alembic/versions/e8bab0d91b2a_*.py` | Migração para colunas de metadados IA |
-| `backend/start.sh` | Script de inicialização (roda alembic antes do worker) |
-| `backend/app/api/documentos_gerados.py` | Endpoints `/docs-gerados` e `/documentos-gerados` (alias) |
+| `backend/app/workers/orchestrator.py` | Criação automática de inquérito na ingestão |
+| `backend/app/models/documento_gerado.py` | Modelo DocumentoGerado |
+| `backend/app/api/documentos_gerados.py` | Endpoints `/docs-gerados` e `/documentos-gerados` |
+| `backend/app/api/inqueritos.py` | Endpoints `gerar-relatorio-inicial`, `gerar-sintese` |
 | `backend/app/services/agente_ficha.py` | Fichas investigativas por pessoa/empresa |
-| `backend/app/services/copiloto_service.py` | RAG conversacional (Copiloto) |
+| `src/components/CopilotoDrawer.tsx` | Frontend do Copiloto — canvas, save explícito |
