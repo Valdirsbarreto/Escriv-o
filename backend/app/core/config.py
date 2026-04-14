@@ -42,20 +42,20 @@ class Settings(BaseSettings):
 
     # ── LLM Camada Econômica ───────────────────────────────
     LLM_ECONOMICO_PROVIDER: str = "google"
-    LLM_ECONOMICO_MODEL: str = "gemini-2.0-flash-lite"
+    LLM_ECONOMICO_MODEL: str = "gemini-2.0-flash-lite-001"
     LLM_ECONOMICO_BASE_URL: str = "https://generativelanguage.googleapis.com"
     LLM_ECONOMICO_API_KEY: Optional[str] = None  # Deprecated — todos os tiers usam GEMINI_API_KEY
     LLM_ECONOMICO_TEMPERATURE: float = 0.1  # Foco em consistência para NER/classificação
 
     # ── LLM Camada Standard / Vision ──────────────────────
     LLM_STANDARD_PROVIDER: str = "google"
-    LLM_STANDARD_MODEL: str = "gemini-2.0-flash"
+    LLM_STANDARD_MODEL: str = "gemini-2.0-flash-001"
     LLM_STANDARD_BASE_URL: str = "https://generativelanguage.googleapis.com"
     LLM_STANDARD_API_KEY: Optional[str] = None  # Deprecated — todos os tiers usam GEMINI_API_KEY
 
     # ── LLM Camada Premium ─────────────────────────────────
     LLM_PREMIUM_PROVIDER: str = "google"
-    LLM_PREMIUM_MODEL: str = "gemini-2.0-flash"
+    LLM_PREMIUM_MODEL: str = "gemini-2.0-flash-001"
     LLM_PREMIUM_BASE_URL: str = "https://generativelanguage.googleapis.com"
     LLM_PREMIUM_API_KEY: Optional[str] = None  # Deprecated — todos os tiers usam GEMINI_API_KEY
 
