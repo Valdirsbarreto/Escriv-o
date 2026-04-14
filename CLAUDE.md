@@ -160,14 +160,20 @@ O Copiloto monta seu contexto na seguinte ordem:
 5. **Contatos e cronologia**
 6. **Chunks RAG** (Qdrant + busca híbrida texto)
 
-**Comportamento esperado:**
-- Referências processuais ("foi relatado", "MP pediu X", "voltou da cota") → identifica fase e busca docs relevantes
-- Pedido de documento formal → gera completo com conteúdo real (não síntese de 5 linhas)
-- `max_tokens = 4000`
+**Comportamento esperado (6 diretrizes formais — commit `1cc8fc9`):**
+- D1 Gatekeeper: "você vê X?" → sim/não + oferta, nunca execução espontânea
+- D2 Fidelidade: prioriza doc mais recente; referências processuais = ponteiros para docs físicos
+- D3 Integridade: nunca trunca; `<RELATORIO_COMPLEMENTAR_CALL>` só em pedido explícito
+- D4 Formato: conversa=prosa, documento=completo formal
+- D5 Read-only: nunca salva, cria ou modifica no sistema
+- D6 Zero inferência: age no que foi escrito, pergunta se ambíguo
+- `max_tokens = 8000`
+
+**Ferramenta `<RELATORIO_COMPLEMENTAR_CALL>`:** quando o Comissário pede explicitamente o Relatório Complementar, o Copiloto emite a tag e `copiloto_service.py` dispara `gerar_relatorio_complementar_task.delay()`.
 
 **NÃO auto-salva respostas** — o usuário salva explicitamente pelo botão "Salvar" no canvas.
 
-**Fases do IP integradas ao SYSTEM_PROMPT_COPILOTO:** o Copiloto conhece o mapa de 5 fases e os documentos típicos de cada fase, permitindo contextualizar referências processuais do Comissário.
+**ATENÇÃO — `{}` no prompt:** qualquer literal `{}` em `SYSTEM_PROMPT_COPILOTO` deve ser `{{}}` — o serviço faz `.format(**kwargs)` e quebra com placeholders posicionais vazios.
 
 ---
 
@@ -183,20 +189,25 @@ O Copiloto monta seu contexto na seguinte ordem:
 
 ## Pendências abertas
 
-1. **Síntese do IP 911-00209/2019** — regenerar:
+1. **Validar Relatório Complementar** no IP 911-00209/2019 — **PRÓXIMA AÇÃO**:
+   - Caminho direto: botão "Gerar Rel. Complementar" na aba Workspace
+   - Caminho via Copiloto: pedir explicitamente "faz o relatório complementar" e verificar se `<RELATORIO_COMPLEMENTAR_CALL>` dispara a task
+   - Se falhar: verificar `tipo_peca` dos docs com `GET /inqueritos/c38991d7.../documentos` — a Cota Ministerial precisa estar como `oficio_recebido`
+
+2. **Síntese do IP 911-00209/2019** — regenerar:
    ```
    POST /inqueritos/c38991d7-e669-435e-b54e-64df6ed6c429/gerar-sintese
    ```
 
-2. **Lote de relatórios iniciais** nos demais inquéritos:
+3. **Lote de relatórios iniciais** nos demais inquéritos:
    ```
    POST /ingestao/admin/gerar-relatorio-inicial-lote?forcar=false
    ```
 
-3. **Alembic migration `j0k1l2m3n4o5`** no Railway — remap tipos de peças:
+4. **Alembic migration `j0k1l2m3n4o5`** no Railway — remap tipos de peças:
    `laudo → laudo_pericial` | `oficio → oficio_expedido` | `termo_oitiva → termo_depoimento`
 
-4. **OSINT Web (Serper.dev)** — plano completo em `reflective-meandering-sky.md`:
+5. **OSINT Web (Serper.dev)** — plano completo em `reflective-meandering-sky.md`:
    - `serper_service.py`, endpoint `/agentes/osint/web/`, `OsintWebPanel` — NÃO criados
    - `SERPER_API_KEY` já está no `.env.local` e hardcoded em `config.py`
 

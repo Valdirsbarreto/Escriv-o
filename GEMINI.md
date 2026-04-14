@@ -19,21 +19,21 @@ Leia o arquivo `CLAUDE.md` na raiz do projeto — ele contém todo o contexto ne
 O sistema está **100% migrado para Google Gemini**. Groq foi removido de todos os tiers.
 
 ### Commits recentes (branch main)
+- `1cc8fc9` — Refactor: SYSTEM_PROMPT_COPILOTO — 6 diretrizes formais de comportamento
+- `e7ff0e6` — Fix: escape `{{}}` em SYSTEM_PROMPT — crash "Replacement index 0 out of range"
+- `85fdc49` — Fix: Copiloto não executa ações sem pedido explícito
+- `5ad5bde` — Fix: Copiloto max_tokens 4k→8k + ferramenta <RELATORIO_COMPLEMENTAR_CALL>
 - `487a479` — Feat: fases processuais do IP nos prompts + botão Rel. Complementar na UI
 - `1b81d5c` — Feat: Relatório Complementar — task Celery, prompt e endpoint
-- `b65620d` — Docs: update CLAUDE.md e GEMINI.md com estado da sessão 13/04
-- `17840e0` — Fix: campo Fato preenchido só pelo Relatório Inicial + remove auto-save Copiloto
-- `33a0ca9` — Fix: remove sintese_investigativa de TIPOS_COMPLETOS no Copiloto
-- `b64bc98` — Feat: injeta índice de peças dos autos no contexto do Copiloto
-- `ec63cac` — Feat: Copiloto entende referências processuais do usuário ("foi relatado", "MP pediu")
-- `33a9142` — Fix: relatorio_inicial injetado sem truncar no Copiloto
-- `0a4b4d0` — Feat: PROMPT_RELATORIO_INICIAL v3 + contexto 2.8M chars
 
 ### Próximos passos pendentes
-1. **Regenerar Síntese do IP 911-00209/2019**:
+1. **Validar Relatório Complementar** no IP 911-00209/2019 — PRÓXIMA AÇÃO:
+   - Botão "Gerar Rel. Complementar" na aba Workspace (caminho direto)
+   - Via Copiloto: pedir "faz o relatório complementar" (valida a ferramenta)
+   - Se falhar: checar `tipo_peca` da Cota Ministerial nos docs do IP
+2. **Regenerar Síntese do IP 911-00209/2019**:
    `POST /inqueritos/c38991d7-e669-435e-b54e-64df6ed6c429/gerar-sintese`
-2. **Lote de relatórios iniciais** nos demais inquéritos:
+3. **Lote de relatórios iniciais** nos demais inquéritos:
    `POST /ingestao/admin/gerar-relatorio-inicial-lote?forcar=false`
-3. **Alembic migration `j0k1l2m3n4o5`** — remap tipos de peças no Railway
-4. **OSINT Web (Serper.dev)** — plano em `reflective-meandering-sky.md`, ainda não implementado
-5. **Testar Relatório Complementar** no IP 911-00209/2019 após deploy
+4. **Alembic migration `j0k1l2m3n4o5`** — remap tipos de peças no Railway
+5. **OSINT Web (Serper.dev)** — plano em `reflective-meandering-sky.md`, ainda não implementado
