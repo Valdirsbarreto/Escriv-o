@@ -457,30 +457,37 @@ class TelegramCopilotoService:
 
         contents.append({"role": "user", "parts": [{"text": mensagem}]})
 
+        config = _gt.GenerateContentConfig(
+            system_instruction=system,
+            tools=[_get_fc_tools()],
+            tool_config=_gt.ToolConfig(
+                function_calling_config=_gt.FunctionCallingConfig(
+                    mode="AUTO",  # Gemini decide: chamar função OU responder em texto
+                )
+            ),
+            temperature=0.1,
+        )
+
         try:
+            # Usa cliente sync em asyncio.to_thread — mesmo padrão que corrigiu embeddings
+            # (aio.models pode ter bug de roteamento com FC tools)
             response = await asyncio.wait_for(
-                self._get_fc_client().aio.models.generate_content(
+                asyncio.to_thread(
+                    self._get_fc_client().models.generate_content,
                     model=settings.LLM_STANDARD_MODEL,
                     contents=contents,
-                    config=_gt.GenerateContentConfig(
-                        system_instruction=system,
-                        tools=[_get_fc_tools()],
-                        tool_config=_gt.ToolConfig(
-                            function_calling_config=_gt.FunctionCallingConfig(
-                                mode="AUTO",  # Gemini decide: chamar função OU perguntar em texto
-                            )
-                        ),
-                        temperature=0.1,
-                    ),
+                    config=config,
                 ),
                 timeout=180.0,
             )
 
             # Verificar se retornou function call
-            for part in response.candidates[0].content.parts:
-                if hasattr(part, "function_call") and part.function_call:
-                    fc = part.function_call
-                    return fc.name, dict(fc.args), None
+            candidates = response.candidates or []
+            if candidates and candidates[0].content and candidates[0].content.parts:
+                for part in candidates[0].content.parts:
+                    if hasattr(part, "function_call") and part.function_call:
+                        fc = part.function_call
+                        return fc.name, dict(fc.args), None
 
             # Resposta em texto (pergunta de clarificação ou conversa)
             texto = response.text.strip() if response.text else None
