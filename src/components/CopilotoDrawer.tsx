@@ -188,16 +188,11 @@ export function CopilotoDrawer() {
       }
 
       // Abre canvas quando o usuário pediu para criar um documento
+      // Não auto-salva — o usuário decide clicando em "Salvar" no canvas
       if (pediriaDocumento(userText) && botText.length > 300) {
         const titulo = detectarTitulo(botText);
         const tipo = detectarTipo(botText);
         abrirCanvas(botText, titulo, tipo);
-        // Auto-salva em background se houver inquérito
-        if (inqueritoAtivoId) {
-          createDocGerado(inqueritoAtivoId, { titulo, tipo, conteudo: botText })
-            .then(() => { bumpDocsGerados(); setSavedMsgs(prev => new Set(prev).add(newIndex)); })
-            .catch(() => {});
-        }
       }
     } catch {
       setMessages(prev => [...prev, { role: "bot", text: "⚠️ Erro ao se comunicar com o servidor. Tente novamente." }]);

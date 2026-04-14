@@ -132,7 +132,7 @@ def orchestrate_new_inquerito(self, storage_paths: List[str], filenames: List[st
                     delegacia_origem_nome=delegacia_nome,
                     delegacia_atual_codigo=delegacia_cod,
                     delegacia_atual_nome=delegacia_nome,
-                    descricao=analise.get("fato_resumo", "Inquérito criado via ingestão automática."),
+                    descricao="",  # preenchido pela Seção 1 do Relatório Inicial após ingestão
                     estado_atual=EstadoInquerito.INDEXANDO.value
                 )
                 db.add(inquerito)
