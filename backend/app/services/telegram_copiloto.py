@@ -494,8 +494,9 @@ class TelegramCopilotoService:
             return None, {}, texto
 
         except Exception as e:
-            logger.error(f"[TG-COPILOTO] Dispatcher FC falhou: {e}", exc_info=True)
-            return None, {}, "Desculpe, tive um problema ao processar. Tente novamente."
+            erro_tipo = type(e).__name__
+            logger.error(f"[TG-COPILOTO] Dispatcher FC falhou [{erro_tipo}]: {e}", exc_info=True)
+            return None, {}, f"[DEBUG] {erro_tipo}: {str(e)[:200]}"
 
     # ── Ação: listar inquéritos ───────────────────────────────────────────────
 
