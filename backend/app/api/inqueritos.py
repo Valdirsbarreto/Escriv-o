@@ -726,6 +726,42 @@ async def gerar_relatorio_inicial(
     }
 
 
+@router.post("/{inquerito_id}/gerar-relatorio-complementar")
+async def gerar_relatorio_complementar(
+    inquerito_id: uuid.UUID,
+    forcar: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Gera o Relatório Complementar ao Relatório Final.
+    Usado quando o MP devolveu o inquérito relatado solicitando diligências complementares
+    e a autoridade as cumpriu (novas oitivas, laudos, etc.).
+    Usa o Relatório Inicial de IA como base + todos os documentos indexados.
+    Se forcar=true, apaga o relatório complementar existente antes de regenerar.
+    """
+    inq = await db.get(Inquerito, inquerito_id)
+    if not inq:
+        raise HTTPException(status_code=404, detail="Inquérito não encontrado")
+
+    docs_result = await db.execute(
+        select(Documento)
+        .where(Documento.inquerito_id == inquerito_id)
+        .where(Documento.status_processamento == "concluido")
+    )
+    if not docs_result.scalars().all():
+        raise HTTPException(status_code=422, detail="Nenhum documento indexado neste inquérito")
+
+    from app.workers.relatorio_complementar_task import gerar_relatorio_complementar_task
+    gerar_relatorio_complementar_task.delay(str(inquerito_id), forcar)
+
+    return {
+        "status": "agendado",
+        "inquerito_id": str(inquerito_id),
+        "forcar": forcar,
+        "mensagem": "Relatório Complementar em geração. Aparecerá na aba Workspace em alguns minutos.",
+    }
+
+
 @router.get("/{inquerito_id}/progresso")
 async def progresso_pipeline(
     inquerito_id: uuid.UUID,
