@@ -469,11 +469,8 @@ class TelegramCopilotoService:
         )
 
         try:
-            # Usa cliente sync em asyncio.to_thread — mesmo padrão que corrigiu embeddings
-            # (aio.models pode ter bug de roteamento com FC tools)
             response = await asyncio.wait_for(
-                asyncio.to_thread(
-                    self._get_fc_client().models.generate_content,
+                self._get_fc_client().aio.models.generate_content(
                     model=settings.LLM_STANDARD_MODEL,
                     contents=contents,
                     config=config,
