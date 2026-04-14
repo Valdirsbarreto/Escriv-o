@@ -298,6 +298,7 @@ export default function InqueritoDetalhePage() {
   const [reprocessing, setReprocessing] = useState(false);
   const [gerandoSintese, setGerandoSintese] = useState(false);
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false);
+  const [gerandoComplementar, setGerandoComplementar] = useState(false);
   const [intimacoes, setIntimacoes] = useState<any[]>([]);
   const [showIntimacaoModal, setShowIntimacaoModal] = useState(false);
   const [docViewer, setDocViewer] = useState<{ open: boolean; doc: any; conteudo: any | null; loading: boolean }>({ open: false, doc: null, conteudo: null, loading: false });
@@ -585,6 +586,36 @@ export default function InqueritoDetalhePage() {
       console.error(e);
       setGerandoRelatorio(false);
       alert("Erro ao acionar geração do Relatório Inicial.");
+    }
+  };
+
+  const handleGerarRelatorioComplementar = async (forcar = false) => {
+    setGerandoComplementar(true);
+    try {
+      await api.post(`/inqueritos/${inqId}/gerar-relatorio-complementar?forcar=${forcar}`);
+      let tentativas = 0;
+      const interval = setInterval(async () => {
+        tentativas++;
+        try {
+          const res = await api.get(`/inqueritos/${inqId}/documentos-gerados`);
+          if ((res.data || []).some((d: any) => d.tipo === "relatorio_complementar")) {
+            setGerandoComplementar(false);
+            clearInterval(interval);
+            const resAll = await api.get(`/inqueritos/${inqId}/documentos-gerados`);
+            setDocsGerados(resAll.data || []);
+            return;
+          }
+        } catch {/* silencioso */}
+        if (tentativas >= 60) {
+          setGerandoComplementar(false);
+          clearInterval(interval);
+          alert("O Relatório Complementar está demorando mais que o esperado. Recarregue a página em alguns minutos.");
+        }
+      }, 5000);
+    } catch (e) {
+      console.error(e);
+      setGerandoComplementar(false);
+      alert("Erro ao acionar geração do Relatório Complementar.");
     }
   };
 
@@ -999,6 +1030,21 @@ export default function InqueritoDetalhePage() {
                   >
                     <FileText size={12} className={gerandoRelatorio ? "animate-pulse" : ""}/>
                     {gerandoRelatorio ? "Gerando relatório..." : docsGerados.some((d: any) => d.tipo === "relatorio_inicial") ? "Regenerar Rel. Inicial" : "Gerar Rel. Inicial"}
+                  </button>
+                )}
+                {inqId && (
+                  <button
+                    onClick={() => {
+                      const temComplementar = docsGerados.some((d: any) => d.tipo === "relatorio_complementar");
+                      if (temComplementar && !confirm("Já existe um Relatório Complementar. Deseja regenerar (apagará o atual)?")) return;
+                      handleGerarRelatorioComplementar(temComplementar);
+                    }}
+                    disabled={gerandoComplementar}
+                    className="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1 transition-colors disabled:opacity-50"
+                    title="Gera o Relatório Complementar ao Relatório Final (quando o MP devolveu o IP para diligências)"
+                  >
+                    <FileText size={12} className={gerandoComplementar ? "animate-pulse" : ""}/>
+                    {gerandoComplementar ? "Gerando complementar..." : docsGerados.some((d: any) => d.tipo === "relatorio_complementar") ? "Regenerar Rel. Complementar" : "Gerar Rel. Complementar"}
                   </button>
                 )}
                 <button
