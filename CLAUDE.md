@@ -9,11 +9,11 @@ Backend FastAPI + Celery + Redis + Qdrant + PostgreSQL. Frontend Next.js no Verc
 ## Ao iniciar uma sessão — leia primeiro
 - `backend/app/core/prompts.py` — todos os system prompts (editá-los aqui, não inline)
 - `backend/app/services/llm_service.py` — roteamento de tiers LLM
-- Memória `project_sessao_13_04_2026_v2.md` — **estado ao encerrar sessão de 13/04 (continuação), pendências e próximas ações**
+- Memória `project_sessao_14_04_2026_v3.md` — **estado ao encerrar sessão de 14/04 (parte 3), pendências e próximas ações**
 
 ---
 
-## Stack atual (atualizado 2026-04-13)
+## Stack atual (atualizado 2026-04-14)
 | Camada | Tecnologia |
 |--------|-----------|
 | Frontend | Next.js, Tailwind, @base-ui/react |
@@ -35,35 +35,35 @@ Backend FastAPI + Celery + Redis + Qdrant + PostgreSQL. Frontend Next.js no Verc
 2. Extração de texto nativo (pypdf) + OCR seletivo nas páginas sem texto
 3. Chunking (600 words, overlap 100)
 4. **Embeddings:** `text-embedding-004` → PostgreSQL + Qdrant
-5. **Agente Classificador** (`tier=triagem` → `gemini-1.5-flash-8b`): classifica tipo de peça
-6. **Agente NER** (`tier=extracao` → `gemini-1.5-flash-8b`): extrai pessoas, empresas, cronologia
+5. **Agente Classificador** (`tier=triagem` → `gemini-2.5-flash-lite`): classifica tipo de peça
+6. **Agente NER** (`tier=extracao` → `gemini-2.5-flash-lite`): extrai pessoas, empresas, cronologia
 7. Dispara `generate_summaries_task` e `extrair_pecas_task`
 
 ### Etapa 2 — Resumos Hierárquicos (`generate_summaries_task`)
-- Página → Documento → Volume (`tier=resumo` → `gemini-1.5-flash-8b`)
+- Página → Documento → Volume (`tier=resumo` → `gemini-2.5-flash-lite`)
 
 ### Etapa 3 — Relatório Inicial (`gerar_relatorio_inicial_task`)
 Disparado quando **todos** os documentos do inquérito estão com `status=concluido`.
 
-- **Agente RelatorioInicial** (`tier=premium` → `gemini-1.5-pro`):
+- **Agente RelatorioInicial** (`tier=premium` → `gemini-2.5-flash`):
   - Contexto: até **2.800.000 chars** (~700k tokens) de `texto_extraido` direto, ordenados por prioridade pericial
   - max_tokens: 8.000 | temperature: 0.1
   - PASSO 0: identifica fase processual (Instauração / Instrução / Indiciamento / Relatamento)
   - Gera **9 seções** com metodologia 5W criminal (v3)
   - **Seção 1 preenche `Inquerito.descricao`** — único lugar onde o campo "Fato" é preenchido
-- **Agente AuditorRelatorio** (`tier=standard` → `gemini-1.5-flash`):
+- **Agente AuditorRelatorio** (`tier=standard` → `gemini-2.5-flash`):
   - Verifica alucinações; substitui rascunho só se output contém `## 1.`, `## 4.`, `## 7.`
 
 ### Etapa 4 — Síntese Investigativa (`generate_analise_task`)
 Disparada automaticamente após Relatório Inicial salvo.
-- **Agente Síntese** (`tier=premium` → `gemini-1.5-pro`): 10 seções com Chain-of-Thought
+- **Agente Síntese** (`tier=premium` → `gemini-2.5-flash`): 10 seções com Chain-of-Thought
 - **ATENÇÃO:** se o Relatório Inicial for regenerado com `forcar=true`, a Síntese também deve ser regenerada via `POST /inqueritos/{id}/gerar-sintese` — ela não é atualizada automaticamente neste caso
 
 ### Etapa 5 — Relatório Complementar (`gerar_relatorio_complementar_task`) [NOVO]
 Disparado manualmente quando o MP devolveu o inquérito para diligências complementares.
 
 - **Contexto processual:** Fase 4 (Relatório Final) → Fase 5 (MP devolveu com Cota Ministerial) → Fase 2 (nova instrução) → agora: Relatório Complementar
-- **Agente RelatorioComplementar** (`tier=premium` → `gemini-1.5-pro`):
+- **Agente RelatorioComplementar** (`tier=premium` → `gemini-2.5-flash`):
   - Carrega `relatorio_inicial` DocumentoGerado como base (até 60.000 chars)
   - Carrega todos os docs indexados — prioriza `oficio_recebido` (Cota Ministerial do MP)
   - Gera **5 seções:** Referência e Objeto | Diligências Realizadas | Resultado | Individualização de Conduta | Conclusão
@@ -92,13 +92,13 @@ Disparado manualmente quando o MP devolveu o inquérito para diligências comple
 ## Mapa de Tiers LLM
 | Tier | Modelo | Usado em |
 |------|--------|----------|
-| `triagem` | `gemini-1.5-flash-8b` | Classificação de tipo de peça |
-| `extracao` | `gemini-1.5-flash-8b` | NER — pessoas/empresas/endereços |
-| `resumo` | `gemini-1.5-flash-8b` | Resumos hierárquicos |
-| `economico` | `gemini-1.5-flash-8b` | Genérico barato |
-| `auditoria` | `gemini-1.5-flash-8b` | Auditoria factual do Copiloto |
-| `standard` | `gemini-1.5-flash` | Orquestrador, auditoria de relatório/complementar |
-| `premium` | `gemini-1.5-pro` | Copiloto RAG, fichas, cautelares, relatório inicial, síntese, complementar |
+| `triagem` | `gemini-2.5-flash-lite` | Classificação de tipo de peça |
+| `extracao` | `gemini-2.5-flash-lite` | NER — pessoas/empresas/endereços |
+| `resumo` | `gemini-2.5-flash-lite` | Resumos hierárquicos |
+| `economico` | `gemini-2.5-flash-lite` | Genérico barato |
+| `auditoria` | `gemini-2.5-flash-lite` | Auditoria factual do Copiloto |
+| `standard` | `gemini-2.5-flash` | Orquestrador, auditoria de relatório/complementar |
+| `premium` | `gemini-2.5-flash` | Copiloto RAG, fichas, cautelares, relatório inicial, síntese, complementar |
 
 ---
 
@@ -147,7 +147,7 @@ Antes de escrever qualquer seção, o agente identifica:
 
 ---
 
-## Copiloto — Arquitetura de contexto (atualizado 2026-04-13)
+## Copiloto — Arquitetura de contexto (atualizado 2026-04-14)
 
 O Copiloto monta seu contexto na seguinte ordem:
 
@@ -177,13 +177,15 @@ O Copiloto monta seu contexto na seguinte ordem:
 
 ---
 
-## Correções aplicadas em 2026-04-13
+## Correções aplicadas em 2026-04-13/14
 
 | Bug | Causa raiz | Correção |
 |-----|-----------|---------|
 | Copiloto retornava síntese genérica "Não especificados" | `sintese_investigativa` antiga injetada completa; LLM a reproduzia | Removida de TIPOS_COMPLETOS; `relatorio_inicial` injetado completo |
 | Copiloto auto-salvava documentos ruins silenciosamente | `CopilotoDrawer.tsx` chamava `createDocGerado` em background | Auto-save removido — só salva via clique explícito |
 | Campo "Fato" preenchido com descrição NER precoce | `orchestrator.py` setava `descricao=fato_resumo` na criação | `descricao=""` na criação; preenchido somente pela Seção 1 do Relatório Inicial |
+| Copiloto "⚠️ LLM indisponível" — 403/404 Gemini | Chave nova AI Studio → família 2.0 bloqueada; billing atrasado | Pagar fatura + migrar para `gemini-2.5-flash` / `gemini-2.5-flash-lite` (14/04) |
+| `Documento.num_paginas` AttributeError no Copiloto | Campo se chama `total_paginas` no modelo | Corrigido em `copiloto_service.py` (commit `87cb2a6`) |
 
 ---
 
@@ -214,6 +216,7 @@ O Copiloto monta seu contexto na seguinte ordem:
 ---
 
 ## Restrições críticas (não violar)
+- **Gemini 2.0 bloqueado:** `gemini-2.0-flash*` e `gemini-2.0-flash-lite*` (com ou sem `-001`) retornam 404 para a chave ativa. Usar sempre família **2.5** (`gemini-2.5-flash`, `gemini-2.5-flash-lite`). `gemini-2.5-pro` disponível mas 503 frequente — reservado para uso futuro.
 - **UI:** usa `@base-ui/react`, NÃO `@radix-ui`. Nunca importar ShadCN sem verificar existência.
 - **Railway:** imports pesados (gRPC, Qdrant, torch) devem ser lazy dentro dos routers FastAPI.
 - **Railway deploy:** NUNCA commitar durante ingestão ativa — rolling deploy mata tasks Celery.
