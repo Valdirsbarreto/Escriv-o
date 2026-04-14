@@ -393,7 +393,7 @@ class CopilotoService:
                 messages=messages,
                 tier="premium",
                 temperature=0.3,
-                max_tokens=4000,
+                max_tokens=8000,
                 agente="Copiloto",
             )
             resposta = llm_result["content"]
@@ -466,7 +466,28 @@ class CopilotoService:
                         llm_result["tokens_resposta"] += llm_result2["tokens_resposta"]
                         llm_result["custo_estimado"] += llm_result2["custo_estimado"]
                     except Exception as e:
-                        logger.error(f"[COPILOTO] Erro na ferramenta Cripto: {e}")                        
+                        logger.error(f"[COPILOTO] Erro na ferramenta Cripto: {e}")
+
+            if "<RELATORIO_COMPLEMENTAR_CALL>" in resposta:
+                logger.info("[COPILOTO] Acionando task Relatório Complementar")
+                try:
+                    from app.workers.relatorio_complementar_task import gerar_relatorio_complementar_task
+                    gerar_relatorio_complementar_task.delay(inquerito_id, False)
+                    resposta = (
+                        "Acionei a geração do **Relatório Complementar** com o contexto completo dos autos "
+                        "(2,8 milhões de chars + Relatório Inicial como base).\n\n"
+                        "O processamento leva alguns minutos. Quando terminar, o documento aparecerá na aba "
+                        "**Workspace** do inquérito, pronto para revisão e juntada aos autos.\n\n"
+                        "Você também pode acionar manualmente pelo botão **Gerar Rel. Complementar** "
+                        "na aba Workspace."
+                    )
+                except Exception as e_comp:
+                    logger.error(f"[COPILOTO] Erro ao acionar task Complementar: {e_comp}")
+                    resposta = (
+                        "Tentei acionar a geração do Relatório Complementar, mas ocorreu um erro interno. "
+                        "Use o botão **Gerar Rel. Complementar** na aba Workspace do inquérito."
+                    )
+
         except Exception as e:
             logger.error(f"[COPILOTO] LLM indisponível: {e}")
             return {
