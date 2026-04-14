@@ -275,7 +275,10 @@ class CopilotoService:
                     # Docs estruturais (relatório inicial e síntese) são injetados completos —
                     # o LLM precisa do conteúdo integral para responder sobre suspeitos, conduta, etc.
                     # Demais docs (ofícios, minutas) ficam truncados em 3000 chars.
-                    TIPOS_COMPLETOS = {"relatorio_inicial", "sintese_investigativa", "relatorio_complementar"}
+                    # relatorio_inicial é injetado completo — é a fonte de verdade do caso.
+                    # sintese_investigativa fica truncada: foi gerada com contexto anterior
+                    # e pode estar obsoleta se o relatório inicial foi regenerado.
+                    TIPOS_COMPLETOS = {"relatorio_inicial", "relatorio_complementar"}
                     for dg in docs_gerados:
                         data = dg.created_at.strftime("%d/%m/%Y") if dg.created_at else ""
                         limite = len(dg.conteudo) if dg.tipo in TIPOS_COMPLETOS else 3000
