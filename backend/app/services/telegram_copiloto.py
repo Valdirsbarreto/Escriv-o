@@ -3,6 +3,7 @@ Escrivão AI — Copiloto Telegram (Sprint B + C)
 Dispatcher via Gemini Function Calling nativo + contexto conversacional rico.
 """
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -69,7 +70,6 @@ def _get_fc_tools():
         _gt.FunctionDeclaration(
             name="listar_inqueritos",
             description="Lista todos os inquéritos policiais cadastrados no sistema.",
-            parameters=_gt.Schema(type=_gt.Type.OBJECT, properties={}),
         ),
         _gt.FunctionDeclaration(
             name="status_inquerito",
@@ -135,7 +135,6 @@ def _get_fc_tools():
         _gt.FunctionDeclaration(
             name="agenda",
             description="Exibe as próximas oitivas e audiências agendadas.",
-            parameters=_gt.Schema(type=_gt.Type.OBJECT, properties={}),
         ),
         _gt.FunctionDeclaration(
             name="ficha_pessoa",
@@ -213,7 +212,6 @@ def _get_fc_tools():
         _gt.FunctionDeclaration(
             name="ajuda",
             description="Exibe a lista de comandos e capacidades disponíveis.",
-            parameters=_gt.Schema(type=_gt.Type.OBJECT, properties={}),
         ),
         _gt.FunctionDeclaration(
             name="abrir_peca_no_pdf",
@@ -460,19 +458,22 @@ class TelegramCopilotoService:
         contents.append({"role": "user", "parts": [{"text": mensagem}]})
 
         try:
-            response = await self._get_fc_client().aio.models.generate_content(
-                model=settings.LLM_STANDARD_MODEL,
-                contents=contents,
-                config=_gt.GenerateContentConfig(
-                    system_instruction=system,
-                    tools=[_get_fc_tools()],
-                    tool_config=_gt.ToolConfig(
-                        function_calling_config=_gt.FunctionCallingConfig(
-                            mode="AUTO",  # Gemini decide: chamar função OU perguntar em texto
-                        )
+            response = await asyncio.wait_for(
+                self._get_fc_client().aio.models.generate_content(
+                    model=settings.LLM_STANDARD_MODEL,
+                    contents=contents,
+                    config=_gt.GenerateContentConfig(
+                        system_instruction=system,
+                        tools=[_get_fc_tools()],
+                        tool_config=_gt.ToolConfig(
+                            function_calling_config=_gt.FunctionCallingConfig(
+                                mode="AUTO",  # Gemini decide: chamar função OU perguntar em texto
+                            )
+                        ),
+                        temperature=0.1,
                     ),
-                    temperature=0.1,
                 ),
+                timeout=180.0,
             )
 
             # Verificar se retornou function call
@@ -486,7 +487,7 @@ class TelegramCopilotoService:
             return None, {}, texto
 
         except Exception as e:
-            logger.warning(f"[TG-COPILOTO] Dispatcher FC falhou: {e}")
+            logger.error(f"[TG-COPILOTO] Dispatcher FC falhou: {e}", exc_info=True)
             return None, {}, "Desculpe, tive um problema ao processar. Tente novamente."
 
     # ── Ação: listar inquéritos ───────────────────────────────────────────────
