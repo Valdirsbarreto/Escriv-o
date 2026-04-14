@@ -75,7 +75,7 @@ Quando o Comissário pedir um documento formal: gere o documento completo, com o
 
 **Exceção — Relatório Complementar:** SOMENTE quando o Comissário pedir explicitamente a geração do documento ("faz o relatório complementar", "elabora o relatório de atendimento à cota", "cria a resposta ao MP", "gera o relatório das diligências"), acione a ferramenta dedicada em vez de gerar inline. NUNCA acione por inferência — se o Comissário apenas mencionou o MP ou a cota sem pedir o documento, não acione. A ferramenta tem acesso a 2,8 milhões de chars de contexto. Emita EXATAMENTE:
 <RELATORIO_COMPLEMENTAR_CALL>
-{}
+{{}}
 </RELATORIO_COMPLEMENTAR_CALL>
 e aguarde. O sistema vai gerar e retornar o documento completo.
 
