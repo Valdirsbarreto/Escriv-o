@@ -9,7 +9,7 @@ Backend FastAPI + Celery + Redis + Qdrant + PostgreSQL. Frontend Next.js no Verc
 ## Ao iniciar uma sessão — leia primeiro
 - `backend/app/core/prompts.py` — todos os system prompts (editá-los aqui, não inline)
 - `backend/app/services/llm_service.py` — roteamento de tiers LLM
-- Memória `project_sessao_13_04_2026.md` — **estado ao encerrar 13/04, pendências e próximas ações**
+- Memória `project_sessao_13_04_2026_v2.md` — **estado ao encerrar sessão de 13/04 (continuação), pendências e próximas ações**
 
 ---
 
@@ -28,7 +28,7 @@ Backend FastAPI + Celery + Redis + Qdrant + PostgreSQL. Frontend Next.js no Verc
 
 ---
 
-## Pipeline Completo: Ingestão → Relatório Inicial
+## Pipeline Completo: Ingestão → Relatório Inicial → Complementar
 
 ### Etapa 1 — Upload e ingestão (`ingest_document`)
 1. Download do PDF do storage (Supabase)
@@ -48,6 +48,7 @@ Disparado quando **todos** os documentos do inquérito estão com `status=conclu
 - **Agente RelatorioInicial** (`tier=premium` → `gemini-1.5-pro`):
   - Contexto: até **2.800.000 chars** (~700k tokens) de `texto_extraido` direto, ordenados por prioridade pericial
   - max_tokens: 8.000 | temperature: 0.1
+  - PASSO 0: identifica fase processual (Instauração / Instrução / Indiciamento / Relatamento)
   - Gera **9 seções** com metodologia 5W criminal (v3)
   - **Seção 1 preenche `Inquerito.descricao`** — único lugar onde o campo "Fato" é preenchido
 - **Agente AuditorRelatorio** (`tier=standard` → `gemini-1.5-flash`):
@@ -57,6 +58,34 @@ Disparado quando **todos** os documentos do inquérito estão com `status=conclu
 Disparada automaticamente após Relatório Inicial salvo.
 - **Agente Síntese** (`tier=premium` → `gemini-1.5-pro`): 10 seções com Chain-of-Thought
 - **ATENÇÃO:** se o Relatório Inicial for regenerado com `forcar=true`, a Síntese também deve ser regenerada via `POST /inqueritos/{id}/gerar-sintese` — ela não é atualizada automaticamente neste caso
+
+### Etapa 5 — Relatório Complementar (`gerar_relatorio_complementar_task`) [NOVO]
+Disparado manualmente quando o MP devolveu o inquérito para diligências complementares.
+
+- **Contexto processual:** Fase 4 (Relatório Final) → Fase 5 (MP devolveu com Cota Ministerial) → Fase 2 (nova instrução) → agora: Relatório Complementar
+- **Agente RelatorioComplementar** (`tier=premium` → `gemini-1.5-pro`):
+  - Carrega `relatorio_inicial` DocumentoGerado como base (até 60.000 chars)
+  - Carrega todos os docs indexados — prioriza `oficio_recebido` (Cota Ministerial do MP)
+  - Gera **5 seções:** Referência e Objeto | Diligências Realizadas | Resultado | Individualização de Conduta | Conclusão
+  - max_tokens: 8.000 | temperature: 0.1
+- **Agente AuditorComplementar** (`tier=standard`): auditoria anti-alucinação
+- Salva como `DocumentoGerado(tipo="relatorio_complementar")`
+- Endpoint: `POST /inqueritos/{id}/gerar-relatorio-complementar?forcar=false`
+- Botão na UI: "Gerar Rel. Complementar" (cor sky-400) na aba Workspace
+
+---
+
+## Fases Processuais do IP — referência para os prompts
+
+| Fase | Nome | Documentos típicos | tipo_peca |
+|------|---------|--------------------|-----------|
+| 1 | Instauração | Portaria, APF, Auto de Apreensão inicial | `bo`, `auto_apreensao` |
+| 2 | Instrução | Oitivas, laudos, quebras de sigilo, apreensões | `termo_depoimento`, `laudo_pericial`, `quebra_sigilo` |
+| 3 | Indiciamento | Despacho de Indiciamento | `relatorio_policial` (parcial) |
+| 4 | Relatamento | Relatório Final (último ato do Delegado antes do MP) | `relatorio_policial` |
+| 5 | Fase Externa | Cota MP (denúncia / devolução / arquivamento) | `oficio_recebido` |
+
+**Quando o IP retorna do MP (Fase 5 → 2):** existe uma Cota Ministerial (`oficio_recebido`) com a solicitação. O Relatório Complementar responde a essa cota.
 
 ---
 
@@ -68,15 +97,22 @@ Disparada automaticamente após Relatório Inicial salvo.
 | `resumo` | `gemini-1.5-flash-8b` | Resumos hierárquicos |
 | `economico` | `gemini-1.5-flash-8b` | Genérico barato |
 | `auditoria` | `gemini-1.5-flash-8b` | Auditoria factual do Copiloto |
-| `standard` | `gemini-1.5-flash` | Orquestrador, auditoria de relatório |
-| `premium` | `gemini-1.5-pro` | Copiloto RAG, fichas, cautelares, relatório inicial, síntese |
+| `standard` | `gemini-1.5-flash` | Orquestrador, auditoria de relatório/complementar |
+| `premium` | `gemini-1.5-pro` | Copiloto RAG, fichas, cautelares, relatório inicial, síntese, complementar |
 
 ---
 
 ## Prompt do Relatório Inicial — v3 (atual)
-**Localização:** `backend/app/core/prompts.py` → `PROMPT_RELATORIO_INICIAL` (linha ~844)
+**Localização:** `backend/app/core/prompts.py` → `PROMPT_RELATORIO_INICIAL` (linha ~870)
 
 Role: **Analista de Inteligência Criminal Multidomínio**.
+
+### Passo 0 — Identificação de fase (NOVO)
+Antes de escrever qualquer seção, o agente identifica:
+- Como o IP foi instaurado (Portaria / APF / VPI)
+- Fase atual (instrução / com indiciados / relatado / retornou do MP)
+- Tipo e complexidade do crime
+- Provas já existentes (diretas, indiretas, técnicas)
 
 ### Metodologia 5W
 | W | Pergunta | Função |
@@ -125,11 +161,13 @@ O Copiloto monta seu contexto na seguinte ordem:
 6. **Chunks RAG** (Qdrant + busca híbrida texto)
 
 **Comportamento esperado:**
-- Referências processuais do usuário ("foi relatado", "MP pediu X") → trata como verdade e busca corroboração nos autos
+- Referências processuais ("foi relatado", "MP pediu X", "voltou da cota") → identifica fase e busca docs relevantes
 - Pedido de documento formal → gera completo com conteúdo real (não síntese de 5 linhas)
 - `max_tokens = 4000`
 
 **NÃO auto-salva respostas** — o usuário salva explicitamente pelo botão "Salvar" no canvas.
+
+**Fases do IP integradas ao SYSTEM_PROMPT_COPILOTO:** o Copiloto conhece o mapa de 5 fases e os documentos típicos de cada fase, permitindo contextualizar referências processuais do Comissário.
 
 ---
 
@@ -137,15 +175,15 @@ O Copiloto monta seu contexto na seguinte ordem:
 
 | Bug | Causa raiz | Correção |
 |-----|-----------|---------|
-| Copiloto retornava síntese genérica "Não especificados" | `sintese_investigativa` antiga (contexto pré-v3) injetada completa; LLM a reproduzia | Removida de TIPOS_COMPLETOS; `relatorio_inicial` injetado completo |
-| Copiloto auto-salvava documentos ruins silenciosamente | `CopilotoDrawer.tsx` chamava `createDocGerado` em background quando `pediriaDocumento()` era verdadeiro | Auto-save removido — só salva via clique explícito |
-| Campo "Fato" preenchido com descrição NER precoce | `orchestrator.py` setava `descricao=fato_resumo` na criação do inquérito | `descricao=""` na criação; preenchido somente pela Seção 1 do Relatório Inicial |
+| Copiloto retornava síntese genérica "Não especificados" | `sintese_investigativa` antiga injetada completa; LLM a reproduzia | Removida de TIPOS_COMPLETOS; `relatorio_inicial` injetado completo |
+| Copiloto auto-salvava documentos ruins silenciosamente | `CopilotoDrawer.tsx` chamava `createDocGerado` em background | Auto-save removido — só salva via clique explícito |
+| Campo "Fato" preenchido com descrição NER precoce | `orchestrator.py` setava `descricao=fato_resumo` na criação | `descricao=""` na criação; preenchido somente pela Seção 1 do Relatório Inicial |
 
 ---
 
 ## Pendências abertas
 
-1. **Síntese do IP 911-00209/2019** — regenerar após limpeza das sínteses ruins:
+1. **Síntese do IP 911-00209/2019** — regenerar:
    ```
    POST /inqueritos/c38991d7-e669-435e-b54e-64df6ed6c429/gerar-sintese
    ```
@@ -178,6 +216,7 @@ O Copiloto monta seu contexto na seguinte ordem:
 - **Inquérito é impessoal:** servidores policiais não são objeto de análise — nunca incluir como suspeitos ou alvos OSINT.
 - **Campo "Fato":** preenchido SOMENTE pela Seção 1 do Relatório Inicial. Não setar em outros lugares.
 - **Síntese Investigativa:** derivada do Relatório Inicial — fica obsoleta se o relatório for regenerado. Sempre regenerar a síntese depois de `forcar=true` no relatório.
+- **Relatório Complementar:** só faz sentido quando o MP devolveu o IP (Cota Ministerial presente nos autos). Não confundir com Relatório Final.
 
 ---
 
@@ -189,10 +228,12 @@ O Copiloto monta seu contexto na seguinte ordem:
 | `backend/app/services/copiloto_service.py` | RAG conversacional — contexto, injeção de docs, tool calling |
 | `backend/app/workers/ingestion.py` | Pipeline de ingestão |
 | `backend/app/workers/relatorio_inicial_task.py` | Geração do Relatório Inicial (contexto 2.8M chars) |
+| `backend/app/workers/relatorio_complementar_task.py` | Geração do Relatório Complementar (fase MP→delegacia) |
 | `backend/app/workers/summary_task.py` | Resumos hierárquicos + Síntese |
 | `backend/app/workers/orchestrator.py` | Criação automática de inquérito na ingestão |
 | `backend/app/models/documento_gerado.py` | Modelo DocumentoGerado |
 | `backend/app/api/documentos_gerados.py` | Endpoints `/docs-gerados` e `/documentos-gerados` |
-| `backend/app/api/inqueritos.py` | Endpoints `gerar-relatorio-inicial`, `gerar-sintese` |
+| `backend/app/api/inqueritos.py` | Endpoints `gerar-relatorio-inicial`, `gerar-sintese`, `gerar-relatorio-complementar` |
 | `backend/app/services/agente_ficha.py` | Fichas investigativas por pessoa/empresa |
 | `src/components/CopilotoDrawer.tsx` | Frontend do Copiloto — canvas, save explícito |
+| `src/app/inqueritos/[id]/page.tsx` | Workspace: botões Rel. Inicial + Rel. Complementar |
