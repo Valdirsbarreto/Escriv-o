@@ -243,10 +243,15 @@ class CopilotoService:
                 docs_gerados = docs_result.scalars().all()
 
                 if docs_gerados:
-                    bloco_docs = ["### Documentos Gerados pela IA (roteiros, ofícios, minutas)\n"]
+                    bloco_docs = ["### Documentos Gerados pela IA\n"]
+                    # Docs estruturais (relatório inicial e síntese) são injetados completos —
+                    # o LLM precisa do conteúdo integral para responder sobre suspeitos, conduta, etc.
+                    # Demais docs (ofícios, minutas) ficam truncados em 3000 chars.
+                    TIPOS_COMPLETOS = {"relatorio_inicial", "sintese_investigativa", "relatorio_complementar"}
                     for dg in docs_gerados:
                         data = dg.created_at.strftime("%d/%m/%Y") if dg.created_at else ""
-                        bloco_docs.append(f"**[{dg.tipo.upper()}] {dg.titulo}** ({data})\n{dg.conteudo[:3000]}")
+                        limite = len(dg.conteudo) if dg.tipo in TIPOS_COMPLETOS else 3000
+                        bloco_docs.append(f"**[{dg.tipo.upper()}] {dg.titulo}** ({data})\n{dg.conteudo[:limite]}")
                         bloco_docs.append("---")
                     contexto_partes.insert(0, "\n".join(bloco_docs))
                     logger.info(f"[COPILOTO] {len(docs_gerados)} doc(s) gerado(s) injetado(s) no contexto")
