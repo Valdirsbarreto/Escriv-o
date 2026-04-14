@@ -117,27 +117,84 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
                 logger.warning(f"[REL-INICIAL] Sem docs indexados ainda: {inquerito_id}")
                 raise Exception("sem_documentos_ainda")
 
-            service = SummaryService()
-            resumos_partes = []
+            # ── 2b. Montar contexto completo — texto_extraido direto (não resumos)
+            # Gemini 1.5 Pro suporta 2M tokens. Para inquéritos complexos (10+ volumes,
+            # interceptações, quebras de sigilo), o modelo precisa de 500k-700k tokens
+            # para correlacionar provas entre volumes. ~3M chars ≈ 750k tokens (PT-BR).
+            # Prioridade: quebras de sigilo e extratos primeiro (dados técnicos densos),
+            # depois depoimentos/oitivas, depois relatórios, por último demais peças.
+
+            PRIORIDADE_TIPO = {
+                "quebra_sigilo": 0,
+                "extrato_financeiro": 0,
+                "laudo_pericial": 1,
+                "termo_interrogatorio": 1,
+                "termo_depoimento": 2,
+                "termo_declaracao": 2,
+                "relatorio_policial": 3,
+                "informacao_investigacao": 3,
+                "registro_aditamento": 3,
+                "bo": 4,
+                "auto_apreensao": 4,
+                "oficio_expedido": 5,
+                "oficio_recebido": 5,
+            }
+
+            docs_ordenados = sorted(
+                todos_docs,
+                key=lambda d: PRIORIDADE_TIPO.get(d.tipo_peca or "outro", 6)
+            )
+
+            partes_contexto = []
             ultimo_aditamento = ""
+            total_chars = 0
+            LIMITE_CHARS = 2_800_000  # ~700k tokens PT-BR — limite operacional seguro
 
-            for d in todos_docs:
-                r = await service.obter_resumo_documento(db, inq_uuid, d.id)
-                texto = r or (d.texto_extraido[:2000] if d.texto_extraido else "")
-                if not texto:
+            service = SummaryService()
+            docs_sem_texto = []
+
+            for d in docs_ordenados:
+                # Usa texto extraído completo como fonte primária
+                texto_completo = d.texto_extraido or ""
+                # Fallback: resumo (quando OCR não gerou texto ou doc é muito curto)
+                if len(texto_completo) < 200:
+                    resumo = await service.obter_resumo_documento(db, inq_uuid, d.id)
+                    texto_completo = resumo or texto_completo
+
+                if not texto_completo:
+                    docs_sem_texto.append(d.nome_arquivo)
                     continue
+
                 tipo = d.tipo_peca or "outro"
-                resumos_partes.append(
-                    f"**{d.nome_arquivo}** (tipo: {tipo})\n{texto}"
-                )
-                # Captura o último aditamento (mais recente)
+                cabecalho = f"=== {d.nome_arquivo} (tipo: {tipo}) ==="
+                bloco = f"{cabecalho}\n{texto_completo}"
+
+                if total_chars + len(bloco) > LIMITE_CHARS:
+                    # Inclui o que couber do documento ao invés de descartar
+                    espaco = LIMITE_CHARS - total_chars
+                    if espaco > 500:
+                        partes_contexto.append(f"{cabecalho}\n{texto_completo[:espaco]}[...TRUNCADO]")
+                        total_chars = LIMITE_CHARS
+                    break
+
+                partes_contexto.append(bloco)
+                total_chars += len(bloco)
+
+                # Captura o último aditamento completo
                 if tipo == "registro_aditamento" or "aditamento" in (d.nome_arquivo or "").lower():
-                    ultimo_aditamento = d.texto_extraido[:3000] if d.texto_extraido else ""
+                    ultimo_aditamento = texto_completo[:5000]
 
-            if not resumos_partes:
-                raise Exception("sem_resumos_disponiveis")
+            if not partes_contexto:
+                raise Exception("sem_texto_extraido_nos_documentos")
 
-            resumos_str = "\n\n---\n\n".join(resumos_partes)
+            if docs_sem_texto:
+                logger.warning(f"[REL-INICIAL] {len(docs_sem_texto)} doc(s) sem texto: {', '.join(docs_sem_texto)}")
+
+            resumos_str = "\n\n---\n\n".join(partes_contexto)
+            logger.info(
+                f"[REL-INICIAL] Contexto: {total_chars:,} chars (~{total_chars//4:,} tokens) "
+                f"de {len(todos_docs)} docs ({len(partes_contexto)} incluídos)"
+            )
 
             # ── 3. Personagens já no banco ────────────────────────────────────
             pessoas_result = await db.execute(
@@ -150,11 +207,8 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
             ) or "Nenhum personagem identificado ainda."
 
             # ── 4. Chamar LLM Premium ─────────────────────────────────────────
-            # Gemini 1.5 Pro suporta 2M tokens — usar contexto completo dos autos.
-            # ~400k chars ≈ 100k tokens, bem dentro do limite de 2M.
-            logger.info(f"[REL-INICIAL] Contexto total dos autos: {len(resumos_str)} chars ({len(todos_docs)} docs)")
             prompt = PROMPT_RELATORIO_INICIAL.format(
-                resumos_documentos=resumos_str[:400000],
+                resumos_documentos=resumos_str,
                 ultimo_aditamento=ultimo_aditamento or "Não disponível.",
                 personagens_raw=personagens_raw,
             )
@@ -163,8 +217,8 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
             result_llm = await llm.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
                 tier="premium",
-                temperature=0.15,
-                max_tokens=6000,
+                temperature=0.1,
+                max_tokens=8000,
                 agente="RelatorioInicial",
             )
             relatorio_rascunho = result_llm["content"].strip()
@@ -235,7 +289,7 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
                 3: "coautor",
                 4: "vitima",
                 5: "testemunha",
-                6: "policial_investigador",
+                # Seção 6 removida — o inquérito é impessoal; servidores não são objeto de análise
             }
 
             # Constrói dicionário nome_normalizado → novo_papel
