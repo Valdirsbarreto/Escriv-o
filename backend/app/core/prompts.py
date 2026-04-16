@@ -405,7 +405,14 @@ REGRAS DE DESEMPATE (aplique nesta ordem)
 11. Se o mesmo documento menciona "Relatório Complementar" + "atende à promoção ministerial" → relatorio_policial
 12. Entre informacao_policial e relatorio_informacao: se há estrutura analítica, vínculos e síntese de inteligência → informacao_investigacao; se é mera prestação de informação → informacao_investigacao (mesmo bucket)
 
-Responda APENAS com o nome exato da espécie (minúsculas, conforme listado), sem nenhum outro texto.
+Responda EXCLUSIVAMENTE com um objeto JSON no formato abaixo — nenhum outro texto, sem markdown, sem crases:
+
+{{"macro_categoria": "<id do macro grupo>", "classe_documental": "<espécie exata conforme listado>", "confidence": "<alta|media|baixa>", "justificativa": "<1 frase: evidência principal usada — título, cargo do signatário ou verbo nuclear>"}}
+
+Política de confiança:
+  alta  → título/cabeçalho claro + signatário compatível + verbo nuclear compatível
+  media → sem título claro, mas estrutura + emissor compatíveis permitem inferência
+  baixa → fragmento sem cabeçalho, classificação apenas por contexto parcial
 
 Documento para analisar:
 {texto}

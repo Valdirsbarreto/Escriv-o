@@ -29,11 +29,14 @@ class ExtractorService:
 
     async def classificar_documento(self, texto: str) -> str:
         """
-        Analisa o texto de um documento e retorna o tipo da peça.
-        Usa o modelo Econômico.
+        Classifica o documento e retorna o tipo da peça (classe_documental).
+        O LLM responde em JSON estruturado com macro_categoria, classe_documental,
+        confidence e justificativa — usado para log/auditoria.
+        Retorna a string classe_documental para manter compatibilidade.
         """
-        # Uma boa classificação normalmente usa as 2 primeiras páginas.
-        # Limitaremos o texto a cerca de 15.000 caracteres (aprox 3k tokens)
+        import json as _json
+        # As duas primeiras páginas são suficientes para classificação.
+        # 15.000 chars ≈ 3k tokens — suficiente para cabeçalho + abertura + assinatura
         texto_curto = texto[:15000]
 
         prompt = SYSTEM_PROMPT_CLASSIFICADOR_PECA.format(texto=texto_curto)
@@ -42,11 +45,22 @@ class ExtractorService:
             result = await self.llm_service.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
                 tier="triagem",
-                temperature=0.0,  # Queremos precisão/determinismo
-                max_tokens=50,
+                temperature=0.0,
+                max_tokens=300,  # JSON com justificativa cabe em ~150 tokens
+                json_mode=True,
                 agente="Classificacao",
             )
-            categoria = result["content"].strip().lower()
+            raw = result["content"].strip()
+            dados = _json.loads(raw)
+            categoria = dados.get("classe_documental", "outro").strip().lower()
+            confidence = dados.get("confidence", "media")
+            justificativa = dados.get("justificativa", "")
+            macro = dados.get("macro_categoria", "")
+
+            nivel = "warning" if confidence == "baixa" else "info"
+            getattr(logger, nivel)(
+                f"[CLASSIFICACAO] {categoria} | {macro} | confiança={confidence} | {justificativa}"
+            )
             return categoria
         except Exception as e:
             logger.error(f"[EXTRATOR] Falha ao classificar documento: {e}")
