@@ -176,7 +176,31 @@ def gerar_relatorio_complementar_task(self, inquerito_id: str, forcar: bool = Fa
                 f"({len(partes_contexto)} incluídos)"
             )
 
-            # ── 4. Personagens ────────────────────────────────────────────────
+            # ── 4a. Isolar Cota Ministerial como campo dedicado ───────────────
+            cota_doc = None
+            for d in docs_ordenados:
+                if d.tipo_peca in ("oficio_recebido", "oficio"):
+                    cota_doc = d
+                    break
+
+            if cota_doc:
+                cota_texto = cota_doc.texto_extraido or ""
+                if len(cota_texto) < 200:
+                    cota_resumo = await service.obter_resumo_documento(db, inq_uuid, cota_doc.id)
+                    cota_texto = cota_resumo or cota_texto
+                cota_ministerial_bloco = (
+                    f"Arquivo: {cota_doc.nome_arquivo} | tipo: {cota_doc.tipo_peca}\n"
+                    f"--- início do documento ---\n{cota_texto}\n--- fim do documento ---"
+                )
+                logger.info(f"[REL-COMPLEMENTAR] Cota Ministerial isolada: {cota_doc.nome_arquivo} ({len(cota_texto):,} chars)")
+            else:
+                cota_ministerial_bloco = (
+                    "[COTA MINISTERIAL NÃO LOCALIZADA NOS AUTOS INDEXADOS — "
+                    "verificar tipo_peca do documento original: deve ser 'oficio_recebido']"
+                )
+                logger.warning(f"[REL-COMPLEMENTAR] Cota Ministerial não encontrada nos docs indexados")
+
+            # ── 4b. Personagens ───────────────────────────────────────────────
             pessoas_result = await db.execute(
                 select(Pessoa).where(Pessoa.inquerito_id == inq_uuid)
             )
@@ -186,11 +210,22 @@ def gerar_relatorio_complementar_task(self, inquerito_id: str, forcar: bool = Fa
                 for p in pessoas
             ) or "Nenhum personagem identificado."
 
+            # Lista separada com apenas investigados/indiciados para individualização
+            tipos_investigado = {"investigado", "indiciado", "suspeito", "coautor", "suspeito_principal"}
+            lista_indiciados = "\n".join(
+                f"- {p.nome} (CPF: {p.cpf or 'não informado'})"
+                for p in pessoas
+                if (p.tipo_pessoa or "").lower() in tipos_investigado
+            ) or "Nenhum investigado/indiciado classificado automaticamente — verificar personagens nos autos."
+            logger.info(f"[REL-COMPLEMENTAR] Indiciados para individualização: {lista_indiciados.count(chr(10)) + 1} pessoas")
+
             # ── 5. Chamar LLM Premium ─────────────────────────────────────────
             prompt = PROMPT_RELATORIO_COMPLEMENTAR.format(
                 relatorio_inicial=relatorio_inicial_texto[:60_000],
+                cota_ministerial_bloco=cota_ministerial_bloco,
                 resumos_documentos=resumos_str,
                 personagens_raw=personagens_raw,
+                lista_indiciados=lista_indiciados,
             )
 
             llm = LLMService()
