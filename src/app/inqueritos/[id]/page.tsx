@@ -681,6 +681,54 @@ export default function InqueritoDetalhePage() {
     }
   };
 
+  const handleExportarDocGeradoPDF = async (doc: any) => {
+    let conteudo = doc.conteudo ?? "";
+    if (!conteudo && inqId) {
+      try {
+        const r = await getDocGerado(inqId, doc.id);
+        conteudo = r.data?.conteudo ?? "";
+      } catch {}
+    }
+    if (!conteudo) { alert("Conteúdo não disponível para exportação."); return; }
+
+    const tipoLabel = TIPO_GERADO_LABEL[doc.tipo] || doc.tipo || "—";
+    const numIp = inquerito?.numero ?? "";
+    const data = new Date(doc.created_at).toLocaleDateString("pt-BR");
+
+    // Detecta se é HTML ou markdown/texto plano
+    const isHtml = /<[a-zA-Z][^>]*>/.test(conteudo);
+    const corpo = isHtml
+      ? conteudo
+      : `<pre style="white-space:pre-wrap;word-wrap:break-word;font-family:inherit;font-size:11.5pt">${conteudo.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</pre>`;
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <title>${doc.titulo || tipoLabel}</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 12pt; line-height: 1.7; margin: 2.5cm; color: #111; }
+    h1 { font-size: 13pt; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #999; padding-bottom: 6px; margin-bottom: 4px; }
+    .meta { font-size: 9.5pt; color: #555; margin-bottom: 1.2cm; }
+    @page { margin: 2cm; }
+    @media print { body { margin: 0; } }
+  </style>
+</head>
+<body>
+  <h1>${doc.titulo || tipoLabel}</h1>
+  <div class="meta">${[numIp, tipoLabel, data].filter(Boolean).join("&nbsp;&nbsp;|&nbsp;&nbsp;")}</div>
+  ${corpo}
+</body>
+</html>`;
+
+    const win = window.open("", "_blank");
+    if (!win) { alert("Permita popups neste site para exportar o PDF."); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 400);
+  };
+
   const handleAbrirPeca = async (peca: any) => {
     // Se já temos conteudo_texto no objeto, usa direto; senão busca
     if (peca.conteudo_texto) {
@@ -1146,6 +1194,9 @@ export default function InqueritoDetalhePage() {
                       <button onClick={() => handleAbrirDocGerado(doc)} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-blue-400 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors">
                         <Eye size={11} /> Ver
                       </button>
+                      <button onClick={() => handleExportarDocGeradoPDF(doc)} className="p-1.5 rounded text-zinc-600 hover:text-red-400 transition-colors" title="Exportar como PDF">
+                        <FileText size={13} />
+                      </button>
                       <button onClick={() => handleAbrirEditDocGerado(doc)} className="p-1.5 rounded text-zinc-600 hover:text-amber-400 transition-colors" title="Editar documento">
                         <Pencil size={13} />
                       </button>
@@ -1265,11 +1316,11 @@ export default function InqueritoDetalhePage() {
                         {TIPO_PECA_LABEL[peca.tipo] || peca.tipo}
                       </span>
                       <button
-                        onClick={() => handleExportarPecaPDF(peca)}
-                        title="Exportar como PDF"
-                        className="flex items-center gap-1 text-xs text-zinc-400 hover:text-red-400 px-2 py-1 rounded border border-zinc-700 hover:border-red-500/40 transition-colors"
+                        onClick={() => handleAbrirPecaNoPDF(peca)}
+                        title="Abrir PDF original"
+                        className="flex items-center gap-1 text-xs text-zinc-400 hover:text-blue-400 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors"
                       >
-                        <FileText size={11} /> PDF
+                        <Eye size={11} /> PDF
                       </button>
                       <button
                         onClick={() => handleAbrirPeca(peca)}
@@ -1496,11 +1547,11 @@ export default function InqueritoDetalhePage() {
                               </div>
                               <div className="flex items-center gap-1 shrink-0 ml-2">
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); handleExportarPecaPDF(peca); }}
-                                  title="Exportar como PDF"
-                                  className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-red-400 px-2 py-1 rounded border border-zinc-800 hover:border-red-500/40 transition-colors"
+                                  onClick={(e) => { e.stopPropagation(); handleAbrirPecaNoPDF(peca); }}
+                                  title="Abrir PDF original"
+                                  className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-blue-400 px-2 py-1 rounded border border-zinc-800 hover:border-blue-500/40 transition-colors"
                                 >
-                                  <FileText size={10}/> PDF
+                                  <Eye size={10}/> PDF
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleAbrirPeca(peca); }}
