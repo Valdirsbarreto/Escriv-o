@@ -314,6 +314,15 @@ export const osintBuscaWeb = async (inqueritoId: string, pessoaId: string) => {
 
 // ── Agente Sherlock ────────────────────────────────────────────────────────────
 
+export const uploadPorUrl = async (inqueritoId: string, url: string, nome_arquivo: string) => {
+  const response = await api.post(
+    `/inqueritos/${inqueritoId}/upload-url`,
+    { url, nome_arquivo },
+    { timeout: 90000 },
+  );
+  return response.data;
+};
+
 export const sherlockAnalise = async (inqueritoId: string, forcar = false) => {
   const response = await api.post(
     `/agentes/sherlock/${inqueritoId}?forcar=${forcar}`,

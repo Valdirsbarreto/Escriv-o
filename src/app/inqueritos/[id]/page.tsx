@@ -7,7 +7,8 @@ import dynamic from "next/dynamic";
 import { useAppStore } from "@/store/app";
 
 const PDFViewer = dynamic(() => import("@/components/PDFViewer"), { ssr: false });
-import { api, getDocsGerados, getDocGerado, deleteDocGerado, updateDocGerado, getPecasExtraidas, getPecaExtraida, reextrairPecas, osintConsultasInquerito, sherlockAnalise as sherlockApi } from "@/lib/api";
+import { api, getDocsGerados, getDocGerado, deleteDocGerado, updateDocGerado, getPecasExtraidas, getPecaExtraida, reextrairPecas, osintConsultasInquerito, sherlockAnalise as sherlockApi, uploadPorUrl } from "@/lib/api";
+import { OneDrivePicker } from "@/components/OneDrivePicker";
 import { PainelInvestigacao } from "@/components/osint/PainelInvestigacao";
 import { deleteInquerito } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -465,6 +466,19 @@ export default function InqueritoDetalhePage() {
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleOneDriveFile = async (file: { nome: string; downloadUrl: string }) => {
+    setUploading(true);
+    try {
+      await uploadPorUrl(inqId, file.downloadUrl, file.nome);
+      await fetchDados();
+    } catch (e: any) {
+      const detalhe = e?.response?.data?.detail || e?.message || "Erro desconhecido";
+      alert(`Erro ao importar do OneDrive: ${detalhe}`);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -1124,6 +1138,7 @@ export default function InqueritoDetalhePage() {
             )}
             {uploading ? "Enviando..." : "Anexar Documento"}
           </Button>
+          <OneDrivePicker onFileSelected={handleOneDriveFile} disabled={uploading} />
           <input
             type="file"
             ref={fileInputRef}

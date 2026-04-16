@@ -400,6 +400,101 @@ async def upload_documento(
     )
 
 
+@router.post("/{inquerito_id}/upload-url", response_model=UploadResponse)
+async def upload_documento_por_url(
+    inquerito_id: uuid.UUID,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Baixa um arquivo a partir de uma URL remota (ex: OneDrive download URL)
+    e o processa como se fosse um upload normal.
+    Body: { "url": "https://...", "nome_arquivo": "doc.pdf" }
+    """
+    import httpx
+
+    url = body.get("url", "").strip()
+    nome_arquivo = body.get("nome_arquivo", "documento.pdf").strip()
+
+    if not url:
+        raise HTTPException(status_code=400, detail="URL não informada")
+
+    # Verificar inquérito
+    inquerito = await db.get(Inquerito, inquerito_id)
+    if not inquerito:
+        raise HTTPException(status_code=404, detail="Inquérito não encontrado")
+
+    # Validar extensão
+    ext = nome_arquivo.lower().rsplit(".", 1)[-1] if "." in nome_arquivo else ""
+    if ext not in ("pdf", "png", "jpg", "jpeg", "tiff"):
+        raise HTTPException(status_code=400, detail=f"Formato .{ext} não suportado. Use PDF, PNG, JPG ou TIFF.")
+
+    # Baixar arquivo da URL remota
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
+            resp = await client.get(url)
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=422, detail=f"Não foi possível baixar o arquivo (HTTP {resp.status_code})")
+            content = resp.content
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Erro ao baixar arquivo da URL: {str(e)[:200]}")
+
+    if len(content) < 100:
+        raise HTTPException(status_code=422, detail="Arquivo baixado está vazio ou inválido")
+
+    # Mesmo fluxo do upload normal
+    file_hash = hashlib.sha256(content).hexdigest()
+    content_type = f"application/{ext}" if ext == "pdf" else f"image/{ext}"
+
+    storage = StorageService()
+    storage_path = f"inqueritos/{inquerito_id}/{nome_arquivo}"
+    await storage.upload_file(content, storage_path, content_type)
+
+    documento = Documento(
+        inquerito_id=inquerito_id,
+        nome_arquivo=nome_arquivo,
+        hash_arquivo=file_hash,
+        storage_path=storage_path,
+        status_processamento="pendente",
+    )
+    db.add(documento)
+    await db.flush()
+    await db.refresh(documento)
+
+    inquerito.total_documentos += 1
+    if inquerito.estado_atual == EstadoInquerito.RECEBIDO.value:
+        estado_anterior = inquerito.estado_atual
+        inquerito.estado_atual = EstadoInquerito.INDEXANDO.value
+        db.add(TransicaoEstado(
+            inquerito_id=inquerito.id,
+            estado_anterior=estado_anterior,
+            estado_novo=EstadoInquerito.INDEXANDO.value,
+            motivo="Upload via OneDrive iniciou indexação",
+        ))
+
+    await db.commit()
+    await db.refresh(documento)
+
+    task_id = None
+    try:
+        from app.workers.ingestion import ingest_document
+        result = ingest_document.delay(str(documento.id), str(inquerito_id))
+        task_id = result.id
+    except Exception as e:
+        logger.error(f"[INGESTÃO] Falha ao disparar ingestora ({e})")
+        raise HTTPException(status_code=500, detail=f"Não foi possível iniciar o processamento: {str(e)}")
+
+    return UploadResponse(
+        documento_id=documento.id,
+        nome_arquivo=nome_arquivo,
+        status="processando" if task_id else "enfileirado",
+        mensagem="Arquivo baixado do OneDrive e enviado para processamento.",
+        task_id=task_id,
+    )
+
+
 @router.delete("/{inquerito_id}/documentos/{documento_id}", status_code=204)
 async def excluir_documento(
     inquerito_id: uuid.UUID,
