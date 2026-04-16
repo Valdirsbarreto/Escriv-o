@@ -104,15 +104,41 @@ async def coletar_vercel(mes: str, cotacao: float) -> Optional[BillingResult]:
 # ── Railway ────────────────────────────────────────────────────────────────────
 
 RAILWAY_GQL = "https://backboard.railway.app/graphql/v2"
-# Consulta uso estimado por projeto do usuário atual
-RAILWAY_QUERY = """
+
+# Railway GraphQL v2 — o campo de custo fica em
+# me.teams.edges.node.subscription.usage ou me.subscription.usage,
+# dependendo do plano (Hobby vs Team).
+# Tentamos as duas formas em sequência.
+RAILWAY_QUERY_TEAM = """
 query {
   me {
-    projects {
+    teams {
       edges {
         node {
           name
-          estimatedUsage
+          subscription {
+            status
+            usage {
+              estimated {
+                total
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+RAILWAY_QUERY_HOBBY = """
+query {
+  me {
+    subscription {
+      status
+      usage {
+        estimated {
+          total
         }
       }
     }
@@ -123,8 +149,9 @@ query {
 
 async def coletar_railway(mes: str, cotacao: float) -> Optional[BillingResult]:
     """
-    Coleta custo estimado via GraphQL público da Railway.
-    Só disponível para o período de faturamento corrente — meses históricos retornam None.
+    Coleta custo estimado da Railway via GraphQL v2.
+    Tenta plano Team (me.teams) e depois plano Hobby (me.subscription).
+    Só disponível para o período de faturamento corrente.
     """
     from app.core.config import settings
 
@@ -133,50 +160,73 @@ async def coletar_railway(mes: str, cotacao: float) -> Optional[BillingResult]:
         logger.info("[BILLING-Railway] RAILWAY_TOKEN não configurado — skip")
         return None
 
-    # Railway só entrega o período corrente — verificar se o mês solicitado é o atual
     mes_atual = datetime.utcnow().strftime("%Y-%m")
     if mes != mes_atual:
         logger.info(f"[BILLING-Railway] Railway não suporta consulta histórica (solicitado: {mes})")
         return None
 
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                RAILWAY_GQL,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
-                },
-                json={"query": RAILWAY_QUERY},
-            )
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
 
-        if resp.status_code >= 400:
-            logger.warning(f"[BILLING-Railway] HTTP {resp.status_code}: {resp.text[:200]}")
+    async def _post(query: str) -> Optional[dict]:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(RAILWAY_GQL, headers=headers, json={"query": query})
+            if resp.status_code >= 400:
+                logger.debug(f"[BILLING-Railway] HTTP {resp.status_code}")
+                return None
+            data = resp.json()
+            if data.get("errors"):
+                logger.debug(f"[BILLING-Railway] GraphQL errors: {data['errors']}")
+                return None
+            return data.get("data")
+        except Exception as e:
+            logger.debug(f"[BILLING-Railway] _post error: {e}")
             return None
 
-        data = resp.json()
-        edges = (data.get("data") or {}).get("me", {}).get("projects", {}).get("edges", [])
-
+    # ── Tentativa 1: plano Team ────────────────────────────────────────────────
+    data = await _post(RAILWAY_QUERY_TEAM)
+    if data:
+        edges = (data.get("me") or {}).get("teams", {}).get("edges", [])
         total_usd = 0.0
-        projetos = []
+        equipes = []
         for edge in edges:
             node = edge.get("node") or {}
-            custo = float(node.get("estimatedUsage") or 0)
+            usage = ((node.get("subscription") or {}).get("usage") or {})
+            custo = float((usage.get("estimated") or {}).get("total") or 0)
             total_usd += custo
-            projetos.append({"nome": node.get("name"), "estimatedUsage": custo})
+            equipes.append({"nome": node.get("name"), "estimated_usd": custo})
+        if equipes:
+            logger.info(f"[BILLING-Railway] Team plan — {len(equipes)} equipes, US${total_usd:.4f}")
+            return BillingResult(
+                custo_usd=Decimal(str(round(total_usd, 4))),
+                custo_brl=Decimal(str(round(total_usd * cotacao, 2))),
+                source="official_api",
+                confidence="medium",
+                raw_payload={"equipes": equipes, "total_usd": total_usd},
+                observacao=f"Railway GraphQL (team) — {len(equipes)} equipes",
+            )
 
+    # ── Tentativa 2: plano Hobby ───────────────────────────────────────────────
+    data = await _post(RAILWAY_QUERY_HOBBY)
+    if data:
+        sub = (data.get("me") or {}).get("subscription") or {}
+        usage = (sub.get("usage") or {})
+        total_usd = float((usage.get("estimated") or {}).get("total") or 0)
+        logger.info(f"[BILLING-Railway] Hobby plan — US${total_usd:.4f}")
         return BillingResult(
             custo_usd=Decimal(str(round(total_usd, 4))),
             custo_brl=Decimal(str(round(total_usd * cotacao, 2))),
             source="official_api",
             confidence="medium",
-            raw_payload={"projetos": projetos, "total_usd": total_usd},
-            observacao=f"Railway GraphQL — {len(projetos)} projetos",
+            raw_payload={"subscription": sub.get("status"), "estimated_usd": total_usd},
+            observacao=f"Railway GraphQL (hobby) — status: {sub.get('status', '?')}",
         )
 
-    except Exception as e:
-        logger.warning(f"[BILLING-Railway] Erro: {e}", exc_info=True)
-        return None
+    logger.warning("[BILLING-Railway] Nenhuma query GraphQL retornou dados de custo — Railway exige entrada manual")
+    return None
 
 
 # ── Supabase (estimativa) ──────────────────────────────────────────────────────
