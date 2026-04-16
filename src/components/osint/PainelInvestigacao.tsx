@@ -9,7 +9,7 @@ import {
   AlertTriangle, CheckCircle, XCircle, MinusCircle,
   ExternalLink, Play, UserSearch, Globe, Scale, Newspaper, FileText,
 } from "lucide-react";
-import { osintSugestao, osintLote, osintAnalisePreliminar, osintBuscaWeb } from "@/lib/api";
+import { osintSugestao, osintLote, osintAnalisePreliminar, osintBuscaWeb, osintGerarRelatorioWeb } from "@/lib/api";
 import { Sparkles, Zap } from "lucide-react";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -109,6 +109,8 @@ function OsintWebPanel({ inqueritoId, pessoaId }: { inqueritoId: string; pessoaI
   const [loading, setLoading] = useState(false);
   const [erroMsg, setErroMsg] = useState<string | null>(null);
   const [aberto, setAberto] = useState(false);
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false);
+  const [relatorioOk, setRelatorioOk] = useState(false);
 
   const handleBuscar = async () => {
     if (dados) { setAberto(v => !v); return; }
@@ -263,7 +265,35 @@ function OsintWebPanel({ inqueritoId, pessoaId }: { inqueritoId: string; pessoaI
                 </div>
               )}
 
-              <p className="text-[9px] text-zinc-700 text-right">via serper.dev</p>
+              {/* Botão gerar relatório formal */}
+              <div className="flex items-center justify-between pt-1 border-t border-zinc-800 mt-1">
+                <p className="text-[9px] text-zinc-700">via serper.dev</p>
+                {relatorioOk ? (
+                  <span className="text-[9px] text-green-500 flex items-center gap-1">
+                    <CheckCircle size={9} /> Relatório salvo nos documentos
+                  </span>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      setGerandoRelatorio(true);
+                      try {
+                        await osintGerarRelatorioWeb(inqueritoId, pessoaId);
+                        setRelatorioOk(true);
+                      } catch (e: any) {
+                        alert(e?.response?.data?.detail || "Erro ao gerar relatório.");
+                      } finally {
+                        setGerandoRelatorio(false);
+                      }
+                    }}
+                    disabled={gerandoRelatorio}
+                    className="flex items-center gap-1 text-[10px] text-sky-400 hover:text-sky-300 disabled:opacity-50 transition-colors"
+                  >
+                    {gerandoRelatorio
+                      ? <><Loader2 size={9} className="animate-spin" /> Gerando...</>
+                      : <><FileText size={9} /> Gerar Relatório Formal</>}
+                  </button>
+                )}
+              </div>
             </>
           ) : null}
         </div>

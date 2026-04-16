@@ -17,6 +17,8 @@ from app.core.database import get_db
 from app.core.config import settings
 from app.models.consumo_api import ConsumoApi
 from app.models.custo_externo import CustoExterno
+from app.models.consulta_externa import ConsultaExterna
+from app.models.inquerito import Inquerito
 
 router = APIRouter(prefix="/consumo", tags=["Orçamento"])
 
@@ -298,4 +300,86 @@ async def set_config_orcamento(body: OrcamentoConfig):
         "budget_brl": settings.BUDGET_BRL,
         "budget_alert_brl": settings.BUDGET_ALERT_BRL,
         "cotacao_dolar": settings.COTACAO_DOLAR,
+    }
+
+
+# ── OSINT por Inquérito ────────────────────────────────────────────────────────
+
+@router.get("/osint-por-inquerito")
+async def osint_por_inquerito(db: AsyncSession = Depends(get_db)):
+    """
+    Agrupa o custo OSINT (direct.data) por inquérito.
+    Retorna ranking dos inquéritos mais caros em consultas externas.
+    """
+    result = await db.execute(
+        select(
+            ConsultaExterna.inquerito_id,
+            func.sum(ConsultaExterna.custo_estimado).label("custo_total"),
+            func.count(ConsultaExterna.id).label("total_consultas"),
+        )
+        .group_by(ConsultaExterna.inquerito_id)
+        .order_by(func.sum(ConsultaExterna.custo_estimado).desc())
+        .limit(10)
+    )
+    rows = result.all()
+
+    # Busca os números dos inquéritos
+    inq_ids = [r.inquerito_id for r in rows]
+    inq_result = await db.execute(
+        select(Inquerito.id, Inquerito.numero).where(Inquerito.id.in_(inq_ids))
+    )
+    inq_map = {str(r.id): r.numero for r in inq_result.all()}
+
+    return [
+        {
+            "inquerito_id": str(r.inquerito_id),
+            "numero": inq_map.get(str(r.inquerito_id), "—"),
+            "custo_brl": round(float(r.custo_total or 0), 2),
+            "total_consultas": int(r.total_consultas),
+        }
+        for r in rows
+    ]
+
+
+@router.get("/projecao")
+async def projecao_mensal(db: AsyncSession = Depends(get_db)):
+    """
+    Projeta o gasto Gemini até o final do mês com base no ritmo dos últimos 7 dias.
+    """
+    hoje = datetime.utcnow()
+    inicio_mes = hoje.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    sete_dias_atras = hoje - timedelta(days=7)
+
+    # Gasto total do mês
+    res_mes = await db.execute(
+        select(func.coalesce(func.sum(ConsumoApi.custo_brl), 0))
+        .where(ConsumoApi.timestamp >= inicio_mes)
+    )
+    gasto_mes = float(res_mes.scalar())
+
+    # Gasto dos últimos 7 dias
+    res_7d = await db.execute(
+        select(func.coalesce(func.sum(ConsumoApi.custo_brl), 0))
+        .where(ConsumoApi.timestamp >= sete_dias_atras)
+    )
+    gasto_7d = float(res_7d.scalar())
+
+    # Dias restantes no mês
+    import calendar
+    _, dias_no_mes = calendar.monthrange(hoje.year, hoje.month)
+    dias_passados = hoje.day
+    dias_restantes = dias_no_mes - dias_passados
+
+    # Ritmo diário (média dos últimos 7 dias)
+    ritmo_diario = gasto_7d / 7 if gasto_7d > 0 else 0
+    projecao = gasto_mes + (ritmo_diario * dias_restantes)
+
+    return {
+        "gasto_ate_hoje": round(gasto_mes, 2),
+        "ritmo_diario_brl": round(ritmo_diario, 4),
+        "dias_restantes": dias_restantes,
+        "projecao_fim_mes": round(projecao, 2),
+        "budget_brl": settings.BUDGET_BRL,
+        "percentual_projetado": round((projecao / settings.BUDGET_BRL * 100) if settings.BUDGET_BRL > 0 else 0, 1),
+        "alerta": projecao >= settings.BUDGET_ALERT_BRL,
     }

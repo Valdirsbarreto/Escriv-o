@@ -5,11 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   DollarSign, Zap, BarChart2, RefreshCw, AlertTriangle, CheckCircle,
-  Pencil, Check, X, Settings, Globe, Database, Server, Search, Bot,
+  Pencil, Check, X, Settings, Globe, Database, Server, Search, Bot, TrendingUp,
 } from "lucide-react";
 import {
   getConsumoSaldo, getConsumoRanking, getConsumoHistorico, getConsumoModelos,
   getConsumoExternos, salvarCustoExterno, getConsumoConfig, salvarConsumoConfig,
+  getConsumoOsintPorInquerito, getConsumoProjecao,
 } from "@/lib/api";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -137,13 +138,32 @@ function CustoExternoCard({
 
 // ── Página principal ──────────────────────────────────────────────────────────
 
+// Gera lista de meses disponíveis (últimos 6)
+function mesesDisponiveis(): { value: string; label: string }[] {
+  const meses = [];
+  const agora = new Date();
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(agora.getFullYear(), agora.getMonth() - i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleString("pt-BR", { month: "long", year: "numeric" });
+    meses.push({ value, label });
+  }
+  return meses;
+}
+
 export default function AdminPage() {
+  const [mesSelecionado, setMesSelecionado] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
   const [saldo, setSaldo]       = useState<any>(null);
   const [ranking, setRanking]   = useState<any[]>([]);
   const [historico, setHistorico] = useState<any[]>([]);
   const [modelos, setModelos]   = useState<any[]>([]);
   const [externos, setExternos] = useState<any>(null);
   const [config, setConfig]     = useState<any>(null);
+  const [osintInqueritos, setOsintInqueritos] = useState<any[]>([]);
+  const [projecao, setProjecao] = useState<any>(null);
   const [loading, setLoading]   = useState(true);
 
   // Editor de config
@@ -153,16 +173,19 @@ export default function AdminPage() {
   const [cfgCotacao, setCfgCotacao]         = useState("");
   const [salvandoConfig, setSalvandoConfig] = useState(false);
 
-  async function carregar() {
+  async function carregar(mes?: string) {
     setLoading(true);
+    const mesRef = mes || mesSelecionado;
     try {
-      const [s, r, h, m, e, c] = await Promise.all([
+      const [s, r, h, m, e, c, o, p] = await Promise.all([
         getConsumoSaldo(),
         getConsumoRanking(),
         getConsumoHistorico(30),
         getConsumoModelos(),
-        getConsumoExternos(),
+        getConsumoExternos(mesRef),
         getConsumoConfig(),
+        getConsumoOsintPorInquerito(),
+        getConsumoProjecao(),
       ]);
       setSaldo(s);
       setRanking(r);
@@ -170,6 +193,8 @@ export default function AdminPage() {
       setModelos(m);
       setExternos(e);
       setConfig(c);
+      setOsintInqueritos(o);
+      setProjecao(p);
       setCfgBudget(String(c.budget_brl));
       setCfgAlerta(String(c.budget_alert_brl));
       setCfgCotacao(String(c.cotacao_dolar));
@@ -182,10 +207,15 @@ export default function AdminPage() {
 
   useEffect(() => { carregar(); }, []);
 
-  const handleSalvarCustoExterno = async (servico: string) => {
+  const handleMesChange = (mes: string) => {
+    setMesSelecionado(mes);
+    carregar(mes);
+  };
+
+  const handleSalvarCustoExterno = (servico: string) => {
     return async (usd: number, brl: number, obs: string) => {
-      await salvarCustoExterno(servico, usd, brl, obs || undefined);
-      const e = await getConsumoExternos();
+      await salvarCustoExterno(servico, usd, brl, obs || undefined, mesSelecionado);
+      const e = await getConsumoExternos(mesSelecionado);
       setExternos(e);
     };
   };
@@ -225,15 +255,26 @@ export default function AdminPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Administrativo</h1>
-          <p className="text-zinc-400 mt-1">Consumo de API e orçamento — mês corrente</p>
+          <p className="text-zinc-400 mt-1">Consumo de API e orçamento</p>
         </div>
-        <button
-          onClick={carregar}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sm text-zinc-300 transition-colors"
-        >
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          Atualizar
-        </button>
+        <div className="flex items-center gap-3">
+          <select
+            value={mesSelecionado}
+            onChange={e => handleMesChange(e.target.value)}
+            className="text-sm bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-300 focus:outline-none focus:border-blue-500"
+          >
+            {mesesDisponiveis().map(m => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => carregar()}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sm text-zinc-300 transition-colors"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            Atualizar
+          </button>
+        </div>
       </div>
 
       {loading && !saldo ? (
@@ -297,11 +338,56 @@ export default function AdminPage() {
             </Card>
           </div>
 
+          {/* ── Projeção Mensal ───────────────────────────────────────────── */}
+          {projecao && (
+            <Card className={`border ${projecao.alerta ? "bg-yellow-950/30 border-yellow-800/40" : "bg-zinc-900 border-zinc-800"}`}>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div className="flex items-center gap-2">
+                  <TrendingUp size={14} className={projecao.alerta ? "text-yellow-400" : "text-zinc-500"} />
+                  <CardTitle className="text-sm font-semibold">Projeção para o Fim do Mês</CardTitle>
+                </div>
+                {projecao.alerta && (
+                  <Badge variant="outline" className="text-[10px] border-yellow-700/40 text-yellow-400">alerta</Badge>
+                )}
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <p className="text-zinc-500 text-xs mb-1">Gasto até hoje</p>
+                    <p className="text-white font-semibold">R$ {projecao.gasto_ate_hoje.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-zinc-500 text-xs mb-1">Ritmo diário (7d)</p>
+                    <p className="text-zinc-300 font-semibold">R$ {projecao.ritmo_diario_brl.toFixed(4)}</p>
+                  </div>
+                  <div>
+                    <p className="text-zinc-500 text-xs mb-1">Dias restantes</p>
+                    <p className="text-zinc-300 font-semibold">{projecao.dias_restantes} dias</p>
+                  </div>
+                  <div>
+                    <p className="text-zinc-500 text-xs mb-1">Projeção fim do mês</p>
+                    <p className={`font-bold text-lg ${projecao.alerta ? "text-yellow-400" : "text-green-400"}`}>
+                      R$ {projecao.projecao_fim_mes.toFixed(2)}
+                    </p>
+                    <p className="text-xs text-zinc-500">{projecao.percentual_projetado.toFixed(1)}% do limite</p>
+                  </div>
+                </div>
+                {/* barra de progresso projetado */}
+                <div className="mt-3 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${projecao.alerta ? "bg-yellow-400" : "bg-green-500"}`}
+                    style={{ width: `${Math.min(100, projecao.percentual_projetado)}%` }}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* ── Custos por Serviço Externo ────────────────────────────────── */}
           {externos && (
             <Card className="bg-zinc-900 border-zinc-800">
               <CardHeader className="flex items-center justify-between">
-                <CardTitle className="text-sm font-semibold">Custos por Serviço — {externos.mes}</CardTitle>
+                <CardTitle className="text-sm font-semibold">Custos por Serviço — {mesSelecionado}</CardTitle>
                 <span className="text-xs text-zinc-500">clique em ✏️ para editar</span>
               </CardHeader>
               <CardContent className="space-y-0 divide-y divide-zinc-800/0">
@@ -424,6 +510,37 @@ export default function AdminPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* ── OSINT por Inquérito ───────────────────────────────────────── */}
+          {osintInqueritos.length > 0 && (
+            <Card className="bg-zinc-900 border-zinc-800">
+              <CardHeader>
+                <CardTitle className="text-sm font-semibold">Custo OSINT por Inquérito (direct.data)</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {(() => {
+                  const maxOsint = Math.max(...osintInqueritos.map(o => o.custo_brl), 0.001);
+                  return osintInqueritos.map((o, i) => (
+                    <div key={i} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-zinc-500 font-mono w-5 text-right">{i + 1}.</span>
+                          <span className="text-zinc-200 font-medium">{o.numero}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-zinc-400 text-xs">
+                          <span>{o.total_consultas} consultas</span>
+                          <span className="text-white font-medium">R$ {o.custo_brl.toFixed(2)}</span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-sky-500 rounded-full" style={{ width: `${pct(o.custo_brl, maxOsint)}%` }} />
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Configurações de orçamento */}
           {config && (

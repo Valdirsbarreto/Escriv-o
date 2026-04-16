@@ -163,6 +163,16 @@ export const salvarConsumoConfig = async (budget_brl: number, budget_alert_brl: 
   return response.data;
 };
 
+export const getConsumoOsintPorInquerito = async () => {
+  const response = await api.get("/consumo/osint-por-inquerito");
+  return response.data;
+};
+
+export const getConsumoProjecao = async () => {
+  const response = await api.get("/consumo/projecao");
+  return response.data;
+};
+
 // ── Documentos Gerados ─────────────────────────────────────────────────────
 export const getDocsGerados = (inqId: string) =>
   api.get(`/inqueritos/${inqId}/docs-gerados`);
@@ -268,6 +278,15 @@ export const osintAnalisePreliminar = async (
   const response = await api.get(
     `/agentes/osint/preliminar/${inqueritoId}/${pessoaId}`,
     { params: { aprimorar }, timeout: 45000 }
+  );
+  return response.data;
+};
+
+export const osintGerarRelatorioWeb = async (inqueritoId: string, pessoaId: string) => {
+  const response = await api.post(
+    `/agentes/osint/web/${inqueritoId}/${pessoaId}/relatorio`,
+    {},
+    { timeout: 120000 },
   );
   return response.data;
 };

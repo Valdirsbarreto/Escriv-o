@@ -153,6 +153,29 @@ async def osint_web_pessoa(
         raise HTTPException(status_code=500, detail=f"Erro OSINT web: {str(e)[:200]}")
 
 
+@router.post(
+    "/osint/web/{inquerito_id}/{pessoa_id}/relatorio",
+    summary="Gera relatório formal OSINT fontes abertas e salva como DocumentoGerado",
+)
+async def osint_web_relatorio(
+    inquerito_id: uuid.UUID,
+    pessoa_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Usa os dados OSINT web já coletados (cache 6h) e gera um relatório policial
+    formal com 7 seções. Salva como DocumentoGerado(tipo='relatorio_osint_web').
+    """
+    agente = AgenteFicha()
+    try:
+        resultado = await agente.gerar_relatorio_osint_web(db, inquerito_id, pessoa_id)
+        return {"status": "concluido", "resultado": resultado}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar relatório OSINT web: {str(e)[:200]}")
+
+
 # ── OSINT — Consultas brutas (sem LLM) ───────────────────────────────────────
 
 @router.post(

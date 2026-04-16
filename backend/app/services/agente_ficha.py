@@ -4,6 +4,7 @@ Consolida dados de Pessoa/Empresa já indexados e gera ficha via LLM Premium.
 Conforme blueprint §9.1 (Agente de Fichas).
 """
 
+import asyncio
 import json
 import logging
 import uuid
@@ -410,6 +411,85 @@ Eventos/Cronologia:
 
         logger.info(f"[AGENTE-FICHA] OSINT web gerado para {pessoa.nome} ({dados_web['total_resultados']} resultados)")
         return analise
+
+    async def gerar_relatorio_osint_web(
+        self,
+        db: AsyncSession,
+        inquerito_id: uuid.UUID,
+        pessoa_id: uuid.UUID,
+    ) -> Dict[str, Any]:
+        """
+        Converte os dados OSINT web (já coletados/cacheados) em um relatório formal
+        policial e salva como DocumentoGerado(tipo='relatorio_osint_web').
+        """
+        from app.models.documento_gerado import DocumentoGerado
+        from app.core.prompts import PROMPT_OSINT_WEB_RELATORIO
+        from datetime import date
+
+        # Obtém dados OSINT (usa cache se disponível)
+        analise = await self.gerar_osint_web_pessoa(db, inquerito_id, pessoa_id)
+
+        pessoa = await db.get(Pessoa, pessoa_id)
+        if not pessoa:
+            raise ValueError(f"Pessoa {pessoa_id} não encontrada")
+
+        dados_internos = (
+            f"Nome: {pessoa.nome}\n"
+            f"CPF: {pessoa.cpf or 'não consta'}\n"
+            f"Papel: {getattr(pessoa, 'papel', None) or getattr(pessoa, 'tipo_pessoa', None) or 'não identificado'}"
+        )
+
+        def _fmt_lista(items) -> str:
+            if not items:
+                return "Nenhum encontrado."
+            return "\n".join(f"- {i}" for i in items)
+
+        fontes_str = ""
+        for f in (analise.get("fontes_relevantes") or [])[:6]:
+            fontes_str += f"- {f.get('titulo', '')} ({f.get('categoria', '')})\n  URL: {f.get('url', '')}\n"
+        if not fontes_str:
+            fontes_str = "Nenhuma fonte relevante identificada."
+
+        prompt = PROMPT_OSINT_WEB_RELATORIO.format(
+            nome=pessoa.nome,
+            presenca_digital=analise.get("presenca_digital", "não avaliada"),
+            resumo_web=analise.get("resumo_web", "Sem resumo disponível."),
+            alertas=_fmt_lista(analise.get("alertas")),
+            mencoes_juridicas=_fmt_lista(analise.get("mencoes_juridicas")),
+            mencoes_oficiais=_fmt_lista(analise.get("mencoes_oficiais")),
+            correlacoes_com_autos=_fmt_lista(analise.get("correlacoes_com_autos")),
+            sugestoes_diligencias=_fmt_lista(analise.get("sugestoes_diligencias")),
+            fontes_relevantes=fontes_str,
+            dados_internos=dados_internos,
+            data_atual=date.today().strftime("%d/%m/%Y"),
+        )
+
+        result = await asyncio.wait_for(
+            self.llm.chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                tier="standard",
+                temperature=0.1,
+                max_tokens=3000,
+                agente="RelatorioOsintWeb",
+            ),
+            timeout=180,
+        )
+        conteudo = result["content"].strip()
+
+        # Salva como DocumentoGerado
+        titulo = f"Relatório OSINT Web — {pessoa.nome}"
+        doc = DocumentoGerado(
+            inquerito_id=inquerito_id,
+            tipo="relatorio_osint_web",
+            titulo=titulo,
+            conteudo=conteudo,
+            modelo_llm=result.get("model"),
+        )
+        db.add(doc)
+        await db.commit()
+
+        logger.info(f"[AGENTE-FICHA] Relatório OSINT Web salvo para {pessoa.nome}")
+        return {"titulo": titulo, "conteudo": conteudo, "doc_id": str(doc.id)}
 
     async def gerar_ficha_empresa(
         self,
