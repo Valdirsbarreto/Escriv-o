@@ -559,24 +559,30 @@ export default function InqueritoDetalhePage() {
 
   const handleGerarRelatorioInicial = async (forcar = false) => {
     setGerandoRelatorio(true);
+    // Captura o timestamp do início para detectar doc novo (quando forcar=true)
+    const iniciadoEm = Date.now();
     try {
       await api.post(`/inqueritos/${inqId}/gerar-relatorio-inicial?forcar=${forcar}`);
-      // Polling até o relatório aparecer na lista de documentos gerados (máx ~5 min)
+      // Polling: aguarda até 10 min pelo doc (novo ou existente se forcar=false)
       let tentativas = 0;
       const relatorioInterval = setInterval(async () => {
         tentativas++;
         try {
-          const res = await api.get(`/inqueritos/${inqId}/documentos-gerados`);
-          if ((res.data || []).some((d: any) => d.tipo === "relatorio_inicial")) {
+          const res = await api.get(`/inqueritos/${inqId}/docs-gerados`);
+          const docs = res.data || [];
+          const docRelatorio = docs.find((d: any) => d.tipo === "relatorio_inicial");
+          // Se forcar=true, espera um doc criado APÓS o início (not the old one)
+          const pronto = docRelatorio && (
+            !forcar || new Date(docRelatorio.created_at).getTime() > iniciadoEm - 5000
+          );
+          if (pronto) {
             setGerandoRelatorio(false);
             clearInterval(relatorioInterval);
-            // Recarregar lista de docs gerados
-            const resAll = await api.get(`/inqueritos/${inqId}/documentos-gerados`);
-            setDocsGerados(resAll.data || []);
+            setDocsGerados(docs);
             return;
           }
         } catch {/* silencioso */}
-        if (tentativas >= 60) { // ~5 min
+        if (tentativas >= 120) { // ~10 min
           setGerandoRelatorio(false);
           clearInterval(relatorioInterval);
           alert("A Síntese Inicial está demorando mais que o esperado. Recarregue a página em alguns minutos.");
