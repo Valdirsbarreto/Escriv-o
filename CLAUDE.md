@@ -9,7 +9,7 @@ Backend FastAPI + Celery + Redis + Qdrant + PostgreSQL. Frontend Next.js no Verc
 ## Ao iniciar uma sessão — leia primeiro
 - `backend/app/core/prompts.py` — todos os system prompts (editá-los aqui, não inline)
 - `backend/app/services/llm_service.py` — roteamento de tiers LLM
-- Memória `project_sessao_16_04_2026_v2.md` — **estado ao encerrar sessão de 16/04 v2, pendências e próximas ações**
+- Memória `project_sessao_16_04_2026_v3.md` — **estado ao encerrar sessão de 16/04 v3, pendências e próximas ações**
 
 ---
 
@@ -219,7 +219,11 @@ O Copiloto conversa naturalmente, sem diretrizes rígidas numeradas. Raciocina e
 
 8. **OSINT Gratuito (BrasilAPI + CGU)** — ✅ IMPLEMENTADO (sessão 16/04 v2): `osint_gratuito_service.py`, endpoint `/agentes/osint/gratuito/`, `OsintGratuitoPanel` — roda ANTES do direct.data
 
-9. **Agente Sherlock** — ✅ IMPLEMENTADO (sessão 16/04 v2): `sherlock_service.py`, `PROMPT_SHERLOCK` (5 camadas), endpoint `POST /agentes/sherlock/{inq_id}`, painel no Workspace (commit `22be074`)
+9. **Agente Sherlock** — ✅ IMPLEMENTADO + corrigido (`estado_atual`, commit `4f12f74`): `sherlock_service.py`, `PROMPT_SHERLOCK` (5 camadas), endpoint `POST /agentes/sherlock/{inq_id}`, painel no Workspace
+
+10. **OneDrive Picker** — ✅ IMPLEMENTADO (sessão 16/04 v3): `OneDrivePicker.tsx` + `/auth/onedrive`, PKCE flow, botão na ingestão e no workspace. Azure App: client `5434c90f`, tenant `a960e527`, redirect `https://escriv-o.vercel.app/auth/onedrive`
+
+11. **Copiar texto limpo** — ✅ IMPLEMENTADO: botão `Copy` nos docs gerados, strip completo de markdown para colar no sistema da PC
 
 10. **Railway billing GraphQL** — queries atualizadas para Team (`me.teams.edges...`) e Hobby (`me.subscription...`) — aguarda validação em produção
 
