@@ -275,11 +275,11 @@ export default function IntimacoesPAge() {
                           )}
                         </span>
                         {intim.intimado_qualificacao && (
-                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400">
                             {QUAL_LABEL[intim.intimado_qualificacao] ?? intim.intimado_qualificacao}
                           </span>
                         )}
-                        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${st.className}`}>
+                        <span className={`text-xs px-2 py-0.5 rounded-full border ${st.className}`}>
                           {st.label}
                         </span>
                       </div>

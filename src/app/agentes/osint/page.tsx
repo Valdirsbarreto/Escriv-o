@@ -168,7 +168,7 @@ function InvestigacaoCripto() {
                   <ScrollArea className="h-48">
                     <div className="space-y-2">
                       {resultado.chainabuse.detalhes?.map((rep: any, i: number) => (
-                        <div key={i} className="text-[11px] p-2 bg-zinc-950 border border-zinc-800 rounded">
+                        <div key={i} className="text-xs p-2 bg-zinc-950 border border-zinc-800 rounded">
                           <p className="text-zinc-300 font-medium">{rep.category || "Reporte"}</p>
                           <p className="text-zinc-500 mt-1">{rep.description}</p>
                         </div>
@@ -198,17 +198,17 @@ function InvestigacaoCripto() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-zinc-800 hover:bg-transparent">
-                      <TableHead className="text-[10px] text-zinc-500">Data</TableHead>
-                      <TableHead className="text-[10px] text-zinc-500 text-right">Valor (ETH)</TableHead>
+                      <TableHead className="text-xs text-zinc-500">Data</TableHead>
+                      <TableHead className="text-xs text-zinc-500 text-right">Valor (ETH)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {resultado.fluxo?.transacoes?.map((tx: any, i: number) => (
                       <TableRow key={i} className="border-zinc-800">
-                        <TableCell className="text-[10px] text-zinc-400">
+                        <TableCell className="text-xs text-zinc-400">
                           {new Date(tx.timeStamp * 1000).toLocaleDateString()}
                         </TableCell>
-                        <TableCell className="text-right text-[11px] font-mono text-zinc-200">
+                        <TableCell className="text-right text-xs font-mono text-zinc-200">
                           {(tx.value / 1e18).toFixed(4)}
                         </TableCell>
                       </TableRow>
@@ -222,7 +222,7 @@ function InvestigacaoCripto() {
                 </Table>
               </ScrollArea>
               <div className="p-3 border-t border-zinc-800 bg-zinc-950/50">
-                <Button variant="ghost" className="w-full text-[10px] text-zinc-500 h-6 hover:text-zinc-300">
+                <Button variant="ghost" className="w-full text-xs text-zinc-500 h-6 hover:text-zinc-300">
                   <History size={11} className="mr-1" /> Ver histórico completo no Explorer <ExternalLink size={10} className="ml-1" />
                 </Button>
               </div>
@@ -237,9 +237,9 @@ function InvestigacaoCripto() {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function stalenessIcon(s: Staleness, fmt?: string | null) {
-  if (s === "fresco")       return <span className="text-green-400 text-[10px]" title={fmt || ""}>✓</span>;
-  if (s === "desatualizado") return <span className="text-yellow-400 text-[10px]" title={fmt || ""}>⚠</span>;
-  return <span className="text-zinc-600 text-[10px]">—</span>;
+  if (s === "fresco")       return <span className="text-green-400 text-xs" title={fmt || ""}>✓</span>;
+  if (s === "desatualizado") return <span className="text-yellow-400 text-xs" title={fmt || ""}>⚠</span>;
+  return <span className="text-zinc-600 text-xs">—</span>;
 }
 
 function DadosBadge({ campo, label }: { campo: DadoCampo; label: string }) {
@@ -249,7 +249,7 @@ function DadosBadge({ campo, label }: { campo: DadoCampo; label: string }) {
   const title = campo.data_doc_fmt ? `${label}: ${campo.data_doc_fmt}` : label;
   return (
     <span title={campo.texto ? `${title} — "${campo.texto}"` : title}
-      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] border cursor-default ${cor}`}>
+      className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs border cursor-default ${cor}`}>
       {label} {stalenessIcon(campo.staleness, campo.data_doc_fmt)}
     </span>
   );
@@ -359,8 +359,8 @@ function ResultadoAvulso({ dados }: { dados: any }) {
               <div key={i} className="flex items-center justify-between text-xs">
                 <span className="text-zinc-200 font-mono">{t.telefoneComDDD}</span>
                 <div className="flex gap-1">
-                  <Badge variant="outline" className="text-zinc-500 border-zinc-700 text-[10px]">{t.tipoTelefone}</Badge>
-                  {t.whatsApp && <Badge variant="outline" className="border-green-700/40 text-green-400 text-[10px]">WhatsApp</Badge>}
+                  <Badge variant="outline" className="text-zinc-500 border-zinc-700 text-xs">{t.tipoTelefone}</Badge>
+                  {t.whatsApp && <Badge variant="outline" className="border-green-700/40 text-green-400 text-xs">WhatsApp</Badge>}
                 </div>
               </div>
             ))}
@@ -390,8 +390,8 @@ function ResultadoAvulso({ dados }: { dados: any }) {
               <div key={i} className="bg-zinc-800/50 rounded p-2">
                 <p className="text-xs font-medium text-zinc-200">{s.razaoSocial}</p>
                 <div className="flex gap-2 mt-1 flex-wrap">
-                  <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-400">{s.cnpj}</Badge>
-                  {!s.baixada && <Badge variant="outline" className="text-[10px] border-green-700/40 text-green-400">Ativa</Badge>}
+                  <Badge variant="outline" className="text-xs border-zinc-700 text-zinc-400">{s.cnpj}</Badge>
+                  {!s.baixada && <Badge variant="outline" className="text-xs border-green-700/40 text-green-400">Ativa</Badge>}
                 </div>
               </div>
             ))}
@@ -723,7 +723,7 @@ function ConsultaAvulsaDialog() {
               {textoLote.trim() && (
                 <div className="flex flex-wrap gap-1">
                   {alvosParseados.map((a, i) => (
-                    <span key={i} className={`text-[10px] px-2 py-0.5 rounded border font-mono ${
+                    <span key={i} className={`text-xs px-2 py-0.5 rounded border font-mono ${
                       a.tipo === "cpf" ? "border-blue-700/40 text-blue-400 bg-blue-500/5" :
                       a.tipo === "cnpj" ? "border-purple-700/40 text-purple-400 bg-purple-500/5" :
                       a.tipo === "placa" ? "border-amber-700/40 text-amber-400 bg-amber-500/5" :
@@ -787,7 +787,7 @@ function ConsultaAvulsaDialog() {
                           {alvo.status === "erro" && <XCircle size={14} className="text-red-400 shrink-0" />}
                           {alvo.status === "pendente" && <div className="w-3.5 h-3.5 rounded-full border border-zinc-600 shrink-0" />}
                           <span className="font-mono text-sm text-zinc-200">{alvo.raw}</span>
-                          <span className={`ml-auto text-[10px] px-2 py-0.5 rounded border ${
+                          <span className={`ml-auto text-xs px-2 py-0.5 rounded border ${
                             alvo.tipo === "cpf" ? "border-blue-700/40 text-blue-400" :
                             alvo.tipo === "cnpj" ? "border-purple-700/40 text-purple-400" :
                             "border-amber-700/40 text-amber-400"
@@ -957,14 +957,14 @@ function PainelPersonagens({ inqueritoId }: { inqueritoId: string }) {
                           : <ChevronRight size={13} className="text-zinc-500 mt-0.5 shrink-0" />}
                         <div>
                           <p className="text-sm text-zinc-200 group-hover:text-zinc-100 font-medium leading-tight">{p.nome}</p>
-                          {p.cpf && <p className="text-[10px] text-zinc-600 mt-0.5">CPF {p.cpf}</p>}
+                          {p.cpf && <p className="text-xs text-zinc-600 mt-0.5">CPF {p.cpf}</p>}
                         </div>
                       </button>
                     </TableCell>
 
                     {/* Papel */}
                     <TableCell>
-                      <Badge variant="outline" className="text-[10px] border-zinc-700 text-zinc-400 capitalize">
+                      <Badge variant="outline" className="text-xs border-zinc-700 text-zinc-400 capitalize">
                         {p.tipo_pessoa}
                       </Badge>
                     </TableCell>
@@ -983,12 +983,12 @@ function PainelPersonagens({ inqueritoId }: { inqueritoId: string }) {
                       {p.historico_inqueritos?.length > 0 ? (
                         <span
                           title={p.historico_inqueritos.map((h: any) => `${h.numero} (${h.tipo_pessoa})`).join("\n")}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] border border-orange-700/40 text-orange-400 bg-orange-500/5 cursor-default"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs border border-orange-700/40 text-orange-400 bg-orange-500/5 cursor-default"
                         >
                           ⚠ {p.historico_inqueritos.length} inq.
                         </span>
                       ) : (
-                        <span className="text-[10px] text-zinc-700">—</span>
+                        <span className="text-xs text-zinc-700">—</span>
                       )}
                     </TableCell>
 
@@ -1005,7 +1005,7 @@ function PainelPersonagens({ inqueritoId }: { inqueritoId: string }) {
                                 onChange={() => toggleModulo(p.pessoa_id, mod.id)}
                                 className="w-3 h-3 cursor-pointer accent-blue-500 bg-zinc-900 border-zinc-700 rounded-sm"
                               />
-                              <span className={`text-[10px] truncate w-36 ${isChecked ? mod.color : 'text-zinc-500'} group-hover:text-zinc-300`}>
+                              <span className={`text-xs truncate w-36 ${isChecked ? mod.color : 'text-zinc-500'} group-hover:text-zinc-300`}>
                                 {mod.label}
                               </span>
                             </label>
@@ -1041,7 +1041,7 @@ function PainelPersonagens({ inqueritoId }: { inqueritoId: string }) {
                             "{p.justificativa}"
                           </p>
                           {p.historico_inqueritos?.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 text-[10px]">
+                            <div className="flex flex-wrap gap-1.5 text-xs">
                               <span className="text-orange-400 font-medium">Histórico:</span>
                               {p.historico_inqueritos.map((h: any, i: number) => (
                                 <span key={i} className="px-1.5 py-0.5 rounded border border-orange-700/30 text-orange-300 bg-orange-500/5">
@@ -1051,13 +1051,13 @@ function PainelPersonagens({ inqueritoId }: { inqueritoId: string }) {
                             </div>
                           )}
                           {resultado?.status === "concluido" && resultado?.dados && (
-                            <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
+                            <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
                               <span className="text-zinc-500">APIs executadas:</span>
                               {resultado.dados.apis_executadas?.map((a: string) => (
-                                <Badge key={a} variant="outline" className="text-[10px] border-green-700/30 text-green-400">{a}</Badge>
+                                <Badge key={a} variant="outline" className="text-xs border-green-700/30 text-green-400">{a}</Badge>
                               ))}
                               {resultado.dados.cadastro?.telefones?.map((t: any, i: number) => (
-                                <span key={i} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] ${t.whatsApp ? "border-green-700/40 text-green-300 bg-green-500/5" : "border-zinc-700 text-zinc-500"}`}>
+                                <span key={i} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs ${t.whatsApp ? "border-green-700/40 text-green-300 bg-green-500/5" : "border-zinc-700 text-zinc-500"}`}>
                                   {t.telefoneComDDD} {t.whatsApp ? "· WhatsApp ✓" : ""}
                                 </span>
                               ))}
@@ -1114,7 +1114,7 @@ function PainelPersonagens({ inqueritoId }: { inqueritoId: string }) {
                         <div className="flex flex-wrap gap-1 mt-1">
                           {mods.map(mID => {
                             const mm = OSINT_MODULOS.find(x => x.id === mID);
-                            return mm ? <span key={mID} className={`text-[10px] px-1.5 py-0.5 bg-zinc-950 border border-zinc-800 rounded ${mm.color}`}>{mm.label}</span> : null;
+                            return mm ? <span key={mID} className={`text-xs px-1.5 py-0.5 bg-zinc-950 border border-zinc-800 rounded ${mm.color}`}>{mm.label}</span> : null;
                           })}
                         </div>
                       </div>

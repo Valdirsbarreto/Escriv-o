@@ -152,7 +152,7 @@ function ProgressoPipeline({ inqId, onConcluido }: { inqId: string; onConcluido:
           return (
             <span
               key={key}
-              className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+              className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
                 atingida
                   ? "bg-green-500/15 border-green-500/30 text-green-400"
                   : atual
@@ -166,7 +166,7 @@ function ProgressoPipeline({ inqId, onConcluido }: { inqId: string; onConcluido:
         })}
         {/* Síntese */}
         <span
-          className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+          className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
             progresso.sintese_pronta
               ? "bg-blue-500/15 border-blue-500/30 text-blue-400"
               : "bg-zinc-800 border-zinc-700 text-zinc-600"
@@ -192,7 +192,7 @@ function ProgressoPipeline({ inqId, onConcluido }: { inqId: string; onConcluido:
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-0.5">
                 <span className="text-xs text-zinc-400 truncate max-w-[200px]">{doc.nome}</span>
-                <span className="text-[10px] text-zinc-600 shrink-0 ml-2">
+                <span className="text-xs text-zinc-600 shrink-0 ml-2">
                   {doc.ultima_etapa ? (ETAPAS_LABEL[doc.ultima_etapa] ?? doc.ultima_etapa) : "aguardando"}
                 </span>
               </div>
@@ -256,20 +256,20 @@ function ProcessosBgBadge({ inqId }: { inqId: string }) {
     : <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse inline-block" />;
 
   return (
-    <div className={`group relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-semibold cursor-default ${cor}`}>
+    <div className={`group relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold cursor-default ${cor}`}>
       {icone}
       <span>
         {bg.status === "concluido" ? "Processado" : bg.status === "erro" ? "Erro" : "Processando"}
       </span>
       {/* Tooltip com detalhe por etapa */}
       <div className="absolute left-0 top-full mt-2 z-50 hidden group-hover:block bg-zinc-900 border border-zinc-700 rounded-lg p-3 shadow-xl min-w-[180px]">
-        <p className="text-[9px] text-zinc-500 uppercase tracking-widest mb-2">Processos internos</p>
+        <p className="text-xs text-zinc-500 uppercase tracking-widest mb-2">Processos internos</p>
         {etapas.map(({ key, label }) => {
           const s = bg[key];
           return (
             <div key={key} className="flex items-center justify-between py-0.5">
-              <span className="text-[11px] text-zinc-400">{label}</span>
-              <span className={`text-[9px] font-bold uppercase ${
+              <span className="text-xs text-zinc-400">{label}</span>
+              <span className={`text-xs font-bold uppercase ${
                 s === "concluido" ? "text-green-400" : s === "pendente" ? "text-zinc-600" : "text-blue-400"
               }`}>
                 {s === "concluido" ? "✓" : s === "pendente" ? "—" : "⟳"}
@@ -1092,7 +1092,7 @@ export default function InqueritoDetalhePage() {
               >
                 {tab.label}
                 {tab.badge && (
-                  <span className="text-[9px] px-1 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-bold uppercase tracking-wider">
+                  <span className="text-xs px-1 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-bold uppercase tracking-wider">
                     auto
                   </span>
                 )}
@@ -1232,7 +1232,7 @@ export default function InqueritoDetalhePage() {
                           {grupo.modulos.map((m: any, i: number) => (
                             <div key={i} className="flex items-center justify-between text-xs py-1">
                               <span className={m.status === "ok" ? "text-zinc-300" : "text-zinc-600"}>{m.tipo}</span>
-                              <span className={`px-2 py-0.5 rounded-full border text-[10px] ${
+                              <span className={`px-2 py-0.5 rounded-full border text-xs ${
                                 m.status === "ok" ? "border-green-700/40 text-green-400 bg-green-500/5"
                                 : m.status === "timeout" ? "border-amber-700/40 text-amber-400 bg-amber-500/5"
                                 : "border-red-700/40 text-red-400 bg-red-500/5"
@@ -1489,11 +1489,11 @@ export default function InqueritoDetalhePage() {
                       {reextrahindo === doc.id && (
                         <div className="mx-3 mb-3 animate-in fade-in slide-in-from-top-1">
                           <div className="flex justify-between items-center mb-1 w-full">
-                            <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-semibold flex items-center gap-1">
+                            <span className="text-xs text-zinc-500 uppercase tracking-widest font-semibold flex items-center gap-1">
                               <Loader2 size={10} className="animate-spin text-amber-500"/>
                               Acelerador Neuronal em uso
                             </span>
-                            <span className="text-[10px] text-zinc-500 font-mono">{extractProgress}%</span>
+                            <span className="text-xs text-zinc-500 font-mono">{extractProgress}%</span>
                           </div>
                           <div className="h-1 bg-zinc-950/80 rounded-full overflow-hidden w-full border border-black/50">
                             <div
@@ -1510,14 +1510,14 @@ export default function InqueritoDetalhePage() {
                           {pecasDoDoc.map((peca: any) => (
                             <div key={peca.id} className="flex items-center justify-between px-3 py-2 hover:bg-zinc-800/30 transition-colors">
                               <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <span className="text-[10px] text-zinc-600 font-mono shrink-0 w-14 text-right">
+                                <span className="text-xs text-zinc-600 font-mono shrink-0 w-14 text-right">
                                   {peca.pagina_inicial != null
                                     ? `fls. ${peca.pagina_inicial}${peca.pagina_final && peca.pagina_final !== peca.pagina_inicial ? `–${peca.pagina_final}` : ""}`
                                     : ""}
                                 </span>
                                 <span className="text-xs text-zinc-300 truncate">{peca.titulo}</span>
                                 {peca.tipo && (
-                                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full border shrink-0 ${TIPO_PECA_COLOR[peca.tipo] || TIPO_PECA_COLOR["outro"]}`}>
+                                  <span className={`text-xs px-1.5 py-0.5 rounded-full border shrink-0 ${TIPO_PECA_COLOR[peca.tipo] || TIPO_PECA_COLOR["outro"]}`}>
                                     {TIPO_PECA_LABEL[peca.tipo] || peca.tipo}
                                   </span>
                                 )}
@@ -1526,14 +1526,14 @@ export default function InqueritoDetalhePage() {
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleAbrirPecaNoPDF(peca); }}
                                   title="Abrir PDF original"
-                                  className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-blue-400 px-2 py-1 rounded border border-zinc-800 hover:border-blue-500/40 transition-colors"
+                                  className="flex items-center gap-1 text-xs text-zinc-500 hover:text-blue-400 px-2 py-1 rounded border border-zinc-800 hover:border-blue-500/40 transition-colors"
                                 >
                                   <Eye size={10}/> PDF
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleAbrirPeca(peca); }}
                                   title="Ver texto extraído"
-                                  className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-amber-400 px-2 py-1 rounded border border-zinc-800 hover:border-amber-500/40 transition-colors"
+                                  className="flex items-center gap-1 text-xs text-zinc-500 hover:text-amber-400 px-2 py-1 rounded border border-zinc-800 hover:border-amber-500/40 transition-colors"
                                 >
                                   <FileText size={10}/> Texto
                                 </button>
@@ -1610,7 +1610,7 @@ export default function InqueritoDetalhePage() {
                   <p className="text-sm font-medium text-zinc-200">
                     {intim.intimado_nome ?? <span className="text-zinc-500 italic">Nome não extraído</span>}
                     {intim.intimado_qualificacao && (
-                      <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400">
+                      <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400">
                         {intim.intimado_qualificacao}
                       </span>
                     )}
@@ -1684,7 +1684,7 @@ export default function InqueritoDetalhePage() {
             <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
               <Network size={18} className="text-cyan-400" /> Análise Blockchain / Cripto
             </h2>
-            <span className="text-[10px] px-2 py-1 rounded-full border border-cyan-500/30 text-cyan-400 bg-cyan-500/5 font-bold uppercase tracking-wider">
+            <span className="text-xs px-2 py-1 rounded-full border border-cyan-500/30 text-cyan-400 bg-cyan-500/5 font-bold uppercase tracking-wider">
               Detectado automaticamente
             </span>
           </div>
@@ -1697,7 +1697,7 @@ export default function InqueritoDetalhePage() {
               <p className="text-xs text-zinc-500 leading-relaxed">
                 O Escrivão AI detectou termos relacionados a criptoativos na descrição deste IP.
                 Use o Copiloto Investigativo (Ctrl+Space) com o comando{" "}
-                <code className="text-cyan-400 bg-zinc-900 px-1 rounded text-[11px]">/analisar carteira &lt;endereço&gt;</code>{" "}
+                <code className="text-cyan-400 bg-zinc-900 px-1 rounded text-xs">/analisar carteira &lt;endereço&gt;</code>{" "}
                 para rastreio on-chain, análise de risco e identificação de exchanges.
               </p>
             </div>

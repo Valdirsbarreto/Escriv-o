@@ -80,7 +80,7 @@ export function Sidebar() {
             {!sidebarCollapsed && <span>Copiloto</span>}
           </div>
           {!sidebarCollapsed && (
-            <kbd className="text-[10px] uppercase bg-blue-950 px-1.5 py-0.5 rounded text-blue-300">Ctrl+Space</kbd>
+            <kbd className="text-xs uppercase bg-blue-950 px-1.5 py-0.5 rounded text-blue-300">Ctrl+Space</kbd>
           )}
         </button>
         <NavItem href="/admin" icon={<ShieldAlert size={18} />} label="Administrativo" active={pathname === "/admin"} collapsed={sidebarCollapsed} />

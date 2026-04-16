@@ -84,7 +84,7 @@ function DadosBadge({ campo, label }: { campo: DadoCampo; label: string }) {
     : "border-zinc-600 text-zinc-400 bg-zinc-800/60";
   return (
     <span title={campo.texto ? `${label}: "${campo.texto}"` : `${label}: não informado`}
-      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border cursor-default ${cor}`}>
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs border cursor-default ${cor}`}>
       {label}
     </span>
   );
@@ -96,7 +96,7 @@ function TipoPessoa({ tipo }: { tipo: string }) {
     : tipo === "testemunha" ? "border-yellow-700/40 text-yellow-400"
     : "border-zinc-700 text-zinc-400";
   return (
-    <Badge variant="outline" className={`text-[10px] capitalize ${cor}`}>{tipo}</Badge>
+    <Badge variant="outline" className={`text-xs capitalize ${cor}`}>{tipo}</Badge>
   );
 }
 
@@ -139,10 +139,10 @@ function OsintWebPanel({ inqueritoId, pessoaId }: { inqueritoId: string; pessoaI
       >
         <div className="flex items-center gap-1.5">
           <Globe size={11} className="text-sky-400" />
-          <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider">Fontes Abertas</span>
-          <span className="text-[9px] text-zinc-600">(web)</span>
+          <span className="text-xs font-bold text-sky-400 uppercase tracking-wider">Fontes Abertas</span>
+          <span className="text-xs text-zinc-600">(web)</span>
           {dados && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-sky-500/10 border border-sky-700/30 text-sky-400">
+            <span className="text-xs px-1.5 py-0.5 rounded-full bg-sky-500/10 border border-sky-700/30 text-sky-400">
               {dados.total_resultados} resultados
             </span>
           )}
@@ -169,7 +169,7 @@ function OsintWebPanel({ inqueritoId, pessoaId }: { inqueritoId: string; pessoaI
               {dados.resumo_web && (
                 <div className="flex items-start gap-2">
                   {dados.presenca_digital && (
-                    <span className={`shrink-0 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border border-current/20 ${presencaCor(dados.presenca_digital)}`}>
+                    <span className={`shrink-0 text-xs font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border border-current/20 ${presencaCor(dados.presenca_digital)}`}>
                       {dados.presenca_digital}
                     </span>
                   )}
@@ -180,12 +180,12 @@ function OsintWebPanel({ inqueritoId, pessoaId }: { inqueritoId: string; pessoaI
               {/* Alertas */}
               {dados.alertas?.length > 0 && (
                 <div>
-                  <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1 flex items-center gap-1">
+                  <p className="text-xs text-zinc-600 uppercase tracking-wider mb-1 flex items-center gap-1">
                     <AlertTriangle size={9} className="text-red-400" /> Alertas
                   </p>
                   <ul className="space-y-0.5">
                     {dados.alertas.slice(0, 4).map((a: string, i: number) => (
-                      <li key={i} className="text-[10px] text-red-300/80 flex gap-1.5">
+                      <li key={i} className="text-xs text-red-300/80 flex gap-1.5">
                         <span className="text-red-500 shrink-0 mt-0.5">⚠</span>{a}
                       </li>
                     ))}
@@ -196,12 +196,12 @@ function OsintWebPanel({ inqueritoId, pessoaId }: { inqueritoId: string; pessoaI
               {/* Menções jurídicas */}
               {dados.mencoes_juridicas?.length > 0 && (
                 <div>
-                  <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1 flex items-center gap-1">
+                  <p className="text-xs text-zinc-600 uppercase tracking-wider mb-1 flex items-center gap-1">
                     <Scale size={9} className="text-blue-400" /> Menções Jurídicas
                   </p>
                   <ul className="space-y-0.5">
                     {dados.mencoes_juridicas.slice(0, 3).map((m: string, i: number) => (
-                      <li key={i} className="text-[10px] text-blue-300/80 flex gap-1.5">
+                      <li key={i} className="text-xs text-blue-300/80 flex gap-1.5">
                         <span className="text-blue-600 shrink-0 mt-0.5">▸</span>{m}
                       </li>
                     ))}
@@ -212,12 +212,12 @@ function OsintWebPanel({ inqueritoId, pessoaId }: { inqueritoId: string; pessoaI
               {/* Menções oficiais */}
               {dados.mencoes_oficiais?.length > 0 && (
                 <div>
-                  <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1 flex items-center gap-1">
+                  <p className="text-xs text-zinc-600 uppercase tracking-wider mb-1 flex items-center gap-1">
                     <FileText size={9} className="text-amber-400" /> Menções Oficiais
                   </p>
                   <ul className="space-y-0.5">
                     {dados.mencoes_oficiais.slice(0, 3).map((m: string, i: number) => (
-                      <li key={i} className="text-[10px] text-amber-300/80 flex gap-1.5">
+                      <li key={i} className="text-xs text-amber-300/80 flex gap-1.5">
                         <span className="text-amber-600 shrink-0 mt-0.5">▸</span>{m}
                       </li>
                     ))}
@@ -228,10 +228,10 @@ function OsintWebPanel({ inqueritoId, pessoaId }: { inqueritoId: string; pessoaI
               {/* Correlações com autos */}
               {dados.correlacoes_com_autos?.length > 0 && (
                 <div>
-                  <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1">Correlações com os autos</p>
+                  <p className="text-xs text-zinc-600 uppercase tracking-wider mb-1">Correlações com os autos</p>
                   <ul className="space-y-0.5">
                     {dados.correlacoes_com_autos.slice(0, 3).map((c: string, i: number) => (
-                      <li key={i} className="text-[10px] text-emerald-300/80 flex gap-1.5">
+                      <li key={i} className="text-xs text-emerald-300/80 flex gap-1.5">
                         <span className="text-emerald-600 shrink-0 mt-0.5">↔</span>{c}
                       </li>
                     ))}
@@ -242,7 +242,7 @@ function OsintWebPanel({ inqueritoId, pessoaId }: { inqueritoId: string; pessoaI
               {/* Fontes com links */}
               {dados.fontes_relevantes?.length > 0 && (
                 <div className="border-t border-zinc-800 pt-2">
-                  <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <p className="text-xs text-zinc-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
                     <Newspaper size={9} /> Fontes
                   </p>
                   <div className="space-y-1">
@@ -256,8 +256,8 @@ function OsintWebPanel({ inqueritoId, pessoaId }: { inqueritoId: string; pessoaI
                       >
                         <ExternalLink size={9} className="text-zinc-600 group-hover:text-sky-400 shrink-0 mt-0.5 transition-colors" />
                         <div className="min-w-0">
-                          <p className="text-[10px] text-zinc-400 group-hover:text-sky-400 truncate transition-colors">{f.titulo}</p>
-                          {f.trecho && <p className="text-[9px] text-zinc-600 line-clamp-1">{f.trecho}</p>}
+                          <p className="text-xs text-zinc-400 group-hover:text-sky-400 truncate transition-colors">{f.titulo}</p>
+                          {f.trecho && <p className="text-xs text-zinc-600 line-clamp-1">{f.trecho}</p>}
                         </div>
                       </a>
                     ))}
@@ -267,9 +267,9 @@ function OsintWebPanel({ inqueritoId, pessoaId }: { inqueritoId: string; pessoaI
 
               {/* Botão gerar relatório formal */}
               <div className="flex items-center justify-between pt-1 border-t border-zinc-800 mt-1">
-                <p className="text-[9px] text-zinc-700">via serper.dev</p>
+                <p className="text-xs text-zinc-700">via serper.dev</p>
                 {relatorioOk ? (
-                  <span className="text-[9px] text-green-500 flex items-center gap-1">
+                  <span className="text-xs text-green-500 flex items-center gap-1">
                     <CheckCircle size={9} /> Relatório salvo nos documentos
                   </span>
                 ) : (
@@ -286,7 +286,7 @@ function OsintWebPanel({ inqueritoId, pessoaId }: { inqueritoId: string; pessoaI
                       }
                     }}
                     disabled={gerandoRelatorio}
-                    className="flex items-center gap-1 text-[10px] text-sky-400 hover:text-sky-300 disabled:opacity-50 transition-colors"
+                    className="flex items-center gap-1 text-xs text-sky-400 hover:text-sky-300 disabled:opacity-50 transition-colors"
                   >
                     {gerandoRelatorio
                       ? <><Loader2 size={9} className="animate-spin" /> Gerando...</>
@@ -339,16 +339,16 @@ function AnalisePreliminarPanel({
       <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 bg-zinc-900/80">
         <div className="flex items-center gap-1.5">
           <Zap size={11} className="text-emerald-400" />
-          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+          <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
             Análise Preliminar
           </span>
-          <span className="text-[9px] text-zinc-600">(LLM gratuita)</span>
+          <span className="text-xs text-zinc-600">(LLM gratuita)</span>
         </div>
         {analise && (
           <button
             onClick={handleAprimorar}
             disabled={aprimorando}
-            className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded border border-blue-700/30 text-blue-400 bg-blue-500/5 hover:bg-blue-500/10 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1 text-xs px-2 py-0.5 rounded border border-blue-700/30 text-blue-400 bg-blue-500/5 hover:bg-blue-500/10 transition-colors disabled:opacity-50"
           >
             {aprimorando
               ? <><Loader2 size={9} className="animate-spin" /> Aprimorando...</>
@@ -371,7 +371,7 @@ function AnalisePreliminarPanel({
             {/* Resumo + risco */}
             <div className="flex items-start gap-2">
               {analise.nivel_risco && (
-                <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${corRisco(analise.nivel_risco)}`}>
+                <span className={`shrink-0 text-xs font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${corRisco(analise.nivel_risco)}`}>
                   {analise.nivel_risco}
                 </span>
               )}
@@ -381,10 +381,10 @@ function AnalisePreliminarPanel({
             {/* Fatos conhecidos */}
             {analise.fatos_conhecidos?.length > 0 && (
               <div>
-                <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1">Fatos nos autos</p>
+                <p className="text-xs text-zinc-600 uppercase tracking-wider mb-1">Fatos nos autos</p>
                 <ul className="space-y-0.5">
                   {analise.fatos_conhecidos.slice(0, 4).map((f: string, i: number) => (
-                    <li key={i} className="text-[10px] text-zinc-400 flex gap-1.5">
+                    <li key={i} className="text-xs text-zinc-400 flex gap-1.5">
                       <span className="text-emerald-600 shrink-0 mt-0.5">▸</span>{f}
                     </li>
                   ))}
@@ -395,10 +395,10 @@ function AnalisePreliminarPanel({
             {/* Pontos de atenção */}
             {analise.pontos_de_atencao?.length > 0 && (
               <div>
-                <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1">Pontos de atenção</p>
+                <p className="text-xs text-zinc-600 uppercase tracking-wider mb-1">Pontos de atenção</p>
                 <ul className="space-y-0.5">
                   {analise.pontos_de_atencao.slice(0, 3).map((pt: string, i: number) => (
-                    <li key={i} className="text-[10px] text-orange-300/80 flex gap-1.5">
+                    <li key={i} className="text-xs text-orange-300/80 flex gap-1.5">
                       <span className="text-orange-500 shrink-0 mt-0.5">⚠</span>{pt}
                     </li>
                   ))}
@@ -409,10 +409,10 @@ function AnalisePreliminarPanel({
             {/* Lacunas → justifica OSINT pago */}
             {analise.lacunas?.length > 0 && (
               <div className="border-t border-zinc-800 pt-2">
-                <p className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1">Lacunas → justificam consulta externa</p>
+                <p className="text-xs text-zinc-600 uppercase tracking-wider mb-1">Lacunas → justificam consulta externa</p>
                 <ul className="space-y-0.5">
                   {analise.lacunas.slice(0, 3).map((l: string, i: number) => (
-                    <li key={i} className="text-[10px] text-zinc-500 flex gap-1.5">
+                    <li key={i} className="text-xs text-zinc-500 flex gap-1.5">
                       <span className="text-zinc-700 shrink-0">→</span>{l}
                     </li>
                   ))}
@@ -421,7 +421,7 @@ function AnalisePreliminarPanel({
             )}
 
             {analise._fonte && (
-              <p className="text-[9px] text-zinc-700 text-right">via {analise._fonte}</p>
+              <p className="text-xs text-zinc-700 text-right">via {analise._fonte}</p>
             )}
           </>
         ) : null}
@@ -484,7 +484,7 @@ function CardPersonagem({
         {/* Nome + identificador */}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-zinc-200 truncate">{p.nome}</p>
-          <p className={`text-[10px] mt-0.5 font-mono ${p.cpf || p.cnpj ? "text-zinc-400" : "text-zinc-500 italic"}`}>
+          <p className={`text-xs mt-0.5 font-mono ${p.cpf || p.cnpj ? "text-zinc-400" : "text-zinc-500 italic"}`}>
             {p.cpf || p.cnpj || "Sem CPF/CNPJ nos autos"}
           </p>
         </div>
@@ -501,7 +501,7 @@ function CardPersonagem({
 
         {/* Cross-inquérito */}
         {temCross && (
-          <span className="shrink-0 text-[10px] px-2 py-0.5 rounded border border-orange-700/40 text-orange-400 bg-orange-500/5">
+          <span className="shrink-0 text-xs px-2 py-0.5 rounded border border-orange-700/40 text-orange-400 bg-orange-500/5">
             ⚠ {p.historico_inqueritos.length} IP(s)
           </span>
         )}
@@ -538,12 +538,12 @@ function CardPersonagem({
           {/* Cross-inquérito com links + tooltip de síntese */}
           {temCross && (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] text-orange-400 font-medium">Aparece em:</span>
+              <span className="text-xs text-orange-400 font-medium">Aparece em:</span>
               {p.historico_inqueritos.map((h) => (
                 <div key={h.inquerito_id} className="relative group/tip">
                   <Link
                     href={`/inqueritos/${h.inquerito_id}`}
-                    className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border border-orange-700/30 text-orange-300 bg-orange-500/5 hover:border-orange-500/50 hover:text-orange-200 transition-colors"
+                    className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border border-orange-700/30 text-orange-300 bg-orange-500/5 hover:border-orange-500/50 hover:text-orange-200 transition-colors"
                   >
                     IP {h.numero}
                     <span className="text-orange-500/60">({h.tipo_pessoa})</span>
@@ -553,19 +553,19 @@ function CardPersonagem({
                   <div className="invisible group-hover/tip:visible opacity-0 group-hover/tip:opacity-100 transition-all duration-150 absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-56 pointer-events-none">
                     <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-3 shadow-2xl">
                       <div className="flex items-baseline gap-1.5 mb-1.5">
-                        <span className="font-semibold text-zinc-100 text-[11px]">IP {h.numero}</span>
-                        {h.ano && <span className="text-zinc-600 text-[9px]">/{h.ano}</span>}
+                        <span className="font-semibold text-zinc-100 text-xs">IP {h.numero}</span>
+                        {h.ano && <span className="text-zinc-600 text-xs">/{h.ano}</span>}
                       </div>
-                      <span className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded border inline-block mb-2 ${
+                      <span className={`text-xs uppercase font-bold px-1.5 py-0.5 rounded border inline-block mb-2 ${
                         h.tipo_pessoa === "investigado" ? "border-red-700/40 text-red-400 bg-red-500/5"
                         : h.tipo_pessoa === "vitima" ? "border-blue-700/40 text-blue-400 bg-blue-500/5"
                         : h.tipo_pessoa === "testemunha" ? "border-yellow-700/40 text-yellow-400 bg-yellow-500/5"
                         : "border-zinc-700 text-zinc-500"
                       }`}>{h.tipo_pessoa}</span>
                       {h.descricao ? (
-                        <p className="text-zinc-400 text-[10px] leading-relaxed">{h.descricao}</p>
+                        <p className="text-zinc-400 text-xs leading-relaxed">{h.descricao}</p>
                       ) : (
-                        <p className="text-zinc-600 text-[10px] italic">Sem descrição disponível.</p>
+                        <p className="text-zinc-600 text-xs italic">Sem descrição disponível.</p>
                       )}
                     </div>
                     <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[5px] border-r-[5px] border-t-[5px] border-l-transparent border-r-transparent border-t-zinc-700" />
@@ -577,7 +577,7 @@ function CardPersonagem({
 
           {/* Módulos OSINT */}
           <div>
-            <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2">Módulos OSINT</p>
+            <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Módulos OSINT</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
               {OSINT_MODULOS.map(mod => {
                 const ativo = modulos.includes(mod.id);
@@ -589,7 +589,7 @@ function CardPersonagem({
                       onChange={() => onToggleModulo(mod.id)}
                       className="w-3 h-3 cursor-pointer accent-blue-500 rounded-sm"
                     />
-                    <span className={`text-[10px] truncate ${ativo ? mod.color : "text-zinc-600"} group-hover:text-zinc-400`}>
+                    <span className={`text-xs truncate ${ativo ? mod.color : "text-zinc-600"} group-hover:text-zinc-400`}>
                       {mod.label}
                     </span>
                   </label>
@@ -620,10 +620,10 @@ function CardPersonagem({
           {/* Resultado inline */}
           {statusFinal?.status === "concluido" && statusFinal?.dados && (
             <div className="border-t border-zinc-800 pt-3 space-y-1.5">
-              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Resultado</p>
+              <p className="text-xs text-zinc-500 uppercase tracking-wider">Resultado</p>
               <div className="flex flex-wrap gap-1">
                 {statusFinal.dados.apis_executadas?.map((a: string) => (
-                  <Badge key={a} variant="outline" className="text-[10px] border-green-700/30 text-green-400">{a}</Badge>
+                  <Badge key={a} variant="outline" className="text-xs border-green-700/30 text-green-400">{a}</Badge>
                 ))}
               </div>
               {statusFinal.dados.cadastro?.nome && (

@@ -101,7 +101,7 @@ export function CalendarioIntimacoes({
       {/* Cabeçalho dias da semana */}
       <div className="grid grid-cols-7 mb-1">
         {DIAS_SEMANA.map((d) => (
-          <div key={d} className="text-center text-[10px] text-zinc-600 font-medium py-1">
+          <div key={d} className="text-center text-xs text-zinc-600 font-medium py-1">
             {d}
           </div>
         ))}
@@ -153,7 +153,7 @@ export function CalendarioIntimacoes({
                     />
                   ))}
                   {intimsDoDia.length > 3 && (
-                    <span className="text-[9px] text-zinc-500">+{intimsDoDia.length - 3}</span>
+                    <span className="text-xs text-zinc-500">+{intimsDoDia.length - 3}</span>
                   )}
                 </div>
               )}
@@ -170,7 +170,7 @@ export function CalendarioIntimacoes({
           { cor: "bg-green-400", label: "Realizada" },
           { cor: "bg-orange-400", label: "Incompleta" },
         ].map(({ cor, label }) => (
-          <span key={label} className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+          <span key={label} className="flex items-center gap-1.5 text-xs text-zinc-500">
             <span className={`w-2 h-2 rounded-full ${cor}`} />
             {label}
           </span>

@@ -87,7 +87,7 @@ function CustoExternoCard({
         <span className={`shrink-0 ${cfg.cor}`}>{cfg.icon}</span>
         <span className="text-sm text-zinc-300 font-medium">{cfg.label}</span>
         {source && SOURCE_BADGE[source] && !editando && (
-          <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${SOURCE_BADGE[source].cls}`}>
+          <Badge variant="outline" className={`text-xs px-1.5 py-0 ${SOURCE_BADGE[source].cls}`}>
             {SOURCE_BADGE[source].label}
           </Badge>
         )}
@@ -392,7 +392,7 @@ export default function AdminPage() {
                   <CardTitle className="text-sm font-semibold">Projeção para o Fim do Mês</CardTitle>
                 </div>
                 {projecao.alerta && (
-                  <Badge variant="outline" className="text-[10px] border-yellow-700/40 text-yellow-400">alerta</Badge>
+                  <Badge variant="outline" className="text-xs border-yellow-700/40 text-yellow-400">alerta</Badge>
                 )}
               </CardHeader>
               <CardContent>
@@ -441,7 +441,7 @@ export default function AdminPage() {
                   <div className="flex items-center gap-2.5">
                     <span className="text-amber-400"><Bot size={14} /></span>
                     <span className="text-sm text-zinc-300 font-medium">Gemini API</span>
-                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-amber-700/30 text-amber-500">auto</Badge>
+                    <Badge variant="outline" className="text-xs px-1.5 py-0 border-amber-700/30 text-amber-500">auto</Badge>
                   </div>
                   <span className="text-sm font-semibold text-white">R$ {externos.gemini_brl.toFixed(2)}</span>
                 </div>
@@ -482,7 +482,7 @@ export default function AdminPage() {
                       <div className="flex items-center justify-between text-sm">
                         <div className="flex items-center gap-2">
                           <span className="text-zinc-200 font-medium">{r.agente}</span>
-                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${TIER_COLOR[r.tier] ?? "bg-zinc-800 text-zinc-400"}`}>
+                          <Badge variant="outline" className={`text-xs px-1.5 py-0 ${TIER_COLOR[r.tier] ?? "bg-zinc-800 text-zinc-400"}`}>
                             {r.tier}
                           </Badge>
                         </div>
@@ -546,7 +546,7 @@ export default function AdminPage() {
                         title={`${h.dia}: R$ ${h.gasto_brl.toFixed(2)} (${h.chamadas} chamadas)`}
                       />
                       {i % 7 === 0 && (
-                        <span className="text-[9px] text-zinc-600 rotate-45 origin-left absolute -bottom-5 left-0">
+                        <span className="text-xs text-zinc-600 rotate-45 origin-left absolute -bottom-5 left-0">
                           {h.dia.slice(5)}
                         </span>
                       )}
@@ -631,7 +631,7 @@ export default function AdminPage() {
                         />
                       </div>
                     </div>
-                    <p className="text-[11px] text-zinc-600">
+                    <p className="text-xs text-zinc-600">
                       ⚠ Ativo até o próximo restart do Railway. Para persistir, atualize as variáveis de ambiente no Railway.
                     </p>
                     <div className="flex gap-2">

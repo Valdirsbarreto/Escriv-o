@@ -87,7 +87,7 @@ export default function Home() {
                 <div className="p-4 bg-blue-500/10 rounded-2xl border border-blue-500/20">
                   <UploadCloud className="w-8 h-8 text-blue-400" />
                 </div>
-                <div className="bg-blue-500/10 text-blue-400 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border border-blue-500/20">
+                <div className="bg-blue-500/10 text-blue-400 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest border border-blue-500/20">
                   Fluxo Principal
                 </div>
               </div>
@@ -163,10 +163,10 @@ export default function Home() {
                   <Card className="bg-zinc-950/80 border-zinc-900 hover:border-blue-500/40 transition-all cursor-pointer h-full relative overflow-hidden group-hover:-translate-y-1 group-hover:shadow-[0_15px_30px_-10px_rgba(59,130,246,0.1)]">
                     <CardHeader className="p-8">
                       <div className="flex justify-between items-start mb-6">
-                        <Badge className="bg-zinc-900 text-zinc-500 border-zinc-800 uppercase text-[9px] font-black tracking-widest px-2 py-1">
+                        <Badge className="bg-zinc-900 text-zinc-500 border-zinc-800 uppercase text-xs font-black tracking-widest px-2 py-1">
                           IP {inq.ano || "2024"}
                         </Badge>
-                        <Badge className={`rounded-full px-3 py-1 text-[9px] uppercase font-black tracking-widest ${
+                        <Badge className={`rounded-full px-3 py-1 text-xs uppercase font-black tracking-widest ${
                           inq.estado_atual === 'completo' ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
                         }`}>
                           {inq.estado_atual}
@@ -184,7 +184,7 @@ export default function Home() {
                             <FilePlus size={14} /> {inq.total_documentos || 0} docs
                           </span>
                         </div>
-                        <span className="text-[10px] font-black text-zinc-700 uppercase">
+                        <span className="text-xs font-black text-zinc-700 uppercase">
                           {new Date(inq.created_at).toLocaleDateString("pt-BR")}
                         </span>
                       </div>
