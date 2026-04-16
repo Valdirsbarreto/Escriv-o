@@ -23,50 +23,53 @@ interface Props {
   disabled?: boolean;
 }
 
-// Obtém token de acesso via popup MSAL implícito (sem biblioteca extra)
+// Obtém token de acesso via popup MSAL implícito com redirect para /auth/onedrive
 async function obterToken(): Promise<string> {
   return new Promise((resolve, reject) => {
-    const redirectUri = encodeURIComponent(window.location.origin);
-    const scope = encodeURIComponent("https://graph.microsoft.com/Files.Read");
+    const redirectUri = `${window.location.origin}/auth/onedrive`;
+    const scope = encodeURIComponent("https://graph.microsoft.com/Files.Read User.Read");
     const url =
       `https://login.microsoftonline.com/${ONEDRIVE_TENANT_ID}/oauth2/v2.0/authorize` +
       `?client_id=${ONEDRIVE_CLIENT_ID}` +
       `&response_type=token` +
-      `&redirect_uri=${redirectUri}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
       `&scope=${scope}` +
       `&response_mode=fragment` +
       `&prompt=select_account`;
 
-    const popup = window.open(url, "mslogin", "width=520,height=620,left=200,top=100");
+    const popup = window.open(url, "mslogin", "width=520,height=640,left=200,top=80");
     if (!popup) {
       reject(new Error("Popup bloqueado. Permita popups para este site."));
       return;
     }
 
-    const timer = setInterval(() => {
-      try {
-        if (!popup || popup.closed) {
-          clearInterval(timer);
-          reject(new Error("Login cancelado."));
-          return;
-        }
-        const hash = popup.location.hash;
-        if (hash && hash.includes("access_token")) {
-          clearInterval(timer);
-          popup.close();
-          const params = new URLSearchParams(hash.replace("#", ""));
-          const token = params.get("access_token");
-          if (token) resolve(token);
-          else reject(new Error("Token não encontrado na resposta."));
-        }
-      } catch {
-        // cross-origin enquanto redireciona — normal, aguarda
+    // Ouve o postMessage enviado pela página /auth/onedrive
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== "onedrive_token") return;
+      window.removeEventListener("message", onMessage);
+      clearTimeout(timeout);
+      if (event.data.token) {
+        resolve(event.data.token);
+      } else {
+        reject(new Error(`Autenticação falhou: ${event.data.error || "erro desconhecido"}`));
       }
-    }, 300);
+    };
+    window.addEventListener("message", onMessage);
+
+    // Detecta se o usuário fechou o popup manualmente
+    const closedTimer = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(closedTimer);
+        window.removeEventListener("message", onMessage);
+        reject(new Error("Login cancelado."));
+      }
+    }, 600);
 
     // Timeout de 3 minutos
-    setTimeout(() => {
-      clearInterval(timer);
+    const timeout = setTimeout(() => {
+      clearInterval(closedTimer);
+      window.removeEventListener("message", onMessage);
       if (!popup.closed) popup.close();
       reject(new Error("Tempo de login esgotado."));
     }, 180000);
