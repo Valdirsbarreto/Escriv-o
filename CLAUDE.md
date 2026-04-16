@@ -9,7 +9,7 @@ Backend FastAPI + Celery + Redis + Qdrant + PostgreSQL. Frontend Next.js no Verc
 ## Ao iniciar uma sessão — leia primeiro
 - `backend/app/core/prompts.py` — todos os system prompts (editá-los aqui, não inline)
 - `backend/app/services/llm_service.py` — roteamento de tiers LLM
-- Memória `project_sessao_14_04_2026_v3.md` — **estado ao encerrar sessão de 14/04 (parte 3), pendências e próximas ações**
+- Memória `project_sessao_15_04_2026.md` — **estado ao encerrar sessão de 15/04, pendências e próximas ações**
 
 ---
 
@@ -147,7 +147,7 @@ Antes de escrever qualquer seção, o agente identifica:
 
 ---
 
-## Copiloto — Arquitetura de contexto (atualizado 2026-04-14)
+## Copiloto — Arquitetura de contexto (atualizado 2026-04-15)
 
 O Copiloto monta seu contexto na seguinte ordem:
 
@@ -160,20 +160,19 @@ O Copiloto monta seu contexto na seguinte ordem:
 5. **Contatos e cronologia**
 6. **Chunks RAG** (Qdrant + busca híbrida texto)
 
-**Comportamento esperado (6 diretrizes formais — commit `1cc8fc9`):**
-- D1 Gatekeeper: "você vê X?" → sim/não + oferta, nunca execução espontânea
-- D2 Fidelidade: prioriza doc mais recente; referências processuais = ponteiros para docs físicos
-- D3 Integridade: nunca trunca; `<RELATORIO_COMPLEMENTAR_CALL>` só em pedido explícito
-- D4 Formato: conversa=prosa, documento=completo formal
-- D5 Read-only: nunca salva, cria ou modifica no sistema
-- D6 Zero inferência: age no que foi escrito, pergunta se ambíguo
-- `max_tokens = 8000`
+**Filosofia (atualizado 15/04 — commit `14cf015`):**
+O Copiloto conversa naturalmente, sem diretrizes rígidas numeradas. Raciocina em voz alta, faz perguntas quando necessário, age quando pedido. Fluxo ideal:
+`Comissário pergunta → Copiloto analisa e responde → refinam juntos → Copiloto gera documento inline → Comissário clica "Salvar"`
 
-**Ferramenta `<RELATORIO_COMPLEMENTAR_CALL>`:** quando o Comissário pede explicitamente o Relatório Complementar, o Copiloto emite a tag e `copiloto_service.py` dispara `gerar_relatorio_complementar_task.delay()`.
+**Capacidade "pauta investigativa":** quando o Comissário pergunta "o que está para fazer?", o Copiloto analisa os autos e retorna: itens da Cota MP não cumpridos, investigados sem oitiva, laudos sem resposta, lacunas de prova.
+
+**Ferramenta `<RELATORIO_COMPLEMENTAR_CALL>`:** SOMENTE quando Comissário diz "salva no sistema" / "usa a ferramenta dedicada". Pedidos conversacionais ("consolide", "redija", "elabore") → gera INLINE na conversa, não dispara a ferramenta. Quando disparada: `copiloto_service.py` chama `gerar_relatorio_complementar_task.delay()`.
 
 **NÃO auto-salva respostas** — o usuário salva explicitamente pelo botão "Salvar" no canvas.
 
 **ATENÇÃO — `{}` no prompt:** qualquer literal `{}` em `SYSTEM_PROMPT_COPILOTO` deve ser `{{}}` — o serviço faz `.format(**kwargs)` e quebra com placeholders posicionais vazios.
+
+- `max_tokens = 8000`
 
 ---
 
@@ -186,6 +185,9 @@ O Copiloto monta seu contexto na seguinte ordem:
 | Campo "Fato" preenchido com descrição NER precoce | `orchestrator.py` setava `descricao=fato_resumo` na criação | `descricao=""` na criação; preenchido somente pela Seção 1 do Relatório Inicial |
 | Copiloto "⚠️ LLM indisponível" — 403/404 Gemini | Chave nova AI Studio → família 2.0 bloqueada; billing atrasado | Pagar fatura + migrar para `gemini-2.5-flash` / `gemini-2.5-flash-lite` (14/04) |
 | `Documento.num_paginas` AttributeError no Copiloto | Campo se chama `total_paginas` no modelo | Corrigido em `copiloto_service.py` (commit `87cb2a6`) |
+| Copiloto rígido — gerava relatório sem conversar | `SYSTEM_PROMPT` com 6 diretrizes obrigatórias engessava o LLM | Reescrito como conversa natural (15/04, commit `bdb8389`) |
+| `<RELATORIO_COMPLEMENTAR_CALL>` disparava cedo demais | Trigger em "consolide" além de pedidos explícitos | Restringido: só "salva no sistema" / "usa a ferramenta" (commit `14cf015`) |
+| Rel. Complementar não localizava Cota Ministerial | Cota perdida no blob; sem Passo 0 de parsing | Cota isolada como campo dedicado + Passo 0 obrigatório (commit `bdb8389`) |
 
 ---
 
