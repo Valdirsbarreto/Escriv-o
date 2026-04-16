@@ -211,9 +211,11 @@ O Copiloto conversa naturalmente, sem diretrizes rígidas numeradas. Raciocina e
 4. **Alembic migration `j0k1l2m3n4o5`** no Railway — remap tipos de peças:
    `laudo → laudo_pericial` | `oficio → oficio_expedido` | `termo_oitiva → termo_depoimento`
 
-5. **OSINT Web (Serper.dev)** — plano completo em `reflective-meandering-sky.md`:
-   - `serper_service.py`, endpoint `/agentes/osint/web/`, `OsintWebPanel` — NÃO criados
-   - `SERPER_API_KEY` já está no `.env.local` e hardcoded em `config.py`
+5. **OSINT Web (Serper.dev)** — ✅ IMPLEMENTADO: `serper_service.py`, `gerar_osint_web_pessoa`, endpoint `/agentes/osint/web/`, `OsintWebPanel` no `PainelInvestigacao.tsx`
+
+6. **Edição de documentos gerados pela IA** — ✅ IMPLEMENTADO (sessão 16/04): botão ✏️ abre modal de edição (título + conteúdo) → `PUT /docs-gerados/{id}`
+
+7. **Exportação PDF de docs gerados** — ✅ IMPLEMENTADO (sessão 16/04): botão 📄 exporta como HTML + `window.print()`
 
 ---
 
