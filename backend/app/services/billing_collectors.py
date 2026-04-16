@@ -70,9 +70,22 @@ async def coletar_vercel(mes: str, cotacao: float) -> Optional[BillingResult]:
             logger.warning(f"[BILLING-Vercel] HTTP {resp.status_code}: {resp.text[:200]}")
             return None
 
-        data = resp.json()
-        charges = data.get("charges") or data.get("data") or []
-        total_usd = sum(float(c.get("total", c.get("amount", 0))) for c in charges) / 100  # centavos → USD
+        # Vercel billing/charges retorna JSONL (uma linha por registro)
+        import json as _json
+        charges = []
+        for line in resp.text.strip().splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    charges.append(_json.loads(line))
+                except _json.JSONDecodeError:
+                    pass
+
+        # Campos possíveis: total, amount, billedAmount (em centavos de USD)
+        total_usd = sum(
+            float(c.get("total", c.get("billedAmount", c.get("amount", 0))))
+            for c in charges
+        ) / 100
 
         return BillingResult(
             custo_usd=Decimal(str(round(total_usd, 4))),
@@ -91,14 +104,16 @@ async def coletar_vercel(mes: str, cotacao: float) -> Optional[BillingResult]:
 # ── Railway ────────────────────────────────────────────────────────────────────
 
 RAILWAY_GQL = "https://backboard.railway.app/graphql/v2"
+# Consulta uso estimado por projeto do usuário atual
 RAILWAY_QUERY = """
 query {
   me {
-    usage {
-      estimatedCost
-      currentBillingPeriod {
-        startDate
-        endDate
+    projects {
+      edges {
+        node {
+          name
+          estimatedUsage
+        }
       }
     }
   }
@@ -140,17 +155,23 @@ async def coletar_railway(mes: str, cotacao: float) -> Optional[BillingResult]:
             return None
 
         data = resp.json()
-        usage = (data.get("data") or {}).get("me", {}).get("usage", {})
-        estimated = float(usage.get("estimatedCost") or 0)
-        periodo = usage.get("currentBillingPeriod") or {}
+        edges = (data.get("data") or {}).get("me", {}).get("projects", {}).get("edges", [])
+
+        total_usd = 0.0
+        projetos = []
+        for edge in edges:
+            node = edge.get("node") or {}
+            custo = float(node.get("estimatedUsage") or 0)
+            total_usd += custo
+            projetos.append({"nome": node.get("name"), "estimatedUsage": custo})
 
         return BillingResult(
-            custo_usd=Decimal(str(round(estimated, 4))),
-            custo_brl=Decimal(str(round(estimated * cotacao, 2))),
+            custo_usd=Decimal(str(round(total_usd, 4))),
+            custo_brl=Decimal(str(round(total_usd * cotacao, 2))),
             source="official_api",
             confidence="medium",
-            raw_payload={"estimatedCost": estimated, "period": periodo},
-            observacao=f"Railway GraphQL — estimativa do período corrente",
+            raw_payload={"projetos": projetos, "total_usd": total_usd},
+            observacao=f"Railway GraphQL — {len(projetos)} projetos",
         )
 
     except Exception as e:
