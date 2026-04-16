@@ -314,6 +314,15 @@ export const osintBuscaWeb = async (inqueritoId: string, pessoaId: string) => {
 
 // ── Agente Sherlock ────────────────────────────────────────────────────────────
 
+export const ingestaoIniciarUrl = async (url: string, nome_arquivo: string) => {
+  const response = await api.post(
+    "/ingestao/iniciar-url",
+    { url, nome_arquivo },
+    { timeout: 90000 },
+  );
+  return response.data as { id_sessao: string; status: string; mensagem: string; arquivos_recebidos: string[] };
+};
+
 export const uploadPorUrl = async (inqueritoId: string, url: string, nome_arquivo: string) => {
   const response = await api.post(
     `/inqueritos/${inqueritoId}/upload-url`,

@@ -112,6 +112,73 @@ async def iniciar_ingestao(
     )
 
 
+@router.post("/iniciar-url", response_model=IngestaoIniciaResponse)
+async def iniciar_ingestao_por_url(body: dict):
+    """
+    Baixa um arquivo de uma URL remota (ex: OneDrive) e inicia a orquestração.
+    Body: { "url": "https://...", "nome_arquivo": "doc.pdf" }
+    """
+    import re, unicodedata, httpx
+
+    url = (body.get("url") or "").strip()
+    nome_original = (body.get("nome_arquivo") or "documento.pdf").strip()
+
+    if not url:
+        raise HTTPException(status_code=400, detail="URL não informada.")
+
+    ext = "." + nome_original.rsplit(".", 1)[-1].lower() if "." in nome_original else ""
+    if ext not in EXTENSOES_PERMITIDAS:
+        raise HTTPException(status_code=400, detail=f"Formato {ext} não suportado.")
+
+    # Baixar da URL remota
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
+            resp = await client.get(url)
+            if resp.status_code >= 400:
+                raise HTTPException(status_code=422, detail=f"Erro ao baixar arquivo (HTTP {resp.status_code})")
+            content = resp.content
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Erro ao baixar arquivo: {str(e)[:200]}")
+
+    if len(content) < 100:
+        raise HTTPException(status_code=422, detail="Arquivo baixado está vazio ou inválido.")
+    if len(content) > TAMANHO_MAX_ARQUIVO:
+        raise HTTPException(status_code=400, detail="Arquivo excede 50 MB.")
+
+    def slugify(text: str) -> str:
+        text = unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+        text = re.sub(r'[^\w\s\.-]', '', text).strip().lower()
+        return re.sub(r'[-\s]+', '-', text)
+
+    nome = slugify(nome_original)
+    if not nome.endswith(ext):
+        nome += ext
+
+    id_sessao = str(uuid.uuid4())
+    storage = StorageService()
+    storage_path = f"temporario/{id_sessao}/{nome}"
+    content_type = f"application/{ext.lstrip('.')}" if ext == ".pdf" else f"image/{ext.lstrip('.')}"
+    await storage.upload_file(content, storage_path, content_type)
+
+    try:
+        if hasattr(orchestrate_new_inquerito, "delay"):
+            orchestrate_new_inquerito.delay([storage_path], [nome_original])
+        else:
+            raise HTTPException(status_code=503, detail="Serviço de processamento (Celery/Redis) indisponível.")
+        logger.info(f"[INGESTÃO-URL] Orquestrador acionado para {nome_original} — sessão {id_sessao}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Não foi possível iniciar o processamento: {str(e)}")
+
+    return IngestaoIniciaResponse(
+        id_sessao=id_sessao,
+        status="processando",
+        mensagem=f"Arquivo '{nome_original}' baixado do OneDrive. O Orquestrador IA está analisando para criar o inquérito automaticamente.",
+        arquivos_recebidos=[nome_original],
+    )
+
+
 # ── Admin: Gerenciamento Qdrant ───────────────────────────────────────────────
 
 @router.post("/admin/qdrant/recreate", tags=["Admin"])

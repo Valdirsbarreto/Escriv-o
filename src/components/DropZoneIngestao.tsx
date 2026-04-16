@@ -7,7 +7,8 @@ import {
   CheckCircle2, AlertTriangle, X, WifiOff, Brain, ArrowRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { api, apiMultipart } from "@/lib/api";
+import { api, apiMultipart, ingestaoIniciarUrl } from "@/lib/api";
+import { OneDrivePicker } from "@/components/OneDrivePicker";
 
 type Stage = "idle" | "uploading" | "analisando_ia" | "extraindo_dados" | "criando_inquerito" | "orquestrando" | "concluido" | "erro";
 
@@ -223,6 +224,45 @@ export function DropZoneIngestao() {
     setErro(""); setProgresso(0); setInqueritoCriado(null); setStepAtivo(0);
   };
 
+  const handleOneDrive = async (file: { nome: string; downloadUrl: string }) => {
+    setStage("uploading");
+    setErro("");
+    setResultado(null);
+    setProgresso(0);
+    setInqueritoCriado(null);
+    setArquivos([{ name: file.nome, size: 0, type: "application/pdf" }]);
+    uploadTimestampRef.current = Date.now();
+
+    try {
+      const res = await ingestaoIniciarUrl(file.downloadUrl, file.nome);
+      setResultado({ id_sessao: res.id_sessao, mensagem: res.mensagem, arquivos_recebidos: res.arquivos_recebidos });
+      setStage("orquestrando");
+      setStepAtivo(0);
+
+      let stepIdx = 0;
+      stepIntervalRef.current = setInterval(() => {
+        stepIdx = Math.min(stepIdx + 1, ORQUESTRANDO_STEPS.length - 1);
+        setStepAtivo(stepIdx);
+      }, 6000);
+
+      const uploadTs = uploadTimestampRef.current;
+      let pollCount = 0;
+      pollIntervalRef.current = setInterval(async () => {
+        pollCount++;
+        if (pollCount > 40) { clearInterval(pollIntervalRef.current!); clearInterval(stepIntervalRef.current!); setStage("concluido"); return; }
+        try {
+          const r = await api.get("/inqueritos");
+          const items: any[] = r.data?.items ?? r.data ?? [];
+          const novo = items.find((inq: any) => new Date(inq.created_at).getTime() > uploadTs - 5000);
+          if (novo) { clearInterval(pollIntervalRef.current!); clearInterval(stepIntervalRef.current!); setInqueritoCriado({ id: novo.id, numero: novo.numero }); setStage("concluido"); }
+        } catch { /* ignora */ }
+      }, 3000);
+    } catch (e: any) {
+      setStage("erro");
+      setErro(e?.response?.data?.detail || e?.message || "Erro ao importar do OneDrive.");
+    }
+  };
+
   const isProcessing = ["uploading", "analisando_ia", "extraindo_dados", "criando_inquerito"].includes(stage);
   const isOrquestrando = stage === "orquestrando";
   const isNetworkError = erro.includes("conectar ao backend") || erro.includes("FastAPI");
@@ -339,6 +379,14 @@ export function DropZoneIngestao() {
           )}
         </div>
       </div>
+
+      {/* Botão OneDrive — só aparece quando idle */}
+      {stage === "idle" && (
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-zinc-600">ou importe direto do</span>
+          <OneDrivePicker onFileSelected={handleOneDrive} />
+        </div>
+      )}
 
       {/* Progresso de Lotes */}
       {lotes.length > 0 && (
