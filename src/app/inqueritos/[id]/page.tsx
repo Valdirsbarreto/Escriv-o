@@ -298,7 +298,6 @@ export default function InqueritoDetalhePage() {
   const [reprocessing, setReprocessing] = useState(false);
   const [gerandoSintese, setGerandoSintese] = useState(false);
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false);
-  const [gerandoComplementar, setGerandoComplementar] = useState(false);
   const [intimacoes, setIntimacoes] = useState<any[]>([]);
   const [showIntimacaoModal, setShowIntimacaoModal] = useState(false);
   const [docViewer, setDocViewer] = useState<{ open: boolean; doc: any; conteudo: any | null; loading: boolean }>({ open: false, doc: null, conteudo: null, loading: false });
@@ -587,36 +586,6 @@ export default function InqueritoDetalhePage() {
       console.error(e);
       setGerandoRelatorio(false);
       alert("Erro ao acionar geração da Síntese Inicial.");
-    }
-  };
-
-  const handleGerarRelatorioComplementar = async (forcar = false) => {
-    setGerandoComplementar(true);
-    try {
-      await api.post(`/inqueritos/${inqId}/gerar-relatorio-complementar?forcar=${forcar}`);
-      let tentativas = 0;
-      const interval = setInterval(async () => {
-        tentativas++;
-        try {
-          const res = await api.get(`/inqueritos/${inqId}/documentos-gerados`);
-          if ((res.data || []).some((d: any) => d.tipo === "relatorio_complementar")) {
-            setGerandoComplementar(false);
-            clearInterval(interval);
-            const resAll = await api.get(`/inqueritos/${inqId}/documentos-gerados`);
-            setDocsGerados(resAll.data || []);
-            return;
-          }
-        } catch {/* silencioso */}
-        if (tentativas >= 60) {
-          setGerandoComplementar(false);
-          clearInterval(interval);
-          alert("O Relatório Complementar está demorando mais que o esperado. Recarregue a página em alguns minutos.");
-        }
-      }, 5000);
-    } catch (e) {
-      console.error(e);
-      setGerandoComplementar(false);
-      alert("Erro ao acionar geração do Relatório Complementar.");
     }
   };
 

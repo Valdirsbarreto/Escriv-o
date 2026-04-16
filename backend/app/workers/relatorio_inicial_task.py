@@ -54,7 +54,7 @@ def _normalizar_nome(nome: str) -> str:
     return re.sub(r"\s+", " ", nome).strip().lower()
 
 
-@celery_app.task(bind=True, max_retries=2, default_retry_delay=60)
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=60, time_limit=700, soft_time_limit=660)
 def gerar_relatorio_inicial_task(self, inquerito_id: str):
     """Gera o Relatório Inicial de Investigação para o inquérito."""
     logger.info(f"[REL-INICIAL] Iniciando — inquerito={inquerito_id}")
@@ -224,12 +224,15 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
             )
 
             llm = LLMService()
-            result_llm = await llm.chat_completion(
-                messages=[{"role": "user", "content": prompt}],
-                tier="premium",
-                temperature=0.1,
-                max_tokens=8000,
-                agente="RelatorioInicial",
+            result_llm = await asyncio.wait_for(
+                llm.chat_completion(
+                    messages=[{"role": "user", "content": prompt}],
+                    tier="premium",
+                    temperature=0.1,
+                    max_tokens=8000,
+                    agente="RelatorioInicial",
+                ),
+                timeout=300,
             )
             relatorio_rascunho = result_llm["content"].strip()
 
@@ -241,12 +244,15 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
                     fontes_primarias=resumos_str[:300000],
                     relatorio_gerado=relatorio_rascunho,
                 )
-                result_auditoria = await llm.chat_completion(
-                    messages=[{"role": "user", "content": prompt_auditoria}],
-                    tier="standard",
-                    temperature=0.0,
-                    max_tokens=5000,
-                    agente="AuditorRelatorio",
+                result_auditoria = await asyncio.wait_for(
+                    llm.chat_completion(
+                        messages=[{"role": "user", "content": prompt_auditoria}],
+                        tier="standard",
+                        temperature=0.0,
+                        max_tokens=5000,
+                        agente="AuditorRelatorio",
+                    ),
+                    timeout=240,
                 )
                 relatorio_auditado = result_auditoria["content"].strip()
 

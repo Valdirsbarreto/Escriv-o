@@ -21,11 +21,8 @@ function getOrCreateSessionId(): string {
 
 function detectarTipo(text: string): string {
   const upper = text.toUpperCase();
-  // Verificações específicas primeiro (evita falso-positivo por "ofício" dentro de relatório)
-  if (upper.includes("RELATÓRIO COMPLEMENTAR") || upper.includes("RELATORIO COMPLEMENTAR")) return "relatorio_complementar";
   if (upper.includes("OITIVA") || upper.includes("ROTEIRO DE OITIVA")) return "roteiro_oitiva";
   if (upper.includes("MANDADO") || upper.includes("REQUISIÇÃO") || upper.includes("REQUISICAO") || upper.includes("CAUTELAR")) return "minuta_cautelar";
-  if (upper.includes("RELATÓRIO") || upper.includes("RELATORIO")) return "relatorio_complementar";
   if (upper.includes("OFÍCIO") || upper.includes("OFICIO")) return "oficio";
   return "outro";
 }
