@@ -11,7 +11,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 
 from app.core.database import get_db
 from app.core.config import settings
@@ -118,8 +118,8 @@ async def historico_diario(dias: int = 30, db: AsyncSession = Depends(get_db)):
             func.count(ConsumoApi.id).label("chamadas"),
         )
         .where(ConsumoApi.timestamp >= inicio)
-        .group_by(func.date_trunc("day", ConsumoApi.timestamp))
-        .order_by(func.date_trunc("day", ConsumoApi.timestamp))
+        .group_by(text("1"))
+        .order_by(text("1"))
     )
     rows = result.all()
 
