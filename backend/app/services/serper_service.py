@@ -44,6 +44,7 @@ class SerperService:
         self,
         nome: str,
         cpf: Optional[str] = None,
+        db=None,  # AsyncSession opcional — grava usage_event se fornecido
     ) -> Dict[str, Any]:
         """
         Executa 5-6 dorks paralelos sobre o nome/CPF da pessoa.
@@ -81,6 +82,28 @@ class SerperService:
                     "posicao": r.get("position", 0),
                     "categoria": categoria,
                 })
+
+        # ── Telemetria de custo ───────────────────────────────────────────────
+        if db is not None:
+            try:
+                from app.models.usage_event import UsageEvent
+                from app.core.config import settings
+                from datetime import datetime as _dt
+                from decimal import Decimal
+                n_queries = len(dorks)
+                custo_usd = (n_queries * settings.SERPER_PRICE_PER_1K_QUERIES) / 1000
+                evento = UsageEvent(
+                    provider="serper",
+                    metric="search_query",
+                    quantity=n_queries,
+                    cost_estimate_usd=Decimal(str(round(custo_usd, 6))),
+                    occurred_at=_dt.utcnow(),
+                    meta={"nome": nome, "tem_cpf": cpf is not None, "total_resultados": total},
+                )
+                db.add(evento)
+                await db.flush()
+            except Exception as _e:
+                logger.warning(f"[Serper] Falha ao gravar usage_event: {_e}")
 
         return {
             "por_categoria": por_categoria,

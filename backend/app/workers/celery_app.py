@@ -4,6 +4,7 @@ Broker e backend via Redis para processamento assíncrono.
 """
 
 from celery import Celery
+from celery.schedules import crontab
 from app.core.config import settings
 
 celery_app = Celery(
@@ -20,6 +21,7 @@ celery_app = Celery(
         "app.workers.peca_extraction_task",
         "app.workers.relatorio_inicial_task",
         "app.workers.relatorio_complementar_task",
+        "app.workers.billing_task",
     ],
 )
 
@@ -44,7 +46,11 @@ celery_app.conf.update(
     beat_schedule={
         "alertas-intimacoes-diario": {
             "task": "app.workers.telegram_alertas.verificar_alertas_intimacoes",
-            "schedule": 60 * 60 * 24,  # 24h — ajustar para crontab se precisar horário fixo
+            "schedule": 60 * 60 * 24,  # 24h
+        },
+        "coletar-custos-externos-diario": {
+            "task": "app.workers.billing_task.coletar_custos_externos_task",
+            "schedule": crontab(hour=0, minute=30),  # 00:30 UTC diariamente
         },
     },
 )

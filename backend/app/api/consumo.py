@@ -203,6 +203,8 @@ async def listar_custos_externos(mes: Optional[str] = None, db: AsyncSession = D
             "custo_usd": float(e.custo_usd),
             "custo_brl": float(e.custo_brl),
             "observacao": e.observacao,
+            "source": e.source,
+            "confidence": e.confidence,
             "updated_at": e.updated_at.isoformat(),
         }
         for e in externos
@@ -246,6 +248,8 @@ async def salvar_custo_externo(
         registro.custo_usd = Decimal(str(body.custo_usd))
         registro.custo_brl = Decimal(str(body.custo_brl))
         registro.observacao = body.observacao
+        registro.source = "manual"
+        registro.confidence = "high"
         registro.updated_at = datetime.utcnow()
     else:
         registro = CustoExterno(
@@ -254,6 +258,8 @@ async def salvar_custo_externo(
             custo_usd=Decimal(str(body.custo_usd)),
             custo_brl=Decimal(str(body.custo_brl)),
             observacao=body.observacao,
+            source="manual",
+            confidence="high",
         )
         db.add(registro)
 

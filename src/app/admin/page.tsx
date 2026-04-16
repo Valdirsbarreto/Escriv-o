@@ -42,15 +42,24 @@ function pct(value: number, total: number) {
 
 // ── Componente de edição inline ───────────────────────────────────────────────
 
+const SOURCE_BADGE: Record<string, { label: string; cls: string }> = {
+  official_api:        { label: "auto",     cls: "border-emerald-700/30 text-emerald-400" },
+  estimated:           { label: "estimado", cls: "border-yellow-700/30 text-yellow-500" },
+  internal_telemetry:  { label: "auto",     cls: "border-sky-700/30 text-sky-400" },
+  manual:              { label: "manual",   cls: "border-zinc-700/30 text-zinc-500" },
+};
+
 function CustoExternoCard({
   servico,
   valor,
   observacao,
+  source,
   onSalvar,
 }: {
   servico: string;
   valor: number;
   observacao?: string;
+  source?: string;
   onSalvar: (usd: number, brl: number, obs: string) => Promise<void>;
 }) {
   const [editando, setEditando] = useState(false);
@@ -77,6 +86,11 @@ function CustoExternoCard({
       <div className="flex items-center gap-2.5 min-w-0">
         <span className={`shrink-0 ${cfg.cor}`}>{cfg.icon}</span>
         <span className="text-sm text-zinc-300 font-medium">{cfg.label}</span>
+        {source && SOURCE_BADGE[source] && !editando && (
+          <Badge variant="outline" className={`text-[9px] px-1.5 py-0 ${SOURCE_BADGE[source].cls}`}>
+            {SOURCE_BADGE[source].label}
+          </Badge>
+        )}
         {observacao && !editando && (
           <span className="text-xs text-zinc-600 truncate max-w-[120px]" title={observacao}>{observacao}</span>
         )}
@@ -242,10 +256,10 @@ export default function AdminPage() {
   const maxHistorico   = Math.max(...historico.map(h => h.gasto_brl), 0.001);
 
   // Monta mapa de custos externos por serviço
-  const custosPorServico: Record<string, { custo_brl: number; observacao?: string }> = {};
+  const custosPorServico: Record<string, { custo_brl: number; observacao?: string; source?: string }> = {};
   if (externos?.externos) {
     for (const e of externos.externos) {
-      custosPorServico[e.servico] = { custo_brl: e.custo_brl, observacao: e.observacao };
+      custosPorServico[e.servico] = { custo_brl: e.custo_brl, observacao: e.observacao, source: e.source };
     }
   }
 
@@ -408,6 +422,7 @@ export default function AdminPage() {
                     servico={servico}
                     valor={custosPorServico[servico]?.custo_brl || 0}
                     observacao={custosPorServico[servico]?.observacao}
+                    source={custosPorServico[servico]?.source}
                     onSalvar={handleSalvarCustoExterno(servico)}
                   />
                 ))}

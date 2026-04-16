@@ -77,6 +77,13 @@ class Settings(BaseSettings):
 
     # ── Web Search (Serper.dev) ────────────────────────────
     SERPER_API_KEY: str = "445238390f1dc65cc43ec5662d87f0aae7b69d36"
+    SERPER_PRICE_PER_1K_QUERIES: float = 0.30   # USD por 1k queries (ajustar ao plano)
+
+    # ── Billing Collectors (coleta automática de custos) ───
+    VERCEL_TOKEN: Optional[str] = None
+    VERCEL_TEAM_ID: Optional[str] = None        # necessário apenas para contas Team/Enterprise
+    RAILWAY_TOKEN: Optional[str] = None
+    SUPABASE_MANAGEMENT_TOKEN: Optional[str] = None  # Account > Access Tokens (diferente do service key)
 
     # ── Cripto / Blockchain OSINT ──────────────────────────
     CHAINABUSE_API_KEY: Optional[str] = None

@@ -351,7 +351,7 @@ Eventos/Cronologia:
         from app.services.serper_service import SerperService
         cpf_limpo = pessoa.cpf.replace(".", "").replace("-", "").strip() if pessoa.cpf else None
         serper = SerperService()
-        dados_web = await serper.buscar_pessoa(nome=pessoa.nome, cpf=cpf_limpo)
+        dados_web = await serper.buscar_pessoa(nome=pessoa.nome, cpf=cpf_limpo, db=db)
 
         # Formatar snippets para o prompt
         blocos = []
