@@ -173,6 +173,11 @@ export const getConsumoProjecao = async () => {
   return response.data;
 };
 
+export const coletarBillingAgora = async () => {
+  const response = await api.post("/consumo/billing/coletar-agora");
+  return response.data;
+};
+
 // ── Documentos Gerados ─────────────────────────────────────────────────────
 export const getDocsGerados = (inqId: string) =>
   api.get(`/inqueritos/${inqId}/docs-gerados`);

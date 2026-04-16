@@ -10,7 +10,7 @@ import {
 import {
   getConsumoSaldo, getConsumoRanking, getConsumoHistorico, getConsumoModelos,
   getConsumoExternos, salvarCustoExterno, getConsumoConfig, salvarConsumoConfig,
-  getConsumoOsintPorInquerito, getConsumoProjecao,
+  getConsumoOsintPorInquerito, getConsumoProjecao, coletarBillingAgora,
 } from "@/lib/api";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -139,7 +139,7 @@ function CustoExternoCard({
       ) : (
         <div className="flex items-center gap-3">
           <span className="text-sm font-semibold text-white">
-            {valor > 0 ? `R$ ${valor.toFixed(2)}` : <span className="text-zinc-600 text-xs">não informado</span>}
+            {(valor > 0 || source) ? `R$ ${valor.toFixed(2)}` : <span className="text-zinc-600 text-xs">não informado</span>}
           </span>
           <button onClick={() => setEditando(true)} className="text-zinc-600 hover:text-zinc-400 transition-colors">
             <Pencil size={12} />
@@ -179,6 +179,8 @@ export default function AdminPage() {
   const [osintInqueritos, setOsintInqueritos] = useState<any[]>([]);
   const [projecao, setProjecao] = useState<any>(null);
   const [loading, setLoading]   = useState(true);
+  const [coletando, setColetando] = useState(false);
+  const [coletaMsg, setColetaMsg] = useState<string | null>(null);
 
   // Editor de config
   const [editandoConfig, setEditandoConfig] = useState(false);
@@ -251,6 +253,20 @@ export default function AdminPage() {
     }
   };
 
+  const handleColetar = async () => {
+    setColetando(true);
+    setColetaMsg(null);
+    try {
+      const res = await coletarBillingAgora();
+      setColetaMsg(`Coleta disparada (task ${res.task_id?.slice(0, 8)}…). Aguarde ~10s e atualize.`);
+      setTimeout(() => carregar(), 12000);
+    } catch {
+      setColetaMsg("Erro ao disparar coleta. Verifique o backend.");
+    } finally {
+      setColetando(false);
+    }
+  };
+
   const maxGastoAgente = Math.max(...ranking.map(r => r.gasto_brl), 0.001);
   const maxGastoModelo = Math.max(...modelos.map(m => m.gasto_brl), 0.001);
   const maxHistorico   = Math.max(...historico.map(h => h.gasto_brl), 0.001);
@@ -282,6 +298,15 @@ export default function AdminPage() {
             ))}
           </select>
           <button
+            onClick={handleColetar}
+            disabled={coletando}
+            title="Dispara a coleta automática de custos externos (Vercel, Railway, Supabase, Serper)"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sm text-zinc-400 transition-colors disabled:opacity-50"
+          >
+            <DollarSign size={14} className={coletando ? "animate-pulse text-emerald-400" : ""} />
+            {coletando ? "Coletando..." : "Coletar Agora"}
+          </button>
+          <button
             onClick={() => carregar()}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sm text-zinc-300 transition-colors"
           >
@@ -290,6 +315,12 @@ export default function AdminPage() {
           </button>
         </div>
       </div>
+
+      {coletaMsg && (
+        <div className="text-xs text-emerald-400 bg-emerald-950/30 border border-emerald-800/40 rounded-lg px-4 py-2">
+          {coletaMsg}
+        </div>
+      )}
 
       {loading && !saldo ? (
         <div className="text-zinc-500">Carregando dados...</div>
