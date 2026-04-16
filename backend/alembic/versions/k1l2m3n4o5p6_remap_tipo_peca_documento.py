@@ -28,7 +28,7 @@ depends_on = None
 
 # Tabelas que armazenam tipo_peca / tipo
 _TABLES = {
-    "documento": "tipo_peca",
+    "documentos": "tipo_peca",
     "pecas_extraidas": "tipo",
 }
 
