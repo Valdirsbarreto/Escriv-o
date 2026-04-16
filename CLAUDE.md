@@ -9,7 +9,7 @@ Backend FastAPI + Celery + Redis + Qdrant + PostgreSQL. Frontend Next.js no Verc
 ## Ao iniciar uma sessão — leia primeiro
 - `backend/app/core/prompts.py` — todos os system prompts (editá-los aqui, não inline)
 - `backend/app/services/llm_service.py` — roteamento de tiers LLM
-- Memória `project_sessao_15_04_2026.md` — **estado ao encerrar sessão de 15/04, pendências e próximas ações**
+- Memória `project_sessao_16_04_2026_v2.md` — **estado ao encerrar sessão de 16/04 v2, pendências e próximas ações**
 
 ---
 
@@ -217,6 +217,12 @@ O Copiloto conversa naturalmente, sem diretrizes rígidas numeradas. Raciocina e
 
 7. **Exportação PDF de docs gerados** — ✅ IMPLEMENTADO (sessão 16/04): botão 📄 exporta como HTML + `window.print()`
 
+8. **OSINT Gratuito (BrasilAPI + CGU)** — ✅ IMPLEMENTADO (sessão 16/04 v2): `osint_gratuito_service.py`, endpoint `/agentes/osint/gratuito/`, `OsintGratuitoPanel` — roda ANTES do direct.data
+
+9. **Agente Sherlock** — ✅ IMPLEMENTADO (sessão 16/04 v2): `sherlock_service.py`, `PROMPT_SHERLOCK` (5 camadas), endpoint `POST /agentes/sherlock/{inq_id}`, painel no Workspace (commit `22be074`)
+
+10. **Railway billing GraphQL** — queries atualizadas para Team (`me.teams.edges...`) e Hobby (`me.subscription...`) — aguarda validação em produção
+
 ---
 
 ## Restrições críticas (não violar)
@@ -252,6 +258,9 @@ O Copiloto conversa naturalmente, sem diretrizes rígidas numeradas. Raciocina e
 | `backend/app/models/documento_gerado.py` | Modelo DocumentoGerado |
 | `backend/app/api/documentos_gerados.py` | Endpoints `/docs-gerados` e `/documentos-gerados` |
 | `backend/app/api/inqueritos.py` | Endpoints `gerar-relatorio-inicial`, `gerar-sintese`, `gerar-relatorio-complementar` |
-| `backend/app/services/agente_ficha.py` | Fichas investigativas por pessoa/empresa |
+| `backend/app/services/agente_ficha.py` | Fichas investigativas por pessoa/empresa + OSINT web + OSINT gratuito |
+| `backend/app/services/sherlock_service.py` | Agente Sherlock — análise estratégica em 5 camadas (cache 6h) |
+| `backend/app/services/serper_service.py` | Wrapper Serper.dev — dorks paralelos (OSINT web) |
+| `backend/app/services/osint_gratuito_service.py` | BrasilAPI CNPJ + CGU CEIS — OSINT gratuito |
 | `src/components/CopilotoDrawer.tsx` | Frontend do Copiloto — canvas, save explícito |
-| `src/app/inqueritos/[id]/page.tsx` | Workspace: botões Rel. Inicial + Rel. Complementar |
+| `src/app/inqueritos/[id]/page.tsx` | Workspace: Sherlock, Rel. Inicial, Rel. Complementar, editor docs, PDF |
