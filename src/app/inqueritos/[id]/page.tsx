@@ -7,7 +7,7 @@ import dynamic from "next/dynamic";
 import { useAppStore } from "@/store/app";
 
 const PDFViewer = dynamic(() => import("@/components/PDFViewer"), { ssr: false });
-import { api, getDocsGerados, getDocGerado, deleteDocGerado, updateDocGerado, getPecasExtraidas, getPecaExtraida, reextrairPecas, osintConsultasInquerito } from "@/lib/api";
+import { api, getDocsGerados, getDocGerado, deleteDocGerado, updateDocGerado, getPecasExtraidas, getPecaExtraida, reextrairPecas, osintConsultasInquerito, sherlockAnalise as sherlockApi } from "@/lib/api";
 import { PainelInvestigacao } from "@/components/osint/PainelInvestigacao";
 import { deleteInquerito } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +23,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check, CalendarPlus, Clock, MapPin, ExternalLink, BookOpen, Quote, ChevronDown, ChevronRight, Bot, Eye, UserSearch, Network, Search } from "lucide-react";
+import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check, CalendarPlus, Clock, MapPin, ExternalLink, BookOpen, Quote, ChevronDown, ChevronRight, Bot, Eye, UserSearch, Network, Search, Microscope, ShieldAlert, ListChecks, Scale, Swords } from "lucide-react";
 import { IntimacaoUploadModal } from "@/components/IntimacaoUploadModal";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -321,6 +321,10 @@ export default function InqueritoDetalhePage() {
   const [catalogando, setCatalogando] = useState(false);
   const [consultasOsint, setConsultasOsint] = useState<any[]>([]);
   const [osintAbertos, setOsintAbertos] = useState<Record<string, boolean>>({});
+  const [sherlockAnalise, setSherlockAnalise] = useState<any>(null);
+  const [sherlockLoading, setSherlockLoading] = useState(false);
+  const [sherlockErro, setSherlockErro] = useState<string | null>(null);
+  const [sherlockSecaoAberta, setSherlockSecaoAberta] = useState<string | null>("resumo");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sintesePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const searchParams = useSearchParams();
@@ -592,6 +596,21 @@ export default function InqueritoDetalhePage() {
       console.error(e);
       setGerandoRelatorio(false);
       alert("Erro ao acionar geração da Síntese Inicial.");
+    }
+  };
+
+  const handleSherlock = async (forcar = false) => {
+    setSherlockLoading(true);
+    setSherlockErro(null);
+    try {
+      const res = await sherlockApi(inqId, forcar);
+      setSherlockAnalise(res.analise);
+      setSherlockSecaoAberta("resumo");
+    } catch (e: any) {
+      const detalhe = e?.response?.data?.detail || e?.message || "Erro desconhecido";
+      setSherlockErro(detalhe);
+    } finally {
+      setSherlockLoading(false);
     }
   };
 
@@ -1249,6 +1268,353 @@ export default function InqueritoDetalhePage() {
               </div>
             </div>
           )}
+
+          {/* ── Agente Sherlock ── */}
+          <div>
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-4">
+              <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
+                <Microscope size={18} className="text-violet-400" /> Agente Sherlock
+                <span className="text-xs font-normal text-zinc-500 ml-1">— análise estratégica em 5 camadas</span>
+              </h2>
+              <div className="flex items-center gap-2">
+                {sherlockAnalise && (
+                  <button
+                    onClick={() => handleSherlock(true)}
+                    disabled={sherlockLoading}
+                    title="Forçar regeneração"
+                    className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors disabled:opacity-40"
+                  >
+                    <RefreshCw size={12} className={sherlockLoading ? "animate-spin" : ""} /> Regenerar
+                  </button>
+                )}
+                <button
+                  onClick={() => handleSherlock(false)}
+                  disabled={sherlockLoading}
+                  className="flex items-center gap-1.5 text-xs bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {sherlockLoading
+                    ? <><Loader2 size={12} className="animate-spin" /> Analisando...</>
+                    : <><Microscope size={12} /> {sherlockAnalise ? "Ver análise" : "Acionar Sherlock"}</>
+                  }
+                </button>
+              </div>
+            </div>
+
+            {sherlockErro && (
+              <div className="flex items-start gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 mb-4">
+                <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                <span>{sherlockErro}</span>
+              </div>
+            )}
+
+            {sherlockLoading && !sherlockAnalise && (
+              <div className="py-14 text-center text-zinc-500 border border-zinc-800 border-dashed rounded-xl bg-zinc-900/40">
+                <Loader2 className="w-10 h-10 mx-auto mb-3 opacity-40 animate-spin text-violet-400" />
+                <p className="font-medium text-zinc-400">Sherlock está raciocinando...</p>
+                <p className="text-sm mt-1 text-zinc-600">Cruzando contradições · tipicidade · diligências · tese · advogado do diabo</p>
+              </div>
+            )}
+
+            {!sherlockAnalise && !sherlockLoading && !sherlockErro && (
+              <div className="py-10 text-center text-zinc-600 border border-zinc-800 border-dashed rounded-xl bg-zinc-900/40">
+                <Microscope className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">Análise estratégica não gerada.</p>
+                <p className="text-sm mt-1 text-zinc-700 max-w-sm mx-auto">
+                  Acione o Sherlock após ter o Relatório Inicial. Quanto mais dados (OSINT, fichas, síntese), melhor a análise.
+                </p>
+              </div>
+            )}
+
+            {sherlockAnalise && (
+              <div className="space-y-3">
+                {/* Resumo executivo */}
+                <div className="bg-violet-500/5 border border-violet-500/20 rounded-xl px-5 py-4">
+                  <p className="text-sm font-semibold text-violet-300 mb-1 flex items-center gap-1.5">
+                    <Sparkles size={13} /> Resumo Estratégico
+                  </p>
+                  <p className="text-sm text-zinc-300 leading-relaxed">{sherlockAnalise.resumo_executivo}</p>
+                  {sherlockAnalise.recomendacao_final && (
+                    <div className="mt-3 pt-3 border-t border-violet-500/10">
+                      <p className="text-xs font-semibold text-amber-400 mb-0.5">Ação prioritária para hoje:</p>
+                      <p className="text-sm text-amber-200">{sherlockAnalise.recomendacao_final}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Crimes */}
+                {sherlockAnalise.crimes_identificados?.length > 0 && (
+                  <div className="border border-zinc-800 rounded-xl overflow-hidden">
+                    <button
+                      onClick={() => setSherlockSecaoAberta(v => v === "crimes" ? null : "crimes")}
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-zinc-300 hover:bg-zinc-800/40 transition-colors"
+                    >
+                      <span className="flex items-center gap-2"><Scale size={14} className="text-blue-400" /> Tipificação Penal ({sherlockAnalise.crimes_identificados.length})</span>
+                      {sherlockSecaoAberta === "crimes" ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                    {sherlockSecaoAberta === "crimes" && (
+                      <div className="border-t border-zinc-800 divide-y divide-zinc-800/60">
+                        {sherlockAnalise.crimes_identificados.map((c: any, i: number) => (
+                          <div key={i} className="px-4 py-3 flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-medium text-zinc-200">{c.tipo}</p>
+                              <p className="text-xs text-zinc-500 mt-0.5">{c.artigo}</p>
+                              {c.observacao && <p className="text-xs text-zinc-600 mt-1 italic">{c.observacao}</p>}
+                            </div>
+                            <span className={`text-xs px-2 py-0.5 rounded-full border shrink-0 ${
+                              c.fase_prova === "materialidade provada" ? "bg-green-500/10 text-green-400 border-green-500/20"
+                              : c.fase_prova === "indiciária" ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                              : "bg-red-500/10 text-red-400 border-red-500/20"
+                            }`}>{c.fase_prova}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Contradições */}
+                {sherlockAnalise.contradicoes?.length > 0 && (
+                  <div className="border border-zinc-800 rounded-xl overflow-hidden">
+                    <button
+                      onClick={() => setSherlockSecaoAberta(v => v === "contradicoes" ? null : "contradicoes")}
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-zinc-300 hover:bg-zinc-800/40 transition-colors"
+                    >
+                      <span className="flex items-center gap-2">
+                        <ShieldAlert size={14} className="text-red-400" /> Contradições ({sherlockAnalise.contradicoes.length})
+                        {sherlockAnalise.contradicoes.some((c: any) => c.gravidade === "CRÍTICA") && (
+                          <span className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded-full">críticas</span>
+                        )}
+                      </span>
+                      {sherlockSecaoAberta === "contradicoes" ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                    {sherlockSecaoAberta === "contradicoes" && (
+                      <div className="border-t border-zinc-800 divide-y divide-zinc-800/60">
+                        {sherlockAnalise.contradicoes.map((c: any, i: number) => (
+                          <div key={i} className="px-4 py-3">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`text-xs px-2 py-0.5 rounded-full border ${
+                                c.gravidade === "CRÍTICA" ? "bg-red-500/10 text-red-400 border-red-500/20"
+                                : c.gravidade === "RELEVANTE" ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                : "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"
+                              }`}>{c.gravidade}</span>
+                            </div>
+                            <p className="text-sm text-zinc-300">{c.descricao}</p>
+                            <div className="mt-1.5 grid grid-cols-2 gap-2 text-xs text-zinc-500">
+                              <span className="bg-zinc-800/60 px-2 py-1 rounded">A: {c.fonte_a}</span>
+                              <span className="bg-zinc-800/60 px-2 py-1 rounded">B: {c.fonte_b}</span>
+                            </div>
+                            {c.impacto && <p className="text-xs text-zinc-500 mt-1.5 italic">{c.impacto}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Checklist de tipicidade */}
+                {sherlockAnalise.checklist_tipicidade?.length > 0 && (
+                  <div className="border border-zinc-800 rounded-xl overflow-hidden">
+                    <button
+                      onClick={() => setSherlockSecaoAberta(v => v === "tipicidade" ? null : "tipicidade")}
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-zinc-300 hover:bg-zinc-800/40 transition-colors"
+                    >
+                      <span className="flex items-center gap-2"><ListChecks size={14} className="text-cyan-400" /> Checklist de Tipicidade ({sherlockAnalise.checklist_tipicidade.length} elementares)</span>
+                      {sherlockSecaoAberta === "tipicidade" ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                    {sherlockSecaoAberta === "tipicidade" && (
+                      <div className="border-t border-zinc-800 divide-y divide-zinc-800/60">
+                        {sherlockAnalise.checklist_tipicidade.map((el: any, i: number) => (
+                          <div key={i} className="px-4 py-3 flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-zinc-300">{el.elementar}</p>
+                              <p className="text-xs text-zinc-600 mt-0.5">{el.artigo}</p>
+                              {el.prova_suporte && <p className="text-xs text-zinc-500 mt-1 italic">{el.prova_suporte}</p>}
+                            </div>
+                            <span className={`text-xs px-2 py-0.5 rounded-full border shrink-0 ${
+                              el.status === "PROVADO" ? "bg-green-500/10 text-green-400 border-green-500/20"
+                              : el.status === "INDICIÁRIO" ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                              : el.status === "CONTRADITÓRIO" ? "bg-red-500/10 text-red-400 border-red-500/20"
+                              : "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"
+                            }`}>{el.status === "PROVADO" ? "✓ " : el.status === "INDICIÁRIO" ? "△ " : el.status === "AUSENTE" ? "✗ " : "⚡ "}{el.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Backlog de diligências */}
+                {sherlockAnalise.backlog_diligencias?.length > 0 && (
+                  <div className="border border-zinc-800 rounded-xl overflow-hidden">
+                    <button
+                      onClick={() => setSherlockSecaoAberta(v => v === "backlog" ? null : "backlog")}
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-zinc-300 hover:bg-zinc-800/40 transition-colors"
+                    >
+                      <span className="flex items-center gap-2">
+                        <ListChecks size={14} className="text-amber-400" /> Backlog de Diligências ({sherlockAnalise.backlog_diligencias.length})
+                        {sherlockAnalise.backlog_diligencias.filter((d: any) => d.urgencia === "URGENTE").length > 0 && (
+                          <span className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded-full">
+                            {sherlockAnalise.backlog_diligencias.filter((d: any) => d.urgencia === "URGENTE").length} urgentes
+                          </span>
+                        )}
+                      </span>
+                      {sherlockSecaoAberta === "backlog" ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                    {sherlockSecaoAberta === "backlog" && (
+                      <div className="border-t border-zinc-800 divide-y divide-zinc-800/60">
+                        {sherlockAnalise.backlog_diligencias.map((d: any, i: number) => (
+                          <div key={i} className="px-4 py-3">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`text-xs px-2 py-0.5 rounded-full border ${
+                                d.urgencia === "URGENTE" ? "bg-red-500/10 text-red-400 border-red-500/20"
+                                : d.urgencia === "IMPRESCINDÍVEL" ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                : "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                              }`}>{d.urgencia}</span>
+                              {d.prazo_sugerido && d.prazo_sugerido !== "sem prazo fixo" && (
+                                <span className="text-xs text-zinc-500">{d.prazo_sugerido}</span>
+                              )}
+                            </div>
+                            <p className="text-sm text-zinc-300">{d.descricao}</p>
+                            {d.justificativa && <p className="text-xs text-zinc-500 mt-1">{d.justificativa}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Tese de autoria */}
+                {sherlockAnalise.tese_autoria && (
+                  <div className="border border-zinc-800 rounded-xl overflow-hidden">
+                    <button
+                      onClick={() => setSherlockSecaoAberta(v => v === "tese" ? null : "tese")}
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-zinc-300 hover:bg-zinc-800/40 transition-colors"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Network size={14} className="text-green-400" /> Tese de Autoria e Materialidade
+                        <span className={`text-xs px-2 py-0.5 rounded-full border ${
+                          sherlockAnalise.tese_autoria.grau_certeza === "ALTO" ? "bg-green-500/10 text-green-400 border-green-500/20"
+                          : sherlockAnalise.tese_autoria.grau_certeza === "MÉDIO" ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                          : "bg-red-500/10 text-red-400 border-red-500/20"
+                        }`}>certeza {sherlockAnalise.tese_autoria.grau_certeza}</span>
+                      </span>
+                      {sherlockSecaoAberta === "tese" ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                    {sherlockSecaoAberta === "tese" && (
+                      <div className="border-t border-zinc-800 px-4 py-4 space-y-4">
+                        <div>
+                          <p className="text-xs font-semibold text-zinc-500 uppercase mb-1">Hipótese central</p>
+                          <p className="text-sm text-zinc-300 leading-relaxed">{sherlockAnalise.tese_autoria.hipotese_central}</p>
+                        </div>
+                        {sherlockAnalise.tese_autoria.justificativa_certeza && (
+                          <div>
+                            <p className="text-xs font-semibold text-zinc-500 uppercase mb-1">Grau de certeza — justificativa</p>
+                            <p className="text-sm text-zinc-400">{sherlockAnalise.tese_autoria.justificativa_certeza}</p>
+                          </div>
+                        )}
+                        {sherlockAnalise.tese_autoria.cadeia_provas?.length > 0 && (
+                          <div>
+                            <p className="text-xs font-semibold text-zinc-500 uppercase mb-2">Cadeia de provas</p>
+                            <ol className="space-y-1 list-decimal list-inside">
+                              {sherlockAnalise.tese_autoria.cadeia_provas.map((p: string, i: number) => (
+                                <li key={i} className="text-sm text-zinc-300">{p}</li>
+                              ))}
+                            </ol>
+                          </div>
+                        )}
+                        {sherlockAnalise.tese_autoria.papel_por_pessoa?.length > 0 && (
+                          <div>
+                            <p className="text-xs font-semibold text-zinc-500 uppercase mb-2">Papel de cada pessoa</p>
+                            <div className="space-y-2">
+                              {sherlockAnalise.tese_autoria.papel_por_pessoa.map((p: any, i: number) => (
+                                <div key={i} className="flex items-start gap-2 text-sm">
+                                  <span className={`text-xs px-2 py-0.5 rounded-full border shrink-0 mt-0.5 ${
+                                    p.papel === "AUTOR PRINCIPAL" ? "bg-red-500/10 text-red-400 border-red-500/20"
+                                    : p.papel === "COAUTOR" ? "bg-orange-500/10 text-orange-400 border-orange-500/20"
+                                    : p.papel === "PARTÍCIPE" ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                    : p.papel === "VÍTIMA" ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                                    : p.papel === "TESTEMUNHA" ? "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"
+                                    : "bg-zinc-800 text-zinc-500 border-zinc-700"
+                                  }`}>{p.papel}</span>
+                                  <div>
+                                    <span className="font-medium text-zinc-200">{p.nome}</span>
+                                    {p.fundamento && <span className="text-zinc-500 ml-1">— {p.fundamento}</span>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Advogado do Diabo */}
+                {sherlockAnalise.advogado_diabo && (
+                  <div className="border border-zinc-800 rounded-xl overflow-hidden">
+                    <button
+                      onClick={() => setSherlockSecaoAberta(v => v === "diabo" ? null : "diabo")}
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-zinc-300 hover:bg-zinc-800/40 transition-colors"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Swords size={14} className="text-orange-400" /> Advogado do Diabo
+                        {sherlockAnalise.advogado_diabo.vulnerabilidades?.some((v: any) => v.gravidade === "ALTA") && (
+                          <span className="text-xs bg-orange-500/10 text-orange-400 border border-orange-500/20 px-1.5 py-0.5 rounded-full">vulnerabilidades altas</span>
+                        )}
+                      </span>
+                      {sherlockSecaoAberta === "diabo" ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                    {sherlockSecaoAberta === "diabo" && (
+                      <div className="border-t border-zinc-800 px-4 py-4 space-y-4">
+                        {sherlockAnalise.advogado_diabo.ponto_mais_fragil && (
+                          <div className="bg-orange-500/5 border border-orange-500/15 rounded-lg px-3 py-2">
+                            <p className="text-xs font-semibold text-orange-400 mb-0.5">Elo mais fraco da tese:</p>
+                            <p className="text-sm text-zinc-300">{sherlockAnalise.advogado_diabo.ponto_mais_fragil}</p>
+                          </div>
+                        )}
+                        {sherlockAnalise.advogado_diabo.pior_cenario && (
+                          <div>
+                            <p className="text-xs font-semibold text-zinc-500 uppercase mb-1">Pior cenário processual</p>
+                            <p className="text-sm text-zinc-400">{sherlockAnalise.advogado_diabo.pior_cenario}</p>
+                          </div>
+                        )}
+                        {sherlockAnalise.advogado_diabo.vulnerabilidades?.length > 0 && (
+                          <div className="space-y-3">
+                            <p className="text-xs font-semibold text-zinc-500 uppercase">Vulnerabilidades ({sherlockAnalise.advogado_diabo.vulnerabilidades.length})</p>
+                            {sherlockAnalise.advogado_diabo.vulnerabilidades.map((v: any, i: number) => (
+                              <div key={i} className="border border-zinc-800 rounded-lg px-3 py-3">
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <span className={`text-xs px-2 py-0.5 rounded-full border ${
+                                    v.gravidade === "ALTA" ? "bg-red-500/10 text-red-400 border-red-500/20"
+                                    : v.gravidade === "MÉDIA" ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                    : "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"
+                                  }`}>{v.gravidade}</span>
+                                  <span className="text-xs text-zinc-500">{v.tipo}</span>
+                                </div>
+                                <p className="text-sm text-zinc-300 mb-2">{v.descricao}</p>
+                                {v.contramedida && (
+                                  <div className="bg-green-500/5 border border-green-500/15 rounded px-2 py-1.5">
+                                    <p className="text-xs font-semibold text-green-400 mb-0.5">Contramedida:</p>
+                                    <p className="text-xs text-zinc-400">{v.contramedida}</p>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <p className="text-xs text-zinc-600 text-right">
+                  gerado em {sherlockAnalise._gerado_em ? new Date(sherlockAnalise._gerado_em).toLocaleString("pt-BR") : "—"}
+                  {sherlockAnalise._modelo && ` · ${sherlockAnalise._modelo}`}
+                </p>
+              </div>
+            )}
+          </div>
 
           {/* Peças Individuais Extraídas */}
           <div>

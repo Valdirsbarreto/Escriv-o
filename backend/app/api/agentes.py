@@ -4,10 +4,13 @@ Endpoints para os 3 agentes: Fichas OSINT, Produção Cautelar e Análise de Ext
 Conforme blueprint §9 (Agentes Especializados).
 """
 
+import logging
 import uuid
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+
+logger = logging.getLogger(__name__)
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -611,3 +614,38 @@ async def analisar_extrato(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao analisar extrato: {str(e)[:200]}")
+
+
+# ── Agente Sherlock ────────────────────────────────────────────────────────────
+
+@router.post(
+    "/sherlock/{inquerito_id}",
+    summary="Agente Sherlock — análise estratégica em 5 camadas de raciocínio",
+)
+async def sherlock_analise(
+    inquerito_id: uuid.UUID,
+    forcar: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Gera análise estratégica completa do inquérito com 5 camadas de raciocínio:
+    1. Matriz de Contradições (Cross-Check)
+    2. Checklist de Tipicidade
+    3. Backlog de Diligências (Urgente / Imprescindível / Estratégico)
+    4. Tese de Autoria e Materialidade
+    5. Advogado do Diabo (vulnerabilidades da tese)
+
+    Cache de 6h em ResultadoAgente. Use `forcar=true` para regenerar.
+    Requer RelatorioInicial gerado. Quanto mais dados (OSINT, fichas, síntese), melhor.
+    """
+    from app.services.sherlock_service import SherlockService
+
+    agente = SherlockService()
+    try:
+        analise = await agente.gerar_estrategia(db, inquerito_id, forcar=forcar)
+        return {"status": "concluido", "analise": analise}
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.exception(f"[SHERLOCK] Erro para inquérito {inquerito_id}")
+        raise HTTPException(status_code=500, detail=f"Erro Sherlock: {str(e)[:300]}")

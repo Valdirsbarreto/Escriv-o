@@ -311,3 +311,14 @@ export const osintBuscaWeb = async (inqueritoId: string, pessoaId: string) => {
   );
   return response.data;
 };
+
+// ── Agente Sherlock ────────────────────────────────────────────────────────────
+
+export const sherlockAnalise = async (inqueritoId: string, forcar = false) => {
+  const response = await api.post(
+    `/agentes/sherlock/${inqueritoId}?forcar=${forcar}`,
+    {},
+    { timeout: 120000 },
+  );
+  return response.data as { status: string; analise: any };
+};
