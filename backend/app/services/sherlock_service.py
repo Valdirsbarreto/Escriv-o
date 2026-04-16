@@ -61,7 +61,7 @@ class SherlockService:
             ctx["inquerito"] = {
                 "numero": inq.numero,
                 "descricao": inq.descricao or "",
-                "status": inq.status,
+                "status": inq.estado_atual,
             }
 
         # Documentos gerados
