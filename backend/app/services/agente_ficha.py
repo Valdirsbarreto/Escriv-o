@@ -412,6 +412,117 @@ Eventos/Cronologia:
         logger.info(f"[AGENTE-FICHA] OSINT web gerado para {pessoa.nome} ({dados_web['total_resultados']} resultados)")
         return analise
 
+    async def gerar_osint_gratuito_pessoa(
+        self,
+        db: AsyncSession,
+        inquerito_id: uuid.UUID,
+        pessoa_id: uuid.UUID,
+    ) -> Dict[str, Any]:
+        """
+        Consulta fontes abertas gratuitas (BrasilAPI/ReceitaFederal, CGU/CEIS)
+        e consolida análise com Gemini Flash.
+        Cache de 12h em ResultadoAgente (tipo_agente='osint_gratuito').
+        Custo: $0.
+        """
+        from app.models.resultado_agente import ResultadoAgente
+        from datetime import timedelta
+        from sqlalchemy import and_
+        from app.core.prompts import PROMPT_OSINT_GRATUITO
+        from app.services.osint_gratuito_service import (
+            consultar_cnpj,
+            consultar_sancoes_cgu,
+            formatar_dados_cnpj_para_llm,
+        )
+
+        # ── Cache 12h ─────────────────────────────────────────────────────────
+        cache_stmt = (
+            select(ResultadoAgente)
+            .where(and_(
+                ResultadoAgente.inquerito_id == inquerito_id,
+                ResultadoAgente.tipo_agente == "osint_gratuito",
+                ResultadoAgente.referencia_id == pessoa_id,
+            ))
+            .order_by(ResultadoAgente.created_at.desc())
+            .limit(1)
+        )
+        cached = (await db.execute(cache_stmt)).scalar_one_or_none()
+        if cached:
+            age = datetime.utcnow() - cached.created_at.replace(tzinfo=None)
+            if age < timedelta(hours=12):
+                logger.info(f"[AGENTE-FICHA] Cache hit 'osint_gratuito' para {pessoa_id}")
+                return cached.resultado_json
+
+        pessoa = await db.get(Pessoa, pessoa_id)
+        if not pessoa:
+            raise ValueError(f"Pessoa {pessoa_id} não encontrada")
+
+        # ── Determinar CPF/CNPJ ───────────────────────────────────────────────
+        from app.services.directdata_service import _limpar_documento
+        doc_limpo = _limpar_documento(pessoa.cpf) if pessoa.cpf else None
+
+        # ── Consultar CNPJ se for empresa (14 dígitos) ────────────────────────
+        dados_cnpj_str = "(não aplicável — pessoa física ou CNPJ não informado)"
+        dados_cnpj_raw = None
+        if doc_limpo and len(doc_limpo) == 14:
+            dados_cnpj_raw = await consultar_cnpj(doc_limpo)
+            if dados_cnpj_raw:
+                dados_cnpj_str = formatar_dados_cnpj_para_llm(dados_cnpj_raw)
+                logger.info(f"[AGENTE-FICHA] CNPJ {doc_limpo} consultado — {dados_cnpj_raw['razao_social']}")
+            else:
+                dados_cnpj_str = f"CNPJ {doc_limpo} não encontrado na Receita Federal."
+
+        # ── Consultar sanções CGU ─────────────────────────────────────────────
+        sancoes = await consultar_sancoes_cgu(pessoa.nome)
+        if sancoes:
+            sancoes_str = "\n".join(
+                f"• {s['sancao']} — {s['orgao']} ({s['data_inicio']} a {s['data_fim']})"
+                for s in sancoes
+            )
+        else:
+            sancoes_str = "Nenhuma sanção encontrada no CEIS/CGU."
+
+        # ── Dados internos básicos ─────────────────────────────────────────────
+        dados_internos = (
+            f"Nome: {pessoa.nome}\n"
+            f"CPF/CNPJ: {pessoa.cpf or 'não consta'}\n"
+            f"Papel: {pessoa.papel or 'não identificado'}\n"
+            f"Tipo: {pessoa.tipo_pessoa or 'não identificado'}"
+        )
+
+        # ── LLM ───────────────────────────────────────────────────────────────
+        prompt = PROMPT_OSINT_GRATUITO.format(
+            nome=pessoa.nome,
+            dados_cnpj=dados_cnpj_str,
+            dados_internos=dados_internos,
+            dados_sancoes=sancoes_str,
+        )
+        result = await self.llm.chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            tier="standard",
+            temperature=0.1,
+            max_tokens=2000,
+            json_mode=True,
+            agente="OsintGratuito",
+        )
+        analise = json.loads(result["content"].strip())
+        analise["_fonte"] = "gratuito"
+        analise["_cnpj_raw"] = dados_cnpj_raw
+        analise["_sancoes_raw"] = sancoes
+
+        # ── Cache ──────────────────────────────────────────────────────────────
+        registro = ResultadoAgente(
+            inquerito_id=inquerito_id,
+            tipo_agente="osint_gratuito",
+            referencia_id=pessoa_id,
+            resultado_json=analise,
+            modelo_llm=result.get("model"),
+        )
+        db.add(registro)
+        await db.commit()
+
+        logger.info(f"[AGENTE-FICHA] OSINT gratuito gerado para {pessoa.nome}")
+        return analise
+
     async def gerar_relatorio_osint_web(
         self,
         db: AsyncSession,

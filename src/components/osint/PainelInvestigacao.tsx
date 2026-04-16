@@ -9,7 +9,7 @@ import {
   AlertTriangle, CheckCircle, XCircle, MinusCircle,
   ExternalLink, Play, UserSearch, Globe, Scale, Newspaper, FileText,
 } from "lucide-react";
-import { osintSugestao, osintLote, osintAnalisePreliminar, osintBuscaWeb, osintGerarRelatorioWeb } from "@/lib/api";
+import { osintSugestao, osintLote, osintAnalisePreliminar, osintBuscaWeb, osintGerarRelatorioWeb, osintGratuito } from "@/lib/api";
 import { Sparkles, Zap } from "lucide-react";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -103,6 +103,175 @@ function TipoPessoa({ tipo }: { tipo: string }) {
 // ── Card de Personagem ────────────────────────────────────────────────────────
 
 // ── Componente OSINT Fontes Abertas (Serper.dev) ──────────────────────────────
+
+// ── Painel OSINT Gratuito (Receita Federal + CGU) ─────────────────────────────
+
+function OsintGratuitoPanel({ inqueritoId, pessoaId }: { inqueritoId: string; pessoaId: string }) {
+  const [dados, setDados] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [erroMsg, setErroMsg] = useState<string | null>(null);
+  const [aberto, setAberto] = useState(false);
+
+  const handleBuscar = async () => {
+    if (dados) { setAberto(v => !v); return; }
+    setLoading(true);
+    setAberto(true);
+    setErroMsg(null);
+    try {
+      const r = await osintGratuito(inqueritoId, pessoaId);
+      setDados(r.dados_gratuitos);
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || e?.message || "Erro desconhecido";
+      setErroMsg(String(detail));
+    } finally { setLoading(false); }
+  };
+
+  const situacaoCor = (s: string) => {
+    if (!s) return "text-zinc-500";
+    const sl = s.toLowerCase();
+    if (sl.includes("ativa")) return "text-emerald-400";
+    if (sl.includes("inapta") || sl.includes("suspensa")) return "text-yellow-400";
+    if (sl.includes("baixada") || sl.includes("cancelada")) return "text-red-400";
+    return "text-zinc-400";
+  };
+
+  return (
+    <div className="rounded-lg border border-emerald-800/40 bg-zinc-900/60 overflow-hidden">
+      {/* Cabeçalho */}
+      <button
+        onClick={handleBuscar}
+        className="w-full flex items-center justify-between px-3 py-2 hover:bg-zinc-800/40 transition-colors"
+      >
+        <div className="flex items-center gap-1.5">
+          <Scale size={11} className="text-emerald-400" />
+          <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Dados Públicos</span>
+          <span className="text-xs text-zinc-600">Receita Federal · CGU</span>
+          <span className="text-xs text-emerald-700 font-medium bg-emerald-950/50 px-1.5 py-0.5 rounded">grátis</span>
+        </div>
+        {loading
+          ? <Loader2 size={11} className="text-emerald-400 animate-spin" />
+          : <ChevronRight size={11} className={`text-zinc-500 transition-transform ${aberto ? "rotate-90" : ""}`} />
+        }
+      </button>
+
+      {/* Conteúdo */}
+      {aberto && (
+        <div className="px-3 pb-3 space-y-2 border-t border-zinc-800/60">
+          {loading && (
+            <p className="text-xs text-zinc-500 py-2">Consultando Receita Federal...</p>
+          )}
+
+          {erroMsg && (
+            <p className="text-xs text-red-400 py-1">{erroMsg}</p>
+          )}
+
+          {dados && (
+            <>
+              {/* Resumo */}
+              {dados.resumo && (
+                <p className="text-sm text-zinc-300 leading-relaxed pt-2">{dados.resumo}</p>
+              )}
+
+              {/* Situação cadastral */}
+              {dados.situacao_cadastral && dados.situacao_cadastral !== "outro" && (
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs text-zinc-500">Situação:</span>
+                  <span className={`text-xs font-bold uppercase ${situacaoCor(dados.situacao_cadastral)}`}>
+                    {dados.situacao_cadastral}
+                  </span>
+                </div>
+              )}
+
+              {/* Alertas */}
+              {dados.alertas?.length > 0 && (
+                <div className="space-y-1 pt-1">
+                  <p className="text-xs text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+                    <AlertTriangle size={9} className="text-red-400" /> Alertas
+                  </p>
+                  {dados.alertas.map((a: string, i: number) => (
+                    <p key={i} className="text-xs text-red-300 pl-3">• {a}</p>
+                  ))}
+                </div>
+              )}
+
+              {/* Sanções */}
+              {dados.sancoes_encontradas?.length > 0 && (
+                <div className="space-y-1 pt-1">
+                  <p className="text-xs text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+                    <XCircle size={9} className="text-orange-400" /> Sanções CGU/CEIS
+                  </p>
+                  {dados.sancoes_encontradas.map((s: any, i: number) => (
+                    <p key={i} className="text-xs text-orange-300 pl-3">
+                      • {s.tipo} — {s.orgao} ({s.periodo})
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {/* Sócios de interesse */}
+              {dados.socios_de_interesse?.length > 0 && (
+                <div className="space-y-1 pt-1">
+                  <p className="text-xs text-zinc-600 uppercase tracking-wider">Quadro Societário</p>
+                  {dados.socios_de_interesse.map((s: any, i: number) => (
+                    <div key={i} className="pl-3">
+                      <p className="text-xs text-zinc-300">
+                        • <span className="font-medium">{s.nome}</span>
+                        {s.cpf_cnpj && <span className="text-zinc-500"> — {s.cpf_cnpj}</span>}
+                        <span className="text-zinc-600"> ({s.qualificacao})</span>
+                      </p>
+                      {s.observacao && (
+                        <p className="text-xs text-yellow-400 pl-3">{s.observacao}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Correlações */}
+              {dados.correlacoes_com_autos?.length > 0 && (
+                <div className="space-y-1 pt-1">
+                  <p className="text-xs text-zinc-600 uppercase tracking-wider flex items-center gap-1">
+                    <CheckCircle size={9} className="text-blue-400" /> Correlações com os autos
+                  </p>
+                  {dados.correlacoes_com_autos.map((c: string, i: number) => (
+                    <p key={i} className="text-xs text-blue-300 pl-3">• {c}</p>
+                  ))}
+                </div>
+              )}
+
+              {/* Dados úteis para diligência */}
+              {dados.dados_uteis_para_diligencia?.length > 0 && (
+                <div className="space-y-1 pt-1">
+                  <p className="text-xs text-zinc-600 uppercase tracking-wider">Dados para diligência</p>
+                  {dados.dados_uteis_para_diligencia.map((d: string, i: number) => (
+                    <p key={i} className="text-xs text-zinc-400 pl-3">• {d}</p>
+                  ))}
+                </div>
+              )}
+
+              {/* Sugestão de consulta paga */}
+              {dados.sugestoes_consulta_paga?.length > 0 && dados.sugestoes_consulta_paga[0] !== "" && (
+                <div className="space-y-1 pt-1 border-t border-zinc-800/40">
+                  <p className="text-xs text-zinc-600 uppercase tracking-wider">Recomenda consulta paga</p>
+                  {dados.sugestoes_consulta_paga.map((s: string, i: number) => (
+                    <p key={i} className="text-xs text-zinc-500 pl-3">• {s}</p>
+                  ))}
+                </div>
+              )}
+
+              {/* Rodapé */}
+              <p className="text-xs text-zinc-700 pt-1">
+                via BrasilAPI / Receita Federal · cache 12h · custo R$0,00
+              </p>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Painel OSINT Fontes Abertas (Serper.dev) ──────────────────────────────────
 
 function OsintWebPanel({ inqueritoId, pessoaId }: { inqueritoId: string; pessoaId: string }) {
   const [dados, setDados] = useState<any>(null);
@@ -529,7 +698,10 @@ function CardPersonagem({
             </p>
           )}
 
-          {/* Análise preliminar automática (Groq — gratuita) */}
+          {/* Dados públicos gratuitos — Receita Federal / CGU (roda ANTES do pago) */}
+          <OsintGratuitoPanel inqueritoId={inqueritoId} pessoaId={p.pessoa_id} />
+
+          {/* Análise preliminar automática (Gemini Flash — gratuita) */}
           <AnalisePreliminarPanel inqueritoId={inqueritoId} pessoaId={p.pessoa_id} />
 
           {/* OSINT fontes abertas (Serper.dev — sob demanda) */}

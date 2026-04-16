@@ -178,6 +178,14 @@ export const coletarBillingAgora = async () => {
   return response.data;
 };
 
+export const osintGratuito = async (inqueritoId: string, pessoaId: string) => {
+  const response = await api.get(
+    `/agentes/osint/gratuito/${inqueritoId}/${pessoaId}`,
+    { timeout: 45000 }
+  );
+  return response.data;
+};
+
 // ── Documentos Gerados ─────────────────────────────────────────────────────
 export const getDocsGerados = (inqId: string) =>
   api.get(`/inqueritos/${inqId}/docs-gerados`);

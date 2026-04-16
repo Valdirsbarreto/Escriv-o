@@ -122,6 +122,34 @@ async def analise_preliminar_pessoa(
         raise HTTPException(status_code=500, detail=f"Erro na análise preliminar: {str(e)[:200]}")
 
 
+# ── OSINT — Fontes Gratuitas (BrasilAPI / ReceitaFederal / CGU) ──────────────
+
+@router.get(
+    "/osint/gratuito/{inquerito_id}/{pessoa_id}",
+    summary="OSINT gratuito — Receita Federal (CNPJ) + sanções CGU",
+)
+async def osint_gratuito_pessoa(
+    inquerito_id: uuid.UUID,
+    pessoa_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Consulta fontes abertas brasileiras sem custo:
+    - BrasilAPI/Receita Federal (CNPJ: razão social, sócios, situação, endereço)
+    - CGU/CEIS (sanções federais, se CGU_API_TOKEN configurado)
+    Cache de 12h em ResultadoAgente.
+    Custo: $0.
+    """
+    agente = AgenteFicha()
+    try:
+        dados = await agente.gerar_osint_gratuito_pessoa(db, inquerito_id, pessoa_id)
+        return {"status": "concluido", "dados_gratuitos": dados}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro OSINT gratuito: {str(e)[:200]}")
+
+
 # ── OSINT — Fontes Abertas (Serper.dev) ──────────────────────────────────────
 
 @router.get(

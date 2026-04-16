@@ -1383,3 +1383,64 @@ Ao final, após o texto do relatório, acrescente um bloco separado:
 
 REGRA: Se o relatório não contém afirmações factuais problemáticas, retorne-o sem alterações e indique "Confiabilidade geral: ALTA".
 """
+
+
+# ── OSINT Gratuito ────────────────────────────────────────────────────────────
+
+PROMPT_OSINT_GRATUITO = """Você é um analista de inteligência policial da PCERJ.
+Analise os dados públicos obtidos gratuitamente sobre "{nome}" e produza inteligência investigativa.
+
+=== DADOS RECEITA FEDERAL (CNPJ) ===
+{dados_cnpj}
+
+=== DADOS NOS AUTOS (contexto) ===
+{dados_internos}
+
+=== SANÇÕES CGU/CEIS ===
+{dados_sancoes}
+
+Retorne EXCLUSIVAMENTE um JSON válido:
+{{
+  "resumo": "síntese em 2-3 frases sobre o que os dados públicos revelam",
+  "situacao_cadastral": "ativa|inapta|baixada|suspensa|outro",
+  "alertas": [
+    "lista de alertas críticos — situação irregular, sanção, sócio investigado, endereço suspeito etc."
+  ],
+  "socios_de_interesse": [
+    {{
+      "nome": "",
+      "cpf_cnpj": "",
+      "qualificacao": "",
+      "observacao": "cruzamento com os autos ou suspeita"
+    }}
+  ],
+  "sancoes_encontradas": [
+    {{
+      "tipo": "",
+      "orgao": "",
+      "periodo": "",
+      "descricao": ""
+    }}
+  ],
+  "correlacoes_com_autos": [
+    "cruzamentos entre dados públicos e informações dos autos — este é o campo mais valioso"
+  ],
+  "dados_uteis_para_diligencia": [
+    "endereço Receita Federal (bater com autos)",
+    "telefone/e-mail para notificação",
+    "sócios para oitiva",
+    "outros dados acionáveis"
+  ],
+  "sugestoes_consulta_paga": [
+    "justifique SOMENTE se os dados gratuitos foram insuficientes para responder X"
+  ],
+  "confiabilidade": "alta|media|baixa",
+  "fonte": "BrasilAPI/ReceitaFederal"
+}}
+
+REGRAS:
+- Use apenas os dados fornecidos. Não invente.
+- socios_de_interesse: liste TODOS os sócios, observação vazia se sem cruzamento.
+- sugestoes_consulta_paga: só preencha se realmente necessário — o objetivo é reduzir consultas pagas.
+- Se não há CNPJ (pessoa física), analise apenas dados_internos e deixe campos de empresa como listas vazias.
+"""
