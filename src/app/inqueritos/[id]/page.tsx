@@ -7,7 +7,7 @@ import dynamic from "next/dynamic";
 import { useAppStore } from "@/store/app";
 
 const PDFViewer = dynamic(() => import("@/components/PDFViewer"), { ssr: false });
-import { api, getDocsGerados, getDocGerado, deleteDocGerado, getPecasExtraidas, getPecaExtraida, reextrairPecas, osintConsultasInquerito } from "@/lib/api";
+import { api, getDocsGerados, getDocGerado, deleteDocGerado, updateDocGerado, getPecasExtraidas, getPecaExtraida, reextrairPecas, osintConsultasInquerito } from "@/lib/api";
 import { PainelInvestigacao } from "@/components/osint/PainelInvestigacao";
 import { deleteInquerito } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -309,6 +309,7 @@ export default function InqueritoDetalhePage() {
   const [docsGeradosLoading, setDocsGeradosLoading] = useState(false);
   const [docGeradoViewer, setDocGeradoViewer] = useState<{ open: boolean; doc: any | null; conteudo: string | null; loading: boolean }>({ open: false, doc: null, conteudo: null, loading: false });
   const [deletingDocGerado, setDeletingDocGerado] = useState<string | null>(null);
+  const [editDocGerado, setEditDocGerado] = useState<{ open: boolean; id: string; titulo: string; tipo: string; conteudo: string; saving: boolean } | null>(null);
   const [deletingDoc, setDeletingDoc] = useState<string | null>(null);
   const [pecasExtraidas, setPecasExtraidas] = useState<any[]>([]);
   const [pecasLoading, setPecasLoading] = useState(false);
@@ -652,6 +653,31 @@ export default function InqueritoDetalhePage() {
       alert("Erro ao excluir documento.");
     } finally {
       setDeletingDocGerado(null);
+    }
+  };
+
+  const handleAbrirEditDocGerado = async (doc: any) => {
+    // Carrega conteúdo completo se necessário e abre o editor
+    let conteudo = doc.conteudo ?? null;
+    if (!conteudo && inqId) {
+      try {
+        const r = await getDocGerado(inqId, doc.id);
+        conteudo = r.data?.conteudo ?? "";
+      } catch { conteudo = ""; }
+    }
+    setEditDocGerado({ open: true, id: doc.id, titulo: doc.titulo, tipo: doc.tipo, conteudo: conteudo ?? "", saving: false });
+  };
+
+  const handleSalvarEditDocGerado = async () => {
+    if (!editDocGerado || !inqId) return;
+    setEditDocGerado(prev => prev ? { ...prev, saving: true } : null);
+    try {
+      await updateDocGerado(inqId, editDocGerado.id, { titulo: editDocGerado.titulo, tipo: editDocGerado.tipo, conteudo: editDocGerado.conteudo });
+      setDocsGerados(prev => prev.map(d => d.id === editDocGerado.id ? { ...d, titulo: editDocGerado.titulo, tipo: editDocGerado.tipo } : d));
+      setEditDocGerado(null);
+    } catch {
+      alert("Erro ao salvar edição.");
+      setEditDocGerado(prev => prev ? { ...prev, saving: false } : null);
     }
   };
 
@@ -1073,6 +1099,9 @@ export default function InqueritoDetalhePage() {
                       </span>
                       <button onClick={() => handleAbrirDocGerado(doc)} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-blue-400 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors">
                         <Eye size={11} /> Ver
+                      </button>
+                      <button onClick={() => handleAbrirEditDocGerado(doc)} className="p-1.5 rounded text-zinc-600 hover:text-amber-400 transition-colors" title="Editar documento">
+                        <Pencil size={13} />
                       </button>
                       <button onClick={() => handleDeletarDocGerado(doc.id)} disabled={deletingDocGerado === doc.id} className="p-1.5 rounded text-zinc-600 hover:text-red-400 transition-colors disabled:opacity-40" title="Excluir documento">
                         {deletingDocGerado === doc.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
@@ -1779,6 +1808,56 @@ export default function InqueritoDetalhePage() {
             </div>
           </div>
         </>,
+        document.body
+      )}
+
+      {/* Modal de edição de documento gerado */}
+      {editDocGerado?.open && typeof window !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setEditDocGerado(null)}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+            {/* Cabeçalho */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <Pencil size={16} className="text-amber-400 shrink-0" />
+                <input
+                  className="flex-1 bg-transparent text-sm font-semibold text-zinc-100 outline-none border-b border-zinc-700 focus:border-amber-500 pb-0.5 min-w-0 transition-colors"
+                  value={editDocGerado.titulo}
+                  onChange={e => setEditDocGerado(prev => prev ? { ...prev, titulo: e.target.value } : null)}
+                  placeholder="Título do documento"
+                />
+              </div>
+              <button onClick={() => setEditDocGerado(null)} className="ml-4 p-1.5 rounded text-zinc-500 hover:text-zinc-200 transition-colors shrink-0">
+                <X size={16} />
+              </button>
+            </div>
+            {/* Editor */}
+            <div className="flex-1 overflow-hidden px-6 py-4 min-h-0">
+              <textarea
+                className="w-full h-full min-h-[400px] bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-200 font-mono leading-relaxed resize-none outline-none focus:border-amber-500/50 transition-colors"
+                value={editDocGerado.conteudo}
+                onChange={e => setEditDocGerado(prev => prev ? { ...prev, conteudo: e.target.value } : null)}
+                spellCheck={false}
+              />
+            </div>
+            {/* Rodapé */}
+            <div className="flex items-center justify-between px-6 py-4 border-t border-zinc-800 shrink-0">
+              <p className="text-xs text-zinc-600">{editDocGerado.conteudo.length.toLocaleString()} caracteres</p>
+              <div className="flex gap-2">
+                <button onClick={() => setEditDocGerado(null)} className="px-4 py-2 text-xs text-zinc-400 hover:text-zinc-200 border border-zinc-700 rounded-lg transition-colors">
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSalvarEditDocGerado}
+                  disabled={editDocGerado.saving}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {editDocGerado.saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                  {editDocGerado.saving ? "Salvando..." : "Salvar alterações"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
         document.body
       )}
 
