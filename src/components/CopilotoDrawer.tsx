@@ -21,21 +21,43 @@ function getOrCreateSessionId(): string {
 
 function detectarTipo(text: string): string {
   const upper = text.toUpperCase();
-  if (upper.includes("OITIVA") || upper.includes("ROTEIRO")) return "roteiro_oitiva";
-  if (upper.includes("OFÍCIO") || upper.includes("OFICIO")) return "oficio";
+  // Verificações específicas primeiro (evita falso-positivo por "ofício" dentro de relatório)
+  if (upper.includes("RELATÓRIO COMPLEMENTAR") || upper.includes("RELATORIO COMPLEMENTAR")) return "relatorio_complementar";
+  if (upper.includes("OITIVA") || upper.includes("ROTEIRO DE OITIVA")) return "roteiro_oitiva";
   if (upper.includes("MANDADO") || upper.includes("REQUISIÇÃO") || upper.includes("REQUISICAO") || upper.includes("CAUTELAR")) return "minuta_cautelar";
-  if (upper.includes("RELATÓRIO") || upper.includes("RELATORIO")) return "relatorio";
+  if (upper.includes("RELATÓRIO") || upper.includes("RELATORIO")) return "relatorio_complementar";
+  if (upper.includes("OFÍCIO") || upper.includes("OFICIO")) return "oficio";
   return "outro";
 }
 
+// Prefixos conversacionais que NÃO são título do documento
+const PREFIXOS_CONVERSACIONAIS = [
+  "com base", "compreendido", "claro", "certo", "entendido", "aqui está",
+  "aqui esta", "segue", "vou", "posso", "com prazer", "certamente",
+  "peço desculpas", "peco desculpas", "me desculpe", "desculpe",
+];
+
 function detectarTitulo(text: string): string {
-  // Remove HTML tags para detectar o título
   const stripped = text.replace(/<[^>]+>/g, "").replace(/&[a-z]+;/gi, " ").trim();
   const lines = stripped.split("\n");
+
+  // Prioridade 1: linha com cabeçalho Markdown (## Título ou # Título)
   for (const line of lines) {
     const trimmed = line.trim();
-    if (trimmed.length > 0) return trimmed.slice(0, 80);
+    if (/^#{1,3}\s+\S/.test(trimmed)) {
+      return trimmed.replace(/^#+\s*/, "").slice(0, 80);
+    }
   }
+
+  // Prioridade 2: primeira linha não-conversacional com conteúdo relevante
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.length < 8) continue;
+    const lower = trimmed.toLowerCase();
+    if (PREFIXOS_CONVERSACIONAIS.some(p => lower.startsWith(p))) continue;
+    return trimmed.slice(0, 80);
+  }
+
   return stripped.slice(0, 80);
 }
 
