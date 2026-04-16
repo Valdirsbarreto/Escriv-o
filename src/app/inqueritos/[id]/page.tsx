@@ -579,13 +579,13 @@ export default function InqueritoDetalhePage() {
         if (tentativas >= 60) { // ~5 min
           setGerandoRelatorio(false);
           clearInterval(relatorioInterval);
-          alert("O Relatório Inicial está demorando mais que o esperado. Recarregue a página em alguns minutos.");
+          alert("A Síntese Inicial está demorando mais que o esperado. Recarregue a página em alguns minutos.");
         }
       }, 5000);
     } catch (e) {
       console.error(e);
       setGerandoRelatorio(false);
-      alert("Erro ao acionar geração do Relatório Inicial.");
+      alert("Erro ao acionar geração da Síntese Inicial.");
     }
   };
 
@@ -826,7 +826,7 @@ export default function InqueritoDetalhePage() {
   };
 
   const TIPO_GERADO_LABEL: Record<string, string> = {
-    relatorio_inicial: "Relatório Inicial de Investigação",
+    relatorio_inicial: "Síntese Inicial",
     roteiro_oitiva: "Roteiro de Oitiva",
     oficio: "Ofício",
     minuta_cautelar: "Minuta Cautelar",
@@ -1016,20 +1016,20 @@ export default function InqueritoDetalhePage() {
               </h2>
               <div className="flex items-center gap-3">
                 <span className="text-sm text-zinc-500">{docsGerados.length} documento(s)</span>
-                {/* Botão Relatório Inicial — aparece quando há docs indexados */}
+                {/* Botão Síntese Inicial — aparece quando há docs indexados */}
                 {documentos.some(d => d.status_processamento === "concluido" && d.tipo_peca !== "sintese_investigativa") && (
                   <button
                     onClick={() => {
                       const temRelatorio = docsGerados.some((d: any) => d.tipo === "relatorio_inicial");
-                      if (temRelatorio && !confirm("Já existe um Relatório Inicial. Deseja regenerar (apagará o atual)?")) return;
+                      if (temRelatorio && !confirm("Já existe uma Síntese Inicial. Deseja regenerar (apagará a atual)?")) return;
                       handleGerarRelatorioInicial(temRelatorio);
                     }}
                     disabled={gerandoRelatorio}
                     className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors disabled:opacity-50"
-                    title="Gera o Relatório Inicial de Investigação com verificação anti-alucinação"
+                    title="Gera a Síntese Inicial sobre os autos"
                   >
                     <FileText size={12} className={gerandoRelatorio ? "animate-pulse" : ""}/>
-                    {gerandoRelatorio ? "Gerando relatório..." : docsGerados.some((d: any) => d.tipo === "relatorio_inicial") ? "Regenerar Rel. Inicial" : "Gerar Rel. Inicial"}
+                    {gerandoRelatorio ? "Gerando síntese..." : docsGerados.some((d: any) => d.tipo === "relatorio_inicial") ? "Regenerar Síntese Inicial" : "Gerar Síntese Inicial"}
                   </button>
                 )}
                 <button

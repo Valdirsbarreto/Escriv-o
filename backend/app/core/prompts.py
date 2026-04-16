@@ -467,7 +467,7 @@ TIPO_PECA_LABEL: dict = {
     "peticao":                   "Petição",
     # Gerados pelo sistema — não classificados pelo agente
     "sintese_investigativa":     "Síntese Investigativa",
-    "relatorio_inicial":         "Relatório Inicial de IA",
+    "relatorio_inicial":         "Síntese Inicial",
     "relatorio_complementar":    "Relatório Complementar de IA",
     # Fallback
     "outro":                     "Outro",
