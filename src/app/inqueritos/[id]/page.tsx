@@ -23,7 +23,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check, CalendarPlus, Clock, MapPin, ExternalLink, BookOpen, Quote, ChevronDown, ChevronRight, Bot, Eye, UserSearch, Network, Search, Microscope, ShieldAlert, ListChecks, Scale, Swords } from "lucide-react";
+import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check, CalendarPlus, Clock, MapPin, ExternalLink, BookOpen, Quote, ChevronDown, ChevronRight, Bot, Eye, UserSearch, Network, Search, Microscope, ShieldAlert, ListChecks, Scale, Swords, Copy, ClipboardCheck } from "lucide-react";
 import { IntimacaoUploadModal } from "@/components/IntimacaoUploadModal";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -321,6 +321,7 @@ export default function InqueritoDetalhePage() {
   const [catalogando, setCatalogando] = useState(false);
   const [consultasOsint, setConsultasOsint] = useState<any[]>([]);
   const [osintAbertos, setOsintAbertos] = useState<Record<string, boolean>>({});
+  const [copiadoDocId, setCopiadoDocId] = useState<string | null>(null);
   const [sherlockAnalise, setSherlockAnalise] = useState<any>(null);
   const [sherlockLoading, setSherlockLoading] = useState(false);
   const [sherlockErro, setSherlockErro] = useState<string | null>(null);
@@ -672,6 +673,65 @@ export default function InqueritoDetalhePage() {
     } catch {
       alert("Erro ao salvar edição.");
       setEditDocGerado(prev => prev ? { ...prev, saving: false } : null);
+    }
+  };
+
+  const markdownParaTextoLimpo = (md: string): string => {
+    return md
+      // Títulos: remove os # e deixa o texto em maiúsculo seguido de linha em branco
+      .replace(/^#{1,6}\s+(.+)$/gm, (_, t) => `\n${t.toUpperCase()}\n`)
+      // Negrito e itálico: remove marcadores, mantém texto
+      .replace(/\*{1,3}(.+?)\*{1,3}/g, "$1")
+      .replace(/_{1,2}(.+?)_{1,2}/g, "$1")
+      // Linhas horizontais → linha em branco
+      .replace(/^[-*_]{3,}$/gm, "")
+      // Listas não ordenadas → bullet simples com recuo
+      .replace(/^\s*[-*+]\s+(.+)$/gm, "  • $1")
+      // Listas ordenadas → mantém numeração
+      .replace(/^\s*(\d+)\.\s+(.+)$/gm, "  $1. $2")
+      // Links: mantém só o texto
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      // Código inline: remove backticks
+      .replace(/`([^`]+)`/g, "$1")
+      // Blocos de código: remove delimitadores
+      .replace(/```[\s\S]*?```/g, "")
+      // Colapsa mais de 2 linhas em branco seguidas em 2
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  };
+
+  const handleCopiarTextoLimpo = async (doc: any) => {
+    let conteudo = doc.conteudo ?? "";
+    if (!conteudo && inqId) {
+      try {
+        const r = await getDocGerado(inqId, doc.id);
+        conteudo = r.data?.conteudo ?? "";
+      } catch {}
+    }
+    if (!conteudo) { alert("Conteúdo não disponível."); return; }
+
+    const isHtml = /<[a-zA-Z][^>]*>/.test(conteudo);
+    let textoFinal: string;
+    if (isHtml) {
+      // Strip HTML tags para obter texto plano
+      const tmp = document.createElement("div");
+      tmp.innerHTML = conteudo;
+      textoFinal = tmp.innerText || tmp.textContent || "";
+    } else {
+      textoFinal = markdownParaTextoLimpo(conteudo);
+    }
+
+    try {
+      await navigator.clipboard.writeText(textoFinal);
+      // Feedback visual breve — troca o ícone por 2s
+      setCopiadoDocId(doc.id);
+      setTimeout(() => setCopiadoDocId(null), 2000);
+    } catch {
+      // Fallback: abre janela com o texto selecionado para copiar manualmente
+      const win = window.open("", "_blank");
+      if (!win) { alert("Permita popups para copiar o texto."); return; }
+      win.document.write(`<html><body><pre style="font-family:Arial;font-size:12pt;white-space:pre-wrap">${textoFinal.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</pre></body></html>`);
+      win.document.close();
     }
   };
 
@@ -1189,6 +1249,14 @@ export default function InqueritoDetalhePage() {
                       </span>
                       <button onClick={() => handleAbrirDocGerado(doc)} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-blue-400 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors">
                         <Eye size={11} /> Ver
+                      </button>
+                      <button
+                        onClick={() => handleCopiarTextoLimpo(doc)}
+                        className="p-1.5 rounded transition-colors"
+                        title="Copiar texto limpo (para colar no sistema)"
+                        style={{ color: copiadoDocId === doc.id ? "#34d399" : "#52525b" }}
+                      >
+                        {copiadoDocId === doc.id ? <ClipboardCheck size={13} /> : <Copy size={13} />}
                       </button>
                       <button onClick={() => handleExportarDocGeradoPDF(doc)} className="p-1.5 rounded text-zinc-600 hover:text-red-400 transition-colors" title="Exportar como PDF">
                         <FileText size={13} />
