@@ -62,7 +62,13 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
+  // Rodar apenas nas rotas protegidas e de autenticação — evita Edge Function em assets e rotas públicas
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/",
+    "/inqueritos/:path*",
+    "/intimacoes/:path*",
+    "/painel/:path*",
+    "/login",
+    "/auth/callback",
   ],
 };
