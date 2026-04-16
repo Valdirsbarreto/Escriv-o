@@ -696,7 +696,53 @@ export default function InqueritoDetalhePage() {
     }
   };
 
-  // Abre o PDF original na página da peça
+  // Exporta o texto da peça como PDF via impressão do browser
+  const handleExportarPecaPDF = async (peca: any) => {
+    let texto = peca.conteudo_texto ?? "";
+    if (!texto && inqId) {
+      try {
+        const r = await getPecaExtraida(inqId, peca.id);
+        texto = r.data?.conteudo_texto ?? "";
+      } catch {}
+    }
+    if (!texto) { alert("Conteúdo não disponível para exportação."); return; }
+
+    const tipoLabel = TIPO_PECA_LABEL[peca.tipo] || peca.tipo || "—";
+    const folhas = peca.pagina_inicial != null
+      ? `Fls. ${peca.pagina_inicial}${peca.pagina_final && peca.pagina_final !== peca.pagina_inicial ? `–${peca.pagina_final}` : ""}`
+      : "";
+    const numIp = inquerito?.numero ?? "";
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <title>${peca.titulo || "Peça"}</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 12pt; line-height: 1.7; margin: 2.5cm; color: #111; }
+    h1 { font-size: 13pt; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #999; padding-bottom: 6px; margin-bottom: 4px; }
+    .meta { font-size: 9.5pt; color: #555; margin-bottom: 1.2cm; }
+    pre { white-space: pre-wrap; word-wrap: break-word; font-family: inherit; font-size: 11.5pt; }
+    @page { margin: 2cm; }
+    @media print { body { margin: 0; } }
+  </style>
+</head>
+<body>
+  <h1>${peca.titulo || "Documento"}</h1>
+  <div class="meta">${[numIp, tipoLabel, folhas].filter(Boolean).join("&nbsp;&nbsp;|&nbsp;&nbsp;")}</div>
+  <pre>${texto.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank");
+    if (!win) { alert("Permita popups neste site para exportar o PDF."); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 400);
+  };
+
+  // Abre o PDF original na página da peça (mantido para uso interno do Copiloto)
   const handleAbrirPecaNoPDF = async (peca: any) => {
     if (!peca.documento_id) { handleAbrirPeca(peca); return; }
     setPdfViewer({ url: null, page: peca.pagina_inicial ?? 1, titulo: peca.titulo, docId: peca.documento_id });
@@ -1219,11 +1265,11 @@ export default function InqueritoDetalhePage() {
                         {TIPO_PECA_LABEL[peca.tipo] || peca.tipo}
                       </span>
                       <button
-                        onClick={() => handleAbrirPecaNoPDF(peca)}
-                        title="Abrir no PDF original"
-                        className="flex items-center gap-1 text-xs text-zinc-400 hover:text-blue-400 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors"
+                        onClick={() => handleExportarPecaPDF(peca)}
+                        title="Exportar como PDF"
+                        className="flex items-center gap-1 text-xs text-zinc-400 hover:text-red-400 px-2 py-1 rounded border border-zinc-700 hover:border-red-500/40 transition-colors"
                       >
-                        <Eye size={11} /> PDF
+                        <FileText size={11} /> PDF
                       </button>
                       <button
                         onClick={() => handleAbrirPeca(peca)}
@@ -1450,11 +1496,11 @@ export default function InqueritoDetalhePage() {
                               </div>
                               <div className="flex items-center gap-1 shrink-0 ml-2">
                                 <button
-                                  onClick={(e) => { e.stopPropagation(); handleAbrirPecaNoPDF(peca); }}
-                                  title="Abrir no PDF original"
-                                  className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-blue-400 px-2 py-1 rounded border border-zinc-800 hover:border-blue-500/40 transition-colors"
+                                  onClick={(e) => { e.stopPropagation(); handleExportarPecaPDF(peca); }}
+                                  title="Exportar como PDF"
+                                  className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-red-400 px-2 py-1 rounded border border-zinc-800 hover:border-red-500/40 transition-colors"
                                 >
-                                  <Eye size={10}/> PDF
+                                  <FileText size={10}/> PDF
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); handleAbrirPeca(peca); }}
