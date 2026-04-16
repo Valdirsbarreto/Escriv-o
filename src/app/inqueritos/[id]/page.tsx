@@ -1032,21 +1032,6 @@ export default function InqueritoDetalhePage() {
                     {gerandoRelatorio ? "Gerando relatório..." : docsGerados.some((d: any) => d.tipo === "relatorio_inicial") ? "Regenerar Rel. Inicial" : "Gerar Rel. Inicial"}
                   </button>
                 )}
-                {inqId && (
-                  <button
-                    onClick={() => {
-                      const temComplementar = docsGerados.some((d: any) => d.tipo === "relatorio_complementar");
-                      if (temComplementar && !confirm("Já existe um Relatório Complementar. Deseja regenerar (apagará o atual)?")) return;
-                      handleGerarRelatorioComplementar(temComplementar);
-                    }}
-                    disabled={gerandoComplementar}
-                    className="text-xs text-sky-400 hover:text-sky-300 flex items-center gap-1 transition-colors disabled:opacity-50"
-                    title="Gera o Relatório Complementar ao Relatório Final (quando o MP devolveu o IP para diligências)"
-                  >
-                    <FileText size={12} className={gerandoComplementar ? "animate-pulse" : ""}/>
-                    {gerandoComplementar ? "Gerando complementar..." : docsGerados.some((d: any) => d.tipo === "relatorio_complementar") ? "Regenerar Rel. Complementar" : "Gerar Rel. Complementar"}
-                  </button>
-                )}
                 <button
                   onClick={fetchDocsGerados}
                   disabled={docsGeradosLoading}
