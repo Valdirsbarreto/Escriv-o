@@ -125,17 +125,27 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
             # depois depoimentos/oitivas, depois relatórios, por último demais peças.
 
             PRIORIDADE_TIPO = {
+                # Prova técnica e financeira — leitura densa
                 "quebra_sigilo": 0,
                 "extrato_financeiro": 0,
                 "laudo_pericial": 1,
+                # Oitivas e declarações
                 "termo_interrogatorio": 1,
                 "termo_depoimento": 2,
                 "termo_declaracao": 2,
+                "termo_reconhecimento": 2,
+                # Relatórios e informações investigativas
                 "relatorio_policial": 3,
                 "informacao_investigacao": 3,
                 "registro_aditamento": 3,
-                "bo": 4,
+                # Representações cautelares (contexto do pedido)
+                "representacao": 3,
+                # Peças inaugurais e documentais
+                "boletim_ocorrencia": 4,
+                "auto_prisao_flagrante": 4,
                 "auto_apreensao": 4,
+                "resposta_orgao_externo": 4,
+                # Ofícios e controle externo
                 "oficio_expedido": 5,
                 "oficio_recebido": 5,
             }

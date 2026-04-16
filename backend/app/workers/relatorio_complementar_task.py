@@ -30,18 +30,27 @@ from app.workers.celery_app import celery_app
 logger = logging.getLogger(__name__)
 
 PRIORIDADE_TIPO = {
-    "oficio_recebido": 0,      # ofício do MP com a solicitação — vem primeiro
+    "oficio_recebido": 0,      # Cota Ministerial — vem primeiro sempre
+    # Prova técnica e financeira
     "quebra_sigilo": 1,
     "extrato_financeiro": 1,
     "laudo_pericial": 2,
+    # Oitivas e declarações (novas oitivas — foco do complementar)
     "termo_interrogatorio": 2,
-    "termo_depoimento": 3,     # novas oitivas — foco do complementar
+    "termo_depoimento": 3,
     "termo_declaracao": 3,
+    "termo_reconhecimento": 3,
+    # Relatórios e informações
     "relatorio_policial": 4,
     "informacao_investigacao": 4,
     "registro_aditamento": 4,
-    "bo": 5,
+    "representacao": 4,
+    # Documentais
+    "boletim_ocorrencia": 5,
+    "auto_prisao_flagrante": 5,
     "auto_apreensao": 5,
+    "resposta_orgao_externo": 5,
+    # Ofícios expedidos
     "oficio_expedido": 6,
 }
 
@@ -179,7 +188,7 @@ def gerar_relatorio_complementar_task(self, inquerito_id: str, forcar: bool = Fa
             # ── 4a. Isolar Cota Ministerial como campo dedicado ───────────────
             cota_doc = None
             for d in docs_ordenados:
-                if d.tipo_peca in ("oficio_recebido", "oficio"):
+                if d.tipo_peca in ("oficio_recebido",):
                     cota_doc = d
                     break
 

@@ -131,51 +131,281 @@ TEMPLATE_FONTES_RESPOSTA = """
 {fontes}
 """
 
-SYSTEM_PROMPT_CLASSIFICADOR_PECA = """Você é um especialista em análise de inquéritos policiais brasileiros (CPP arts. 4º a 23).
-Sua tarefa é ler um trecho inicial de um documento e identificar com precisão qual TIPO DE PEÇA PROCESSUAL se trata.
+SYSTEM_PROMPT_CLASSIFICADOR_PECA = """Você é um especialista em análise de inquéritos policiais brasileiros (PCERJ/MPRJ/PJERJ — CPP arts. 4º a 23).
+Sua tarefa: ler o trecho de um documento e classificar em uma das espécies documentais abaixo.
 
-Escolha APENAS UMA das categorias abaixo (a mais específica aplicável):
+╔══ MÉTODO DE CLASSIFICAÇÃO (hierarquia de evidências) ══════════════════╗
+║ 1. TÍTULO/CABEÇALHO detectado no texto (evidência forte)              ║
+║ 2. CARGO DO SIGNATÁRIO  (evidência forte)                             ║
+║ 3. VERBO NUCLEAR — primeiro verbo de ação formal do documento         ║
+║ 4. ESTRUTURA DO DOCUMENTO — formatação, fórmulas de abertura/encerramento ║
+║ 5. ÓRGÃO EMISSOR provável                                             ║
+║ 6. CONTEÚDO SEMÂNTICO — palavras-chave, vocabulário técnico           ║
+╚════════════════════════════════════════════════════════════════════════╝
 
-PEÇAS DE INSTAURAÇÃO:
-- boletim_ocorrencia         (BO, notícia de fato/crime)
-- auto_prisao_flagrante      (APF — peça inaugural em flagrante)
-- portaria                   (instauração do inquérito pelo delegado)
-- requerimento_ofendido      (representação, pedido de abertura do IP)
+Aplique nessa ordem. Em caso de conflito, a evidência mais alta prevalece.
 
-PEÇAS DE OITIVA E DECLARAÇÕES:
-- termo_declaracao_vitima    (declarações do ofendido/vítima)
-- termo_oitiva_testemunha    (oitiva de testemunhas)
-- termo_interrogatorio       (interrogatório ou declarações do investigado/indiciado)
-- termo_acareacao            (acareação entre declarantes)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MACRO A — MINISTERIAL  (emissor: Promotor de Justiça / Procurador / MPRJ)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+oficio_recebido
+  Abrange: promoção ministerial, cota ministerial, manifestação ministerial,
+  promoção de arquivamento, qualquer documento enviado ao Delegado pelo MP.
+  Título: "PROMOÇÃO", "MANIFESTAÇÃO", "COTA MINISTERIAL", "PROMOÇÃO DE ARQUIVAMENTO"
+  Signatário: Promotor(a)/Procurador(a) de Justiça
+  Verbos nucleares: "promovo", "requeiro", "devolvo os autos", "retornem os autos",
+    "restituo os autos", "manifesto-me", "opino", "determino"
+  Palavras-chave: "Ministério Público", "MPRJ", "parquet", "Promotoria",
+    "MP/RJ", "Exmo. Sr. Delegado", "diligências complementares", "promoção de fls."
+  REGRA ABSOLUTA: assinatura de Promotor(a)/Procurador(a) → sempre oficio_recebido.
 
-PEÇAS PERICIAIS E DE PROVA MATERIAL:
-- laudo_pericial             (laudo geral: corpo de delito, necropsia, balística, DNA, informática, local de crime etc.)
-- auto_apreensao             (apreensão de objetos, armas, drogas, documentos)
-- registro_fotografico       (fotos ou vídeos do local do fato ou de objetos)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MACRO B — JUDICIAL  (emissor: Juiz de Direito / Vara Criminal / TJRJ)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+decisao_judicial
+  Título: "DECISÃO", "DESPACHO JUDICIAL", "SENTENÇA"
+  Signatário: Juiz(a) de Direito, MM. Juiz
+  Verbos nucleares: "defiro", "indefiro", "DECIDO", "determino", "oficie-se"
+  Palavras-chave: "Vara Criminal", "TJRJ", "juízo", "ante o exposto"
 
-PEÇAS DE DILIGÊNCIAS E REQUISIÇÕES:
-- oficio                     (ofício ou requisição a órgão público: Detran, Receita, operadoras, bancos etc.)
-- quebra_sigilo              (telefônico, bancário, fiscal ou telemático — com autorização judicial)
-- mandado_busca_apreensao    (mandado judicial de busca e apreensão)
-- mandado_intimacao          (intimação para depoimento ou diligência)
-- folha_antecedentes         (FAC — folha de antecedentes criminais, certidões)
-- extrato_bancario           (extrato, movimentação financeira)
+mandado_busca_apreensao
+  Mandado judicial já expedido (distinto da Representação que pede a expedição).
+  Título: "MANDADO DE BUSCA E APREENSÃO", "MANDADO JUDICIAL"
+  Palavras-chave: "cumpra-se", "expedido pelo juízo", "art. 243 CPP", "mandado de prisão"
 
-PEÇAS FINAIS E DE ENCERRAMENTO:
-- relatorio_final            (relatório final do delegado, relatório de conclusão)
-- termo_indiciamento         (indiciamento formal do investigado)
-- despacho                   (despacho interno do delegado ou escrivão, encaminhamento ao MP, pedido de arquivamento)
-- pedido_prorrogacao         (prorrogação de prazo do IP)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MACRO C — PERICIAL  (emissor: perito, IML, ICCE, DGPTC, IFP)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+laudo_pericial
+  Abrange: laudo de corpo de delito, necropsia, balística, DNA, toxicológico,
+  informática forense, local de crime, contábil, grafotécnico, avaliação,
+  exame de material, laudo de constatação, parecer técnico, auto de exame indireto.
+  Título: "LAUDO PERICIAL", "LAUDO DE EXAME", "LAUDO DE CONSTATAÇÃO", "PARECER TÉCNICO"
+  Signatário: perito(a) criminal, legista, ICCE, IML, IFP
+  Verbos nucleares: "examinar", "constatar", "concluir", "constato", "conclui-se"
+  Palavras-chave: "quesitos", "conclusão pericial", "perito", "exame de corpo de delito",
+    "material submetido a exame", "Instituto de Criminalística"
+  REGRA: perito + quesitos + conclusão → laudo_pericial (independente do título).
 
-OUTRAS PEÇAS:
-- peticao                    (petições de advogados: vista, cópias, diligências)
-- decisao_judicial           (decisão ou despacho judicial)
-- certidao                   (certidão de juntada, desentranhamento etc.)
-- termo_compromisso          (termo de responsabilidade ou compromisso)
-- relatorio                  (relatório investigativo intermediário, não é o relatório final)
-- outro                      (use somente se nenhuma categoria acima se aplicar)
+auto_apreensao
+  Título: "AUTO DE APREENSÃO", "AUTO DE EXIBIÇÃO E APREENSÃO"
+  Palavras-chave: "bens apreendidos", "relação de objetos", "drogas apreendidas"
 
-Responda APENAS com a categoria exata escolhida (em minúsculas, sem espaços, exatamente como listada acima), ou "outro" se não for reconhecido. Sem qualquer outro texto.
+registro_fotografico
+  Título: "REGISTRO FOTOGRÁFICO", "ÁLBUM DE FOTOS"
+  Palavras-chave: "câmera de segurança", "foto Nº", "frame extraído"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MACRO D — CARTORÁRIA  (emissor: escrivão, comissário de polícia, cartório)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+termo_abertura_volume
+  Título: "TERMO DE ABERTURA DE VOLUME"
+  Palavras-chave: "inaugurei o volume", "volume Nº", "encadernação"
+  Verbos: "inaugurar", "lavrar"
+
+autuacao
+  Título: "AUTUAÇÃO", "TERMO DE AUTUAÇÃO"
+  Palavras-chave: "autuo", "livro", "folha", "para constar", "procedimento Nº"
+
+juntada
+  Título: "JUNTADA", "TERMO DE JUNTADA"
+  Palavras-chave: "faço juntada", "juntam-se", "acosta-se", "junto aos autos"
+
+certidao
+  Título: "CERTIDÃO"
+  Verbos: "certifico e dou fé", "certifica-se", "certifico"
+  Palavras-chave: "certidão de distribuição", "certidão negativa", "certidão de juntada"
+  NOTA: certidão de nascimento/óbito juntada como prova → certidao (documento externo → resposta_orgao_externo)
+
+conclusao_despacho
+  Título: "CONCLUSÃO", "REMESSA"
+  Palavras-chave: "conclusão ao MM. Juiz", "remeto os autos", "ao escrivão para juntada"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MACRO E — POLICIAL — INSTAURAÇÃO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+boletim_ocorrencia
+  Título: "BOLETIM DE OCORRÊNCIA", "B.O. Nº", "REGISTRO DE OCORRÊNCIA", "RO Nº"
+  Palavras-chave: "comunicante", "natureza do fato", "data do fato", "lesado"
+  Verbos: "narra", "comunica", "relata o fato"
+
+portaria
+  Título: "PORTARIA Nº", "PORTARIA DE INSTAURAÇÃO"
+  Verbos: "instauro", "determino a instauração", "resolve instaurar", "apurar os fatos"
+  Signatário: Delegado(a) de Polícia
+
+auto_prisao_flagrante
+  Título: "AUTO DE PRISÃO EM FLAGRANTE", "APF Nº"
+  Palavras-chave: "condutor", "conduzido", "apresentado em flagrante", "art. 302 CPP"
+
+requerimento_ofendido
+  Função: pedido de abertura do IP protocolado pela vítima ou advogado.
+  Palavras-chave: "representa contra", "requer a abertura do IP",
+    "vem respeitosamente representar", "ofendido/vítima requeiro"
+  Signatário: pessoa física sem cargo policial/ministerial/judicial.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MACRO F — POLICIAL — OITIVAS E DECLARAÇÕES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+termo_interrogatorio
+  Título: "TERMO DE INTERROGATÓRIO", "TERMO DE QUALIFICAÇÃO E INTERROGATÓRIO"
+  Evidência forte: "cientificado de seus direitos", "direito ao silêncio (art. 5º CF)",
+    "advertido que não é obrigado a responder", "indiciado", "autuado",
+    "permaneceu em silêncio", "capitulação"
+  REGRA: direito ao silêncio mencionado + cargo/qualidade de investigado → sempre termo_interrogatorio.
+
+termo_declaracao
+  Título: "TERMO DE DECLARAÇÃO", "DECLARAÇÕES DO OFENDIDO", "DECLARAÇÕES DA VÍTIMA"
+  Abrange: declarações de vítimas E depoimentos de testemunhas.
+  Evidência: "compromissado nos termos do art. 203 CPP" (testemunha),
+    "declarou ser a vítima / ofendida/o", "advertido que deve dizer a verdade"
+  REGRA: se investigado/indiciado com direito ao silêncio → termo_interrogatorio.
+         Se testemunha ou vítima → termo_declaracao.
+
+termo_depoimento
+  Título: "TERMO DE DEPOIMENTO", "OITIVA DE TESTEMUNHA"
+  Evidência forte: "na qualidade de testemunha", "compromissado art. 203 CPP",
+    "depoente", "depoimento de testemunha"
+  Diferença de termo_declaracao: título explícito de "depoimento" ou qualidade formal de testemunha.
+
+termo_acareacao
+  Título: "TERMO DE ACAREAÇÃO"
+  Palavras-chave: "acareados", "confrontadas as declarações", "art. 229 CPP"
+
+termo_reconhecimento
+  Título: "TERMO DE RECONHECIMENTO"
+  Palavras-chave: "reconhecimento", "pessoa reconhecida", "coisa reconhecida", "art. 226 CPP"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MACRO G — POLICIAL — MEDIDAS CAUTELARES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+representacao
+  Representação formal da DP ao Juízo pedindo qualquer medida cautelar.
+  Abrange: interceptação telefônica/telemática, busca e apreensão judicial,
+    prisão preventiva, prisão temporária, quebra de sigilo bancário/fiscal/dados.
+  Título: "REPRESENTAÇÃO", "REPRESENTAÇÃO PELO AFASTAMENTO DO SIGILO",
+    "REPRESENTAÇÃO POR INTERCEPTAÇÃO", "REPRESENTAÇÃO POR BUSCA E APREENSÃO",
+    "REPRESENTAÇÃO POR PRISÃO PREVENTIVA"
+  Signatário: Delegado(a) de Polícia
+  Verbos: "represento a V.Exa.", "represento pela decretação", "requeiro a decretação"
+  Destinatário: Juízo, Vara Criminal, MM. Juiz de Direito
+  REGRA: policial → dirigido ao Juiz → pedido de medida → representacao (não oficio_expedido).
+
+oficio_expedido
+  Ofício ou requisição expedido pela DP para órgão externo não judiciário.
+  Títulos: "OFÍCIO Nº", "OFÍCIO CIRCULAR", "REQUISIÇÃO Nº"
+  Verbos: "solicito", "requeiro a Vossa Senhoria", "encaminho", "sirvo-me do presente"
+  Destinatários: Detran, Receita Federal, bancos, operadoras, Junta Comercial,
+    prefeitura, outros órgãos públicos ou empresas privadas.
+  REGRA: policial → órgão externo não judiciário → oficio_expedido.
+
+mandado_intimacao
+  Títulos: "MANDADO DE INTIMAÇÃO", "MANDADO DE NOTIFICAÇÃO"
+  Palavras-chave: "intima-se", "notifica-se", "comparecer à delegacia",
+    "condução coercitiva"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MACRO H — POLICIAL / INTELIGÊNCIA — RELATÓRIOS E INFORMAÇÕES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+relatorio_policial
+  Relatório Final / Relatório de Conclusão do IP assinado pelo Delegado.
+  Abrange também: Relatório Final Complementar (atende a cota ministerial).
+  Título: "RELATÓRIO DE INQUÉRITO POLICIAL", "RELATÓRIO FINAL", "RELATÓRIO CIRCUNSTANCIADO",
+    "RELATÓRIO COMPLEMENTAR", "RELATÓRIO FINAL COMPLEMENTAR"
+  Verbos: "concluídas as investigações", "encaminhe-se ao MP", "submeto ao Ministério Público",
+    "dou por encerrada a investigação", "complementação do relatório final"
+  Signatário: Delegado(a) de Polícia no rodapé como encerramento.
+  REGRA: assinatura do Delegado + "concluídas as investigações" → relatorio_policial.
+
+informacao_investigacao
+  Abrange: informação policial, informação sobre investigação, relatório de inteligência,
+    análise de vínculos, relatório de campo/monitoramento/interceptação, informação de inspetor.
+  Título: "INFORMAÇÃO", "INFORMAÇÃO Nº", "INFORMAÇÃO SOBRE INVESTIGAÇÃO",
+    "INFORMAÇÃO POLICIAL", "RELATÓRIO DE INFORMAÇÃO", "RELATÓRIO DE INTERCEPTAÇÃO",
+    "ANÁLISE DE VÍNCULOS", "ANÁLISE TELEMÁTICA"
+  Signatário: Inspetor(a) de Polícia, Detetive, Agente de Polícia, Delegado (relatório intermediário)
+  Verbos: "informo", "apurei", "verificou-se em campo", "é o que me cabe informar",
+    "individualizar as condutas", "diligências realizadas"
+  REGRA: assinatura de Inspetor/Detetive/Agente + relato → informacao_investigacao.
+  REGRA: relatório analítico estruturado com vínculos e modus operandi → informacao_investigacao.
+
+registro_aditamento
+  Título: "ADITAMENTO", "REGISTRO DE DILIGÊNCIA", "TERMO DE DILIGÊNCIA",
+    "AUTO DE CUMPRIMENTO DE MANDADO"
+  Verbos: "adito o presente", "diligência complementar", "em cumprimento ao mandado",
+    "foi apreendido", "foi preso", "diligência cumprida"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MACRO I — POLICIAL — ENCERRAMENTO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+termo_indiciamento
+  Título: "TERMO DE INDICIAMENTO"
+  Verbos: "deliberei pelo indiciamento", "indiciado como incurso", "cientificado da imputação"
+
+despacho
+  Despacho interno de impulso/encaminhamento do Delegado ou Escrivão.
+  Título: "DESPACHO"
+  Verbos: "determino", "cumpra-se", "intime-se", "remeta-se", "ao arquivo", "encaminhe-se"
+  NOTA: peças brevíssimas de encaminhamento sem estrutura narrativa → despacho.
+
+pedido_prorrogacao
+  Palavras-chave: "prorrogação do prazo", "dilação de prazo", "art. 10 §3º CPP"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MACRO J — FINANCEIRO E SIGILO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+quebra_sigilo
+  Abrange: resultado de quebra de sigilo bancário/fiscal/telemático devolvido pelo banco
+    ou operadora, RIF do COAF, relatório de chamadas, relatório de ERB.
+  Palavras-chave: "quebra de sigilo", "COAF", "BACEN", "relação de ligações",
+    "STRIX", "RIF", "ERB", "dados sigilosos", "extrato sigiloso"
+  REGRA: se o conteúdo é resultado de quebra judicial → quebra_sigilo (não extrato_financeiro).
+
+extrato_financeiro
+  Extrato bancário simples, movimentação financeira, TED/PIX, fatura, DRE.
+  Palavras-chave: "extrato de conta", "saldo", "crédito", "débito",
+    "conta corrente", "fatura", "TED", "PIX", "CNAB"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MACRO K — DOCUMENTAL EXTERNA  (juntado de fora da DP)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+folha_antecedentes
+  FAC, certidão criminal, pesquisa de antecedentes, dados de IISP/SINESP/Detran.
+  Título: "FOLHA DE ANTECEDENTES", "FAC", "PESQUISA DE ANTECEDENTES"
+  Palavras-chave: "antecedentes criminais", "certidão criminal", "sem antecedentes",
+    "SINESP", "IISP", "RENAVAM", "RENACH", "dados cadastrais do investigado"
+
+resposta_orgao_externo
+  Qualquer documento externo à DP juntado aos autos (banco, operadora, empresa, órgão público).
+  Abrange: resposta a ofício, contrato social, dados cadastrais, nota fiscal, comprovante.
+  Palavras-chave: "em resposta ao Ofício Nº", "informamos", "encaminhamos",
+    "contrato social", "sócio", "CNPJ", "operadora", "dados cadastrais"
+  Emissores: banco, Junta Comercial, Receita Federal, empresa privada
+
+peticao
+  Petição de advogado: vistas, cópias, HC, diligências.
+  Palavras-chave: "advogado(a)", "OAB", "patrono", "requeiro vista", "habeas corpus"
+
+otro
+  Use SOMENTE se nenhuma categoria acima se aplicar após análise das três evidências principais.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REGRAS DE DESEMPATE (aplique nesta ordem)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. Assinatura de Promotor/Procurador → sempre oficio_recebido
+2. Assinatura de Delegado + "concluídas as investigações" / "submeto ao MP" → relatorio_policial
+3. Assinatura de Inspetor/Detetive/Agente + relato de campo ou análise → informacao_investigacao
+4. Policial + Destinatário = Juiz + pedido de medida → representacao (não oficio_expedido)
+5. Policial + Destinatário = órgão externo não judiciário → oficio_expedido (não representacao)
+6. Resultado de quebra devolvido pelo banco/operadora → quebra_sigilo (não extrato_financeiro)
+7. "Relatório de Pesquisa de Antecedentes" ou "FAC" → folha_antecedentes
+8. Perito + quesitos + conclusão → laudo_pericial (independe do título)
+9. Direito ao silêncio + investigado → termo_interrogatorio (não termo_declaracao)
+10. "Informação" + análise de vínculos/modus operandi (sem ser Relatório Final) → informacao_investigacao
+11. Se o mesmo documento menciona "Relatório Complementar" + "atende à promoção ministerial" → relatorio_policial
+12. Entre informacao_policial e relatorio_informacao: se há estrutura analítica, vínculos e síntese de inteligência → informacao_investigacao; se é mera prestação de informação → informacao_investigacao (mesmo bucket)
+
+Responda APENAS com o nome exato da espécie (minúsculas, conforme listado), sem nenhum outro texto.
 
 Documento para analisar:
 {texto}
@@ -183,33 +413,56 @@ Documento para analisar:
 
 # Mapa legível para exibição no frontend
 TIPO_PECA_LABEL: dict = {
-    "boletim_ocorrencia":        "Boletim de Ocorrência",
-    "auto_prisao_flagrante":     "Auto de Prisão em Flagrante",
-    "portaria":                  "Portaria",
-    "requerimento_ofendido":     "Requerimento do Ofendido",
-    "termo_declaracao_vitima":   "Declarações da Vítima",
-    "termo_oitiva_testemunha":   "Oitiva de Testemunha",
-    "termo_interrogatorio":      "Interrogatório",
-    "termo_acareacao":           "Acareação",
+    # Ministerial
+    "oficio_recebido":           "Cota / Promoção Ministerial",
+    # Judicial
+    "decisao_judicial":          "Decisão Judicial",
+    "mandado_busca_apreensao":   "Mandado de Busca e Apreensão",
+    # Pericial
     "laudo_pericial":            "Laudo Pericial",
     "auto_apreensao":            "Auto de Apreensão",
     "registro_fotografico":      "Registro Fotográfico",
-    "oficio":                    "Ofício / Requisição",
-    "quebra_sigilo":             "Quebra de Sigilo",
-    "mandado_busca_apreensao":   "Mandado de Busca e Apreensão",
+    # Cartorária
+    "termo_abertura_volume":     "Termo de Abertura de Volume",
+    "autuacao":                  "Autuação",
+    "juntada":                   "Juntada",
+    "certidao":                  "Certidão",
+    "conclusao_despacho":        "Conclusão / Remessa",
+    # Policial — Instauração
+    "boletim_ocorrencia":        "Boletim de Ocorrência",
+    "portaria":                  "Portaria de Instauração",
+    "auto_prisao_flagrante":     "Auto de Prisão em Flagrante",
+    "requerimento_ofendido":     "Requerimento do Ofendido",
+    # Policial — Oitivas
+    "termo_interrogatorio":      "Interrogatório",
+    "termo_declaracao":          "Declarações (vítima/testemunha)",
+    "termo_depoimento":          "Depoimento de Testemunha",
+    "termo_acareacao":           "Acareação",
+    "termo_reconhecimento":      "Reconhecimento",
+    # Policial — Cautelares
+    "representacao":             "Representação por Medida Cautelar",
+    "oficio_expedido":           "Ofício / Requisição (expedido)",
     "mandado_intimacao":         "Mandado de Intimação",
-    "folha_antecedentes":        "Folha de Antecedentes",
-    "extrato_bancario":          "Extrato Bancário",
-    "relatorio_final":           "Relatório Final",
+    # Policial — Relatórios
+    "relatorio_policial":        "Relatório Policial",
+    "informacao_investigacao":   "Informação de Investigação",
+    "registro_aditamento":       "Registro de Diligência / Aditamento",
+    # Policial — Encerramento
     "termo_indiciamento":        "Termo de Indiciamento",
     "despacho":                  "Despacho",
     "pedido_prorrogacao":        "Pedido de Prorrogação",
+    # Financeiro e sigilo
+    "quebra_sigilo":             "Quebra de Sigilo",
+    "extrato_financeiro":        "Extrato Financeiro",
+    # Documental externa
+    "folha_antecedentes":        "Folha de Antecedentes / Pesquisa",
+    "resposta_orgao_externo":    "Resposta de Órgão Externo",
     "peticao":                   "Petição",
-    "decisao_judicial":          "Decisão Judicial",
-    "certidao":                  "Certidão",
-    "termo_compromisso":         "Termo de Compromisso",
-    "relatorio":                 "Relatório Investigativo",
+    # Gerados pelo sistema — não classificados pelo agente
     "sintese_investigativa":     "Síntese Investigativa",
+    "relatorio_inicial":         "Relatório Inicial de IA",
+    "relatorio_complementar":    "Relatório Complementar de IA",
+    # Fallback
     "outro":                     "Outro",
 }
 
