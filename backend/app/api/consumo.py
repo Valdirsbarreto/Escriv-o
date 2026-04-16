@@ -1,20 +1,26 @@
 """
 Escrivão AI — API de Controle de Orçamento LLM
-Endpoints para dashboard financeiro: saldo, ranking por agente, histórico diário.
+Endpoints para dashboard financeiro: saldo, ranking por agente, histórico diário,
+custos de serviços externos e configurações de orçamento.
 """
 
 from datetime import datetime, timedelta
-from typing import List
+from decimal import Decimal
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.core.database import get_db
 from app.core.config import settings
 from app.models.consumo_api import ConsumoApi
+from app.models.custo_externo import CustoExterno
 
 router = APIRouter(prefix="/consumo", tags=["Orçamento"])
+
+SERVICOS_VALIDOS = {"vercel", "supabase", "railway", "serper", "gemini_studio", "outro"}
 
 
 def _inicio_mes_atual() -> datetime:
@@ -152,3 +158,144 @@ async def ranking_por_modelo(db: AsyncSession = Depends(get_db)):
         }
         for r in rows
     ]
+
+
+# ── Custos Externos (Vercel, Supabase, Railway, Serper) ────────────────────────
+
+class CustoExternoInput(BaseModel):
+    custo_usd: float = 0.0
+    custo_brl: float = 0.0
+    observacao: Optional[str] = None
+
+
+def _mes_atual() -> str:
+    return datetime.utcnow().strftime("%Y-%m")
+
+
+@router.get("/externos")
+async def listar_custos_externos(mes: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    """
+    Lista custos externos do mês informado (padrão: mês atual).
+    Retorna também o total consolidado (Gemini + externos).
+    """
+    mes_ref = mes or _mes_atual()
+
+    result = await db.execute(
+        select(CustoExterno).where(CustoExterno.mes == mes_ref).order_by(CustoExterno.servico)
+    )
+    externos = result.scalars().all()
+
+    # Soma Gemini do mesmo mês
+    inicio_mes = datetime.strptime(mes_ref + "-01", "%Y-%m-%d")
+
+    res_gemini = await db.execute(
+        select(func.coalesce(func.sum(ConsumoApi.custo_brl), 0))
+        .where(ConsumoApi.timestamp >= inicio_mes)
+    )
+    gemini_brl = float(res_gemini.scalar())
+
+    externos_list = [
+        {
+            "servico": e.servico,
+            "mes": e.mes,
+            "custo_usd": float(e.custo_usd),
+            "custo_brl": float(e.custo_brl),
+            "observacao": e.observacao,
+            "updated_at": e.updated_at.isoformat(),
+        }
+        for e in externos
+    ]
+
+    total_externos_brl = sum(e["custo_brl"] for e in externos_list)
+
+    return {
+        "mes": mes_ref,
+        "gemini_brl": round(gemini_brl, 2),
+        "externos": externos_list,
+        "total_externos_brl": round(total_externos_brl, 2),
+        "total_consolidado_brl": round(gemini_brl + total_externos_brl, 2),
+    }
+
+
+@router.put("/externos/{servico}")
+async def salvar_custo_externo(
+    servico: str,
+    body: CustoExternoInput,
+    mes: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Salva (cria ou atualiza) o custo de um serviço externo para o mês.
+    Serviços: vercel, supabase, railway, serper, gemini_studio, outro.
+    """
+    if servico not in SERVICOS_VALIDOS:
+        raise HTTPException(status_code=422, detail=f"Serviço inválido. Use: {', '.join(sorted(SERVICOS_VALIDOS))}")
+
+    mes_ref = mes or _mes_atual()
+
+    result = await db.execute(
+        select(CustoExterno)
+        .where(CustoExterno.servico == servico)
+        .where(CustoExterno.mes == mes_ref)
+    )
+    registro = result.scalar_one_or_none()
+
+    if registro:
+        registro.custo_usd = Decimal(str(body.custo_usd))
+        registro.custo_brl = Decimal(str(body.custo_brl))
+        registro.observacao = body.observacao
+        registro.updated_at = datetime.utcnow()
+    else:
+        registro = CustoExterno(
+            servico=servico,
+            mes=mes_ref,
+            custo_usd=Decimal(str(body.custo_usd)),
+            custo_brl=Decimal(str(body.custo_brl)),
+            observacao=body.observacao,
+        )
+        db.add(registro)
+
+    await db.commit()
+    return {"status": "ok", "servico": servico, "mes": mes_ref, "custo_brl": float(registro.custo_brl)}
+
+
+# ── Configurações de Orçamento ─────────────────────────────────────────────────
+
+class OrcamentoConfig(BaseModel):
+    budget_brl: float
+    budget_alert_brl: float
+    cotacao_dolar: float
+
+
+@router.get("/config")
+async def get_config_orcamento():
+    """Retorna as configurações atuais de orçamento LLM."""
+    return {
+        "budget_brl": settings.BUDGET_BRL,
+        "budget_alert_brl": settings.BUDGET_ALERT_BRL,
+        "cotacao_dolar": settings.COTACAO_DOLAR,
+    }
+
+
+@router.put("/config")
+async def set_config_orcamento(body: OrcamentoConfig):
+    """
+    Atualiza limites de orçamento em tempo de execução.
+    ATENÇÃO: persiste apenas até o próximo restart. Atualize no Railway para persistir.
+    """
+    if body.budget_brl <= 0 or body.budget_alert_brl <= 0 or body.cotacao_dolar <= 0:
+        raise HTTPException(status_code=422, detail="Todos os valores devem ser positivos.")
+    if body.budget_alert_brl >= body.budget_brl:
+        raise HTTPException(status_code=422, detail="Alerta deve ser menor que o limite total.")
+
+    settings.BUDGET_BRL = body.budget_brl
+    settings.BUDGET_ALERT_BRL = body.budget_alert_brl
+    settings.COTACAO_DOLAR = body.cotacao_dolar
+
+    return {
+        "status": "ok",
+        "aviso": "Ativo até o próximo restart. Atualize no Railway para persistir.",
+        "budget_brl": settings.BUDGET_BRL,
+        "budget_alert_brl": settings.BUDGET_ALERT_BRL,
+        "cotacao_dolar": settings.COTACAO_DOLAR,
+    }

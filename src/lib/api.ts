@@ -133,6 +133,36 @@ export const getConsumoModelos = async () => {
   return response.data;
 };
 
+export const getConsumoExternos = async (mes?: string) => {
+  const response = await api.get("/consumo/externos", { params: mes ? { mes } : {} });
+  return response.data;
+};
+
+export const salvarCustoExterno = async (
+  servico: string,
+  custo_usd: number,
+  custo_brl: number,
+  observacao?: string,
+  mes?: string,
+) => {
+  const response = await api.put(
+    `/consumo/externos/${servico}`,
+    { custo_usd, custo_brl, observacao },
+    { params: mes ? { mes } : {} },
+  );
+  return response.data;
+};
+
+export const getConsumoConfig = async () => {
+  const response = await api.get("/consumo/config");
+  return response.data;
+};
+
+export const salvarConsumoConfig = async (budget_brl: number, budget_alert_brl: number, cotacao_dolar: number) => {
+  const response = await api.put("/consumo/config", { budget_brl, budget_alert_brl, cotacao_dolar });
+  return response.data;
+};
+
 // ── Documentos Gerados ─────────────────────────────────────────────────────
 export const getDocsGerados = (inqId: string) =>
   api.get(`/inqueritos/${inqId}/docs-gerados`);
