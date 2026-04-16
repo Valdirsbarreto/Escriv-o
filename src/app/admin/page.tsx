@@ -358,7 +358,7 @@ export default function AdminPage() {
                   </div>
                   <div>
                     <p className="text-zinc-500 text-xs mb-1">Ritmo diário (7d)</p>
-                    <p className="text-zinc-300 font-semibold">R$ {projecao.ritmo_diario_brl.toFixed(4)}</p>
+                    <p className="text-zinc-300 font-semibold">R$ {projecao.ritmo_diario_brl.toFixed(2)}</p>
                   </div>
                   <div>
                     <p className="text-zinc-500 text-xs mb-1">Dias restantes</p>
@@ -442,7 +442,7 @@ export default function AdminPage() {
                         </div>
                         <div className="flex items-center gap-3 text-zinc-400 text-xs">
                           <span>{r.chamadas}x</span>
-                          <span className="text-white font-medium">R$ {r.gasto_brl.toFixed(4)}</span>
+                          <span className="text-white font-medium">R$ {r.gasto_brl.toFixed(2)}</span>
                         </div>
                       </div>
                       <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
@@ -469,7 +469,7 @@ export default function AdminPage() {
                         <span className="text-zinc-200 font-medium truncate max-w-[180px]" title={m.modelo}>{m.modelo}</span>
                         <div className="flex items-center gap-3 text-zinc-400 text-xs">
                           <span>{(m.tokens_total / 1000).toFixed(0)}k tok</span>
-                          <span className="text-white font-medium">R$ {m.gasto_brl.toFixed(4)}</span>
+                          <span className="text-white font-medium">R$ {m.gasto_brl.toFixed(2)}</span>
                         </div>
                       </div>
                       <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
@@ -497,7 +497,7 @@ export default function AdminPage() {
                       <div
                         className="w-full bg-blue-500/70 hover:bg-blue-400 rounded-sm transition-colors cursor-default"
                         style={{ height: `${Math.max(4, pct(h.gasto_brl, maxHistorico) * 0.88)}px` }}
-                        title={`${h.dia}: R$ ${h.gasto_brl.toFixed(4)} (${h.chamadas} chamadas)`}
+                        title={`${h.dia}: R$ ${h.gasto_brl.toFixed(2)} (${h.chamadas} chamadas)`}
                       />
                       {i % 7 === 0 && (
                         <span className="text-[9px] text-zinc-600 rotate-45 origin-left absolute -bottom-5 left-0">
