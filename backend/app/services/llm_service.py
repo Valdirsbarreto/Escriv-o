@@ -249,28 +249,43 @@ class LLMService:
             logger.warning(f"[LLM-Alerta] Falha ao enviar alerta Telegram: {e}")
 
     def _estimar_custo(self, model: str, tokens_in: int, tokens_out: int) -> float:
-        """Estimativa de custo (USD) baseada em preços por 1M tokens (Target Gemini)."""
-        precos = {
-            # Família 2.5 (atual — chaves novas)
-            "gemini-2.5-flash-lite": {"in": 0.10,   "out": 0.40},
-            "gemini-2.5-flash":      {"in": 0.15,   "out": 0.60},
-            "gemini-2.5-pro":        {"in": 1.25,   "out": 10.00},
+        """Estimativa de custo (USD) baseada em preços por 1M tokens.
+
+        ATENÇÃO: as chaves mais específicas devem vir ANTES das menos específicas
+        (ex: gemini-2.5-flash-lite antes de gemini-2.5-flash) para evitar
+        que o substring match capture o modelo errado.
+        """
+        # Ordenado do mais específico para o menos específico dentro de cada família
+        precos = [
+            # Família 2.5 (atual)
+            ("gemini-2.5-flash-lite",  {"in": 0.10,   "out": 0.40}),
+            ("gemini-2.5-flash",       {"in": 0.15,   "out": 0.60}),
+            ("gemini-2.5-pro",         {"in": 1.25,   "out": 10.00}),
             # Família 2.0 (legado)
-            "gemini-2.0-flash-lite": {"in": 0.075,  "out": 0.30},
-            "gemini-2.0-flash":      {"in": 0.10,   "out": 0.40},
+            ("gemini-2.0-flash-lite",  {"in": 0.075,  "out": 0.30}),
+            ("gemini-2.0-flash",       {"in": 0.10,   "out": 0.40}),
             # Família 1.5 (legado)
-            "gemini-1.5-flash-8b":   {"in": 0.0375, "out": 0.15},
-            "gemini-1.5-flash":      {"in": 0.075,  "out": 0.30},
-            "gemini-1.5-pro":        {"in": 1.25,   "out": 5.00},
-            # Embeddings
-            "text-embedding-004":    {"in": 0.00,   "out": 0.00},
-            "gemini-embedding":      {"in": 0.00,   "out": 0.00},
-        }
+            ("gemini-1.5-flash-8b",    {"in": 0.0375, "out": 0.15}),
+            ("gemini-1.5-flash",       {"in": 0.075,  "out": 0.30}),
+            ("gemini-1.5-pro",         {"in": 1.25,   "out": 5.00}),
+            # Aliases antigos do SDK (sem versão explícita)
+            ("gemini-pro-latest",      {"in": 0.50,   "out": 1.50}),  # era gemini-1.0-pro
+            ("gemini-flash-latest",    {"in": 0.075,  "out": 0.30}),  # era gemini-1.5-flash
+            ("gemini-pro",             {"in": 0.50,   "out": 1.50}),  # gemini-1.0-pro
+            # Groq (Llama) — preços reais Groq por 1M tokens em USD
+            ("llama-3.3-70b",          {"in": 0.59,   "out": 0.79}),
+            ("llama-3.1-70b",          {"in": 0.59,   "out": 0.79}),
+            ("llama-3.1-8b",           {"in": 0.05,   "out": 0.08}),
+            ("llama",                  {"in": 0.20,   "out": 0.30}),  # fallback llama genérico
+            # Embeddings (gratuitos)
+            ("text-embedding-004",     {"in": 0.00,   "out": 0.00}),
+            ("gemini-embedding",       {"in": 0.00,   "out": 0.00}),
+        ]
 
         model_lower = model.lower()
-        selected_price = {"in": 1.0, "out": 3.0}
+        selected_price = {"in": 0.15, "out": 0.60}  # fallback = gemini-2.5-flash (razoável)
 
-        for key, prices in precos.items():
+        for key, prices in precos:
             if key in model_lower:
                 selected_price = prices
                 break
