@@ -23,32 +23,58 @@ interface Props {
   disabled?: boolean;
 }
 
-// Obtém token de acesso via popup MSAL implícito com redirect para /auth/onedrive
-async function obterToken(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const redirectUri = `${window.location.origin}/auth/onedrive`;
-    const scope = encodeURIComponent("https://graph.microsoft.com/Files.Read User.Read");
-    const url =
-      `https://login.microsoftonline.com/${ONEDRIVE_TENANT_ID}/oauth2/v2.0/authorize` +
-      `?client_id=${ONEDRIVE_CLIENT_ID}` +
-      `&response_type=token` +
-      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      `&scope=${scope}` +
-      `&response_mode=fragment` +
-      `&prompt=select_account`;
+// ── PKCE helpers ──────────────────────────────────────────────────────────────
 
+function gerarVerifier(): string {
+  const arr = new Uint8Array(32);
+  window.crypto.getRandomValues(arr);
+  return btoa(String.fromCharCode(...arr))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+
+async function gerarChallenge(verifier: string): Promise<string> {
+  const data = new TextEncoder().encode(verifier);
+  const digest = await window.crypto.subtle.digest("SHA-256", data);
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+
+// Obtém token de acesso via PKCE (Authorization Code + PKCE — sem fluxo implícito)
+async function obterToken(): Promise<string> {
+  const verifier = gerarVerifier();
+  const challenge = await gerarChallenge(verifier);
+  const redirectUri = `${window.location.origin}/auth/onedrive`;
+  const state = crypto.randomUUID();
+
+  // Salva verifier e state no sessionStorage para a página de callback usar
+  sessionStorage.setItem("pkce_verifier", verifier);
+  sessionStorage.setItem("pkce_state", state);
+
+  const scope = encodeURIComponent("https://graph.microsoft.com/Files.Read User.Read offline_access");
+  const url =
+    `https://login.microsoftonline.com/${ONEDRIVE_TENANT_ID}/oauth2/v2.0/authorize` +
+    `?client_id=${ONEDRIVE_CLIENT_ID}` +
+    `&response_type=code` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&scope=${scope}` +
+    `&state=${state}` +
+    `&code_challenge=${challenge}` +
+    `&code_challenge_method=S256` +
+    `&prompt=select_account`;
+
+  return new Promise((resolve, reject) => {
     const popup = window.open(url, "mslogin", "width=520,height=640,left=200,top=80");
     if (!popup) {
       reject(new Error("Popup bloqueado. Permita popups para este site."));
       return;
     }
 
-    // Ouve o postMessage enviado pela página /auth/onedrive
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
       if (event.data?.type !== "onedrive_token") return;
       window.removeEventListener("message", onMessage);
       clearTimeout(timeout);
+      clearInterval(closedTimer);
       if (event.data.token) {
         resolve(event.data.token);
       } else {
@@ -57,7 +83,6 @@ async function obterToken(): Promise<string> {
     };
     window.addEventListener("message", onMessage);
 
-    // Detecta se o usuário fechou o popup manualmente
     const closedTimer = setInterval(() => {
       if (popup.closed) {
         clearInterval(closedTimer);
@@ -66,7 +91,6 @@ async function obterToken(): Promise<string> {
       }
     }, 600);
 
-    // Timeout de 3 minutos
     const timeout = setTimeout(() => {
       clearInterval(closedTimer);
       window.removeEventListener("message", onMessage);
