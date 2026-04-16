@@ -347,6 +347,14 @@ async def osint_por_inquerito(db: AsyncSession = Depends(get_db)):
     ]
 
 
+@router.post("/billing/coletar-agora")
+async def disparar_coleta_billing():
+    """Dispara manualmente a coleta de custos externos (teste/admin)."""
+    from app.workers.billing_task import coletar_custos_externos_task
+    task = coletar_custos_externos_task.delay()
+    return {"status": "disparado", "task_id": str(task.id)}
+
+
 @router.get("/projecao")
 async def projecao_mensal(db: AsyncSession = Depends(get_db)):
     """
