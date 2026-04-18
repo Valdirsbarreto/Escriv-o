@@ -27,6 +27,62 @@ from app.services.llm_service import LLMService
 logger = logging.getLogger(__name__)
 
 
+def _recuperar_json_truncado(raw: str) -> dict:
+    """
+    Tenta recuperar um JSON truncado pelo limite de tokens do LLM.
+    Fecha colchetes/chaves pendentes até obter JSON válido.
+    """
+    # Remove texto parcial após a última vírgula ou valor completo
+    text = raw.rstrip()
+
+    # Remove trailing comma se houver
+    if text.endswith(","):
+        text = text[:-1]
+
+    # Conta estruturas abertas e fecha na ordem inversa
+    stack = []
+    in_string = False
+    escape_next = False
+    for ch in text:
+        if escape_next:
+            escape_next = False
+            continue
+        if ch == "\\" and in_string:
+            escape_next = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch in ("{", "["):
+            stack.append("}" if ch == "{" else "]")
+        elif ch in ("}", "]"):
+            if stack and stack[-1] == ch:
+                stack.pop()
+
+    # Fecha as estruturas abertas em ordem inversa
+    closing = "".join(reversed(stack))
+    recovered = text + closing
+
+    try:
+        result = json.loads(recovered)
+        logger.warning(f"[SHERLOCK] JSON truncado recuperado — fechou {len(stack)} estrutura(s)")
+        return result
+    except json.JSONDecodeError as e:
+        logger.error(f"[SHERLOCK] Falha ao recuperar JSON truncado: {e}")
+        # Retorna estrutura mínima para não quebrar o frontend
+        return {
+            "_erro": "JSON truncado — contexto muito longo. Tente novamente.",
+            "resumo_estrategico": "Análise incompleta devido ao tamanho do contexto.",
+            "contradicoes": [],
+            "lacunas_tipicidade": [],
+            "backlog_diligencias": [],
+            "tese_autoria": "",
+            "advogado_diabo": [],
+        }
+
+
 class SherlockService:
     def __init__(self):
         self.llm = LLMService()
@@ -72,9 +128,9 @@ class SherlockService:
         )
         for doc in res_docs.scalars().all():
             if doc.tipo == "relatorio_inicial" and not ctx["relatorio_inicial"]:
-                ctx["relatorio_inicial"] = doc.conteudo[:25000]
+                ctx["relatorio_inicial"] = doc.conteudo[:12000]
             elif doc.tipo == "sintese_investigativa" and not ctx["sintese"]:
-                ctx["sintese"] = doc.conteudo[:10000]
+                ctx["sintese"] = doc.conteudo[:5000]
 
         # Pessoas
         res_pessoas = await db.execute(
@@ -276,12 +332,17 @@ class SherlockService:
             messages=[{"role": "user", "content": prompt}],
             tier="premium",
             temperature=0.2,
-            max_tokens=6000,
+            max_tokens=8000,
             json_mode=True,
             agente="Sherlock",
         )
 
-        analise = json.loads(result["content"].strip())
+        raw = result["content"].strip()
+        try:
+            analise = json.loads(raw)
+        except json.JSONDecodeError:
+            # Tenta recuperar JSON truncado fechando chaves/colchetes pendentes
+            analise = _recuperar_json_truncado(raw)
         analise["_gerado_em"] = datetime.utcnow().isoformat()
         analise["_modelo"] = result.get("model")
         analise["_inquerito"] = ctx["inquerito"]
