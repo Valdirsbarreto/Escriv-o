@@ -376,7 +376,10 @@ class TelegramCopilotoService:
                     ctx["ultimo_alvo"] = f"CPF {cpf} ({nome})" if nome else f"CPF {cpf}"
                 elif nome:
                     ctx["ultimo_alvo"] = nome
-                resposta = await self._buscar_pessoa_sistema(nome, cpf, db)
+                resposta, inqueritos_encontrados = await self._buscar_pessoa_sistema(nome, cpf, db)
+                # Se apenas um inquérito contém essa pessoa, define-o como foco automático
+                if len(inqueritos_encontrados) == 1:
+                    ctx["inquerito_atual"] = inqueritos_encontrados[0]
 
             elif fc_name == "osint_avulso":
                 cpf = fc_args.get("cpf", "")
@@ -696,11 +699,23 @@ class TelegramCopilotoService:
             alvo = cpf or nome
             return f"❌ Nenhuma pessoa encontrada para <i>{_esc(alvo)}</i> nos autos indexados."
 
+        # Carregar inquéritos para mostrar o número do IP
+        inq_ids = list({p.inquerito_id for p in pessoas if p.inquerito_id})
+        inq_map: dict = {}
+        if inq_ids:
+            inq_res = await db.execute(select(Inquerito).where(Inquerito.id.in_(inq_ids)))
+            for inq in inq_res.scalars().all():
+                inq_map[inq.id] = inq
+
         linhas = ["👤 <b>Ficha(s) encontrada(s)</b>\n"]
         for p in pessoas:
             tipo = _esc(p.tipo_pessoa or "não classificado")
             cpf_str = f" · CPF: <code>{_esc(p.cpf)}</code>" if p.cpf else ""
-            linhas.append(f"<b>{_esc(p.nome)}</b> — {tipo}{cpf_str}")
+            inq = inq_map.get(p.inquerito_id)
+            ip_str = f"\n📂 IP: <code>{_esc(inq.numero)}</code>" if inq else ""
+            linhas.append(f"<b>{_esc(p.nome)}</b> — {tipo}{cpf_str}{ip_str}")
+            if inq and inq.descricao:
+                linhas.append(f"  📌 {_esc(inq.descricao[:200])}")
             if p.resumo_contexto:
                 linhas.append(f"<i>{_esc(p.resumo_contexto[:400])}</i>")
             if p.observacoes:
@@ -712,15 +727,19 @@ class TelegramCopilotoService:
 
     # ── Ação: buscar pessoa em todo o sistema ────────────────────────────────
 
-    async def _buscar_pessoa_sistema(self, nome: str, cpf: str, db: AsyncSession) -> str:
-        """Busca pessoa nos autos indexados E nas intimações agendadas."""
+    async def _buscar_pessoa_sistema(self, nome: str, cpf: str, db: AsyncSession) -> tuple[str, list[str]]:
+        """
+        Busca pessoa nos autos indexados E nas intimações agendadas.
+        Retorna (texto_resposta, lista_de_numeros_ip_unicos_encontrados).
+        """
         if not nome and not cpf:
-            return "ℹ️ Informe o nome ou CPF da pessoa para buscar."
+            return "ℹ️ Informe o nome ou CPF da pessoa para buscar.", []
 
         partes = [f"🔍 <b>Busca por: {_esc(nome or cpf)}</b>\n"]
         encontrou = False
+        numeros_ip_encontrados: list[str] = []
 
-        # 1. Buscar nos autos (tabela Pessoa)
+        # 1. Buscar nos autos (tabela Pessoa) — join com Inquerito para mostrar o IP
         query = select(Pessoa)
         if cpf:
             query = query.where(Pessoa.cpf == cpf.strip())
@@ -733,13 +752,29 @@ class TelegramCopilotoService:
 
         if pessoas:
             encontrou = True
+            # Carregar os inquéritos associados
+            inq_ids = list({p.inquerito_id for p in pessoas if p.inquerito_id})
+            inq_map: dict = {}
+            if inq_ids:
+                inq_result = await db.execute(
+                    select(Inquerito).where(Inquerito.id.in_(inq_ids))
+                )
+                for inq in inq_result.scalars().all():
+                    inq_map[inq.id] = inq
+
             partes.append("👥 <b>Nos autos dos inquéritos:</b>")
             for p in pessoas:
                 tipo = _esc(p.tipo_pessoa or "não classificado")
                 cpf_str = f" · CPF: <code>{_esc(p.cpf)}</code>" if p.cpf else ""
-                partes.append(f"• <b>{_esc(p.nome)}</b> — {tipo}{cpf_str}")
+                inq = inq_map.get(p.inquerito_id)
+                ip_str = f" · IP <code>{_esc(inq.numero)}</code>" if inq else ""
+                partes.append(f"• <b>{_esc(p.nome)}</b> — {tipo}{cpf_str}{ip_str}")
                 if p.resumo_contexto:
                     partes.append(f"  <i>{_esc(p.resumo_contexto[:200])}</i>")
+                if inq and inq.descricao:
+                    partes.append(f"  📌 {_esc(inq.descricao[:150])}")
+                if inq and inq.numero not in numeros_ip_encontrados:
+                    numeros_ip_encontrados.append(inq.numero)
             partes.append("")
 
         # 2. Buscar nas intimações
@@ -771,10 +806,17 @@ class TelegramCopilotoService:
             tipo = "CPF <code>" + _esc(cpf) + "</code>" if cpf else f"<i>{_esc(nome)}</i>"
             return (
                 f"❌ {tipo} não encontrado nos autos nem nas intimações do sistema.\n\n"
-                f"Quer que eu faça uma pesquisa complementar nas <b>fontes externas (OSINT)</b>?"
+                f"Quer que eu faça uma pesquisa complementar nas <b>fontes externas (OSINT)</b>?",
+                [],
             )
 
-        return "\n".join(partes)
+        # Dica de foco automático
+        if len(numeros_ip_encontrados) == 1:
+            partes.append(f"💡 IP em foco: <code>{_esc(numeros_ip_encontrados[0])}</code> — pode perguntar diretamente sobre este inquérito.")
+        elif len(numeros_ip_encontrados) > 1:
+            partes.append(f"💡 Encontrada em {len(numeros_ip_encontrados)} IPs: {', '.join(_esc(n) for n in numeros_ip_encontrados)}. Informe qual IP para detalhes.")
+
+        return "\n".join(partes), numeros_ip_encontrados
 
     # ── Ação: OSINT avulso ────────────────────────────────────────────────────
 

@@ -104,6 +104,21 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
                 await engine.dispose()
                 return {"status": "ja_existe"}
 
+            # ── 1b. Gravar placeholder imediatamente para evitar execução concorrente ──
+            # Se dois workers checarem "já existe?" ao mesmo tempo (race condition pós-deploy),
+            # ambos passariam. O placeholder garante que apenas um prossiga: o segundo
+            # encontrará o placeholder na próxima checagem.
+            placeholder = DocumentoGerado(
+                inquerito_id=inq_uuid,
+                tipo="relatorio_inicial",
+                titulo=f"Relatório Inicial de Investigação — {inq.numero}",
+                conteudo="__PROCESSANDO__",
+            )
+            db.add(placeholder)
+            await db.commit()
+            await db.refresh(placeholder)
+            logger.info(f"[REL-INICIAL] Placeholder criado — iniciando geração LLM")
+
             # ── 2. Coletar resumos dos documentos ─────────────────────────────
             docs_result = await db.execute(
                 select(Documento)
@@ -283,18 +298,18 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
             except Exception as e_audit:
                 logger.warning(f"[REL-INICIAL] Auditoria anti-alucinação falhou (usando rascunho): {e_audit}")
 
-            # ── 5. Salvar como DocumentoGerado ───────────────────────────────
-            doc_gerado = DocumentoGerado(
-                inquerito_id=inq_uuid,
-                tipo="relatorio_inicial",
-                titulo=f"Relatório Inicial de Investigação — {inq.numero}",
-                conteudo=relatorio_texto,
-                modelo_llm=result_llm.get("model"),
-                tokens_prompt=result_llm.get("tokens_prompt"),
-                tokens_resposta=result_llm.get("tokens_resposta"),
-                custo_estimado=result_llm.get("custo_estimado"),
-            )
-            db.add(doc_gerado)
+            # ── 5. Atualizar placeholder com conteúdo real ───────────────────
+            # Usa o placeholder criado em 1b para evitar criar um segundo registro
+            placeholder.conteudo = relatorio_texto
+            if hasattr(placeholder, "modelo_llm"):
+                placeholder.modelo_llm = result_llm.get("model")
+            if hasattr(placeholder, "tokens_prompt"):
+                placeholder.tokens_prompt = result_llm.get("tokens_prompt")
+            if hasattr(placeholder, "tokens_resposta"):
+                placeholder.tokens_resposta = result_llm.get("tokens_resposta")
+            if hasattr(placeholder, "custo_estimado"):
+                placeholder.custo_estimado = result_llm.get("custo_estimado")
+            doc_gerado = placeholder
             await db.flush()
 
             # ── 6. Extrair e atualizar qualificação dos personagens ───────────
@@ -355,4 +370,38 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
         return result
     except Exception as e:
         logger.error(f"[REL-INICIAL] Erro: {e}")
+        # Remove placeholder "__PROCESSANDO__" para que a próxima tentativa possa rodar
+        async def _limpar_placeholder():
+            from app.models.documento_gerado import DocumentoGerado
+            from sqlalchemy import delete as sa_delete
+            async_url = _encode_password_in_url(settings.DATABASE_URL)
+            async_url = async_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            async_url = async_url.replace("postgres://", "postgresql+asyncpg://", 1)
+            import ssl
+            connect_args = {"statement_cache_size": 0}
+            if "supabase" in async_url or "localhost" not in async_url:
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                connect_args["ssl"] = ctx
+            from sqlalchemy.pool import NullPool
+            engine2 = create_async_engine(async_url, connect_args=connect_args, poolclass=NullPool)
+            AsyncSession2 = async_sessionmaker(engine2, class_=AsyncSession, expire_on_commit=False)
+            async with AsyncSession2() as db2:
+                await db2.execute(
+                    sa_delete(DocumentoGerado).where(
+                        DocumentoGerado.inquerito_id == uuid.UUID(inquerito_id),
+                        DocumentoGerado.tipo == "relatorio_inicial",
+                        DocumentoGerado.conteudo == "__PROCESSANDO__",
+                    )
+                )
+                await db2.commit()
+            await engine2.dispose()
+        try:
+            loop2 = asyncio.new_event_loop()
+            loop2.run_until_complete(_limpar_placeholder())
+            loop2.close()
+            logger.info(f"[REL-INICIAL] Placeholder removido após erro — retry possível")
+        except Exception as e2:
+            logger.warning(f"[REL-INICIAL] Falha ao limpar placeholder: {e2}")
         raise self.retry(exc=e)
