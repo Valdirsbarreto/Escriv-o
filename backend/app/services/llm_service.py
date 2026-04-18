@@ -93,6 +93,8 @@ class LLMService:
             tokens_prompt=result["tokens_prompt"],
             tokens_saida=result["tokens_resposta"],
             custo_usd=result["custo_estimado"],
+            tempo_ms=result.get("tempo_ms"),
+            status="ok",
         )
 
         return result
@@ -162,6 +164,16 @@ class LLMService:
 
             return result
 
+        except asyncio.TimeoutError:
+            tempo_ms = int((time.time() - t0) * 1000)
+            logger.error(f"[LLM-Gemini] Timeout ({model}) após {tempo_ms}ms")
+            # Registra o timeout na telemetria (fire-and-forget)
+            asyncio.ensure_future(self._registrar_consumo(
+                agente="timeout", tier="?", model=model,
+                tokens_prompt=0, tokens_saida=0, custo_usd=0.0,
+                tempo_ms=tempo_ms, status="timeout",
+            ))
+            raise
         except Exception as e:
             logger.error(f"[LLM-Gemini] Erro ({model}): {e}")
             raise
@@ -175,6 +187,8 @@ class LLMService:
         tokens_prompt: int,
         tokens_saida: int,
         custo_usd: float,
+        tempo_ms: int = None,
+        status: str = "ok",
     ) -> None:
         """Persiste o consumo no banco e dispara alerta Telegram se necessário."""
         try:
@@ -195,6 +209,8 @@ class LLMService:
                 custo_usd=Decimal(str(custo_usd)),
                 custo_brl=custo_brl,
                 cotacao_dolar=cotacao,
+                tempo_ms=tempo_ms,
+                status=status,
             )
 
             async with async_session() as db:

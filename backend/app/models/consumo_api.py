@@ -41,6 +41,10 @@ class ConsumoApi(Base):
     tokens_prompt: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     tokens_saida: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
+    # Telemetria de performance (adicionado 2026-04-18)
+    tempo_ms: Mapped[int] = mapped_column(Integer, nullable=True)   # latência real da chamada LLM
+    status: Mapped[str] = mapped_column(String(20), nullable=True, default="ok")  # ok|timeout|erro
+
     # Custo em USD (base de cálculo)
     custo_usd: Mapped[Decimal] = mapped_column(Numeric(10, 6), nullable=False, default=0)
 
