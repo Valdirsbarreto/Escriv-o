@@ -9,7 +9,7 @@ Backend FastAPI + Celery + Redis + Qdrant + PostgreSQL. Frontend Next.js no Verc
 ## Ao iniciar uma sessão — leia primeiro
 - `backend/app/core/prompts.py` — todos os system prompts (editá-los aqui, não inline)
 - `backend/app/services/llm_service.py` — roteamento de tiers LLM
-- Memória `project_sessao_16_04_2026_v3.md` — **estado ao encerrar sessão de 16/04 v3, pendências e próximas ações**
+- Memória `project_sessao_18_04_2026_v2.md` — **estado ao encerrar sessão de 18/04 v2, pendências e próximas ações**
 
 ---
 
@@ -193,10 +193,10 @@ O Copiloto conversa naturalmente, sem diretrizes rígidas numeradas. Raciocina e
 
 ## Pendências abertas
 
-1. **Validar Relatório Complementar** no IP 911-00209/2019 — **PRÓXIMA AÇÃO**:
-   - Caminho direto: botão "Gerar Rel. Complementar" na aba Workspace
-   - Caminho via Copiloto: pedir explicitamente "faz o relatório complementar" e verificar se `<RELATORIO_COMPLEMENTAR_CALL>` dispara a task
-   - Se falhar: verificar `tipo_peca` dos docs com `GET /inqueritos/c38991d7.../documentos` — a Cota Ministerial precisa estar como `oficio_recebido`
+1. **Síntese do IP 911-00009-2020** — relatório inicial CONCLUÍDO (18/04) — disparar síntese:
+   ```
+   POST /inqueritos/f1d47601-133e-4687-8d15-7b6a14802deb/gerar-sintese
+   ```
 
 2. **Síntese do IP 911-00209/2019** — regenerar:
    ```
@@ -211,21 +211,33 @@ O Copiloto conversa naturalmente, sem diretrizes rígidas numeradas. Raciocina e
 4. **Alembic migration `j0k1l2m3n4o5`** no Railway — remap tipos de peças:
    `laudo → laudo_pericial` | `oficio → oficio_expedido` | `termo_oitiva → termo_depoimento`
 
-5. **OSINT Web (Serper.dev)** — ✅ IMPLEMENTADO: `serper_service.py`, `gerar_osint_web_pessoa`, endpoint `/agentes/osint/web/`, `OsintWebPanel` no `PainelInvestigacao.tsx`
+5. **CGU_API_TOKEN** — configurar no Railway para OSINT gratuito (sanções CEIS)
 
-6. **Edição de documentos gerados pela IA** — ✅ IMPLEMENTADO (sessão 16/04): botão ✏️ abre modal de edição (título + conteúdo) → `PUT /docs-gerados/{id}`
+6. **`intimacao_extractor.py`** — ainda usa `model="gemini-flash-latest"` (gemini-1.5-flash, bloqueado) em duas chamadas — corrigir para `settings.LLM_STANDARD_MODEL`
 
-7. **Exportação PDF de docs gerados** — ✅ IMPLEMENTADO (sessão 16/04): botão 📄 exporta como HTML + `window.print()`
+7. **Testar Telegram investigativo** — verificar raciocínio pleno via CopilotoService após fixes de 18/04
 
-8. **OSINT Gratuito (BrasilAPI + CGU)** — ✅ IMPLEMENTADO (sessão 16/04 v2): `osint_gratuito_service.py`, endpoint `/agentes/osint/gratuito/`, `OsintGratuitoPanel` — roda ANTES do direct.data
+8. **OSINT Web (Serper.dev)** — ✅ IMPLEMENTADO: `serper_service.py`, `gerar_osint_web_pessoa`, endpoint `/agentes/osint/web/`, `OsintWebPanel` no `PainelInvestigacao.tsx`
 
-9. **Agente Sherlock** — ✅ IMPLEMENTADO + corrigido (`estado_atual`, commit `4f12f74`): `sherlock_service.py`, `PROMPT_SHERLOCK` (5 camadas), endpoint `POST /agentes/sherlock/{inq_id}`, painel no Workspace
+9. **Edição de documentos gerados pela IA** — ✅ IMPLEMENTADO (sessão 16/04): botão ✏️ abre modal de edição (título + conteúdo) → `PUT /docs-gerados/{id}`
 
-10. **OneDrive Picker** — ✅ IMPLEMENTADO (sessão 16/04 v3): `OneDrivePicker.tsx` + `/auth/onedrive`, PKCE flow, botão na ingestão e no workspace. Azure App: client `5434c90f`, tenant `a960e527`, redirect `https://escriv-o.vercel.app/auth/onedrive`
+10. **Exportação PDF de docs gerados** — ✅ IMPLEMENTADO (sessão 16/04): botão 📄 exporta como HTML + `window.print()`
 
-11. **Copiar texto limpo** — ✅ IMPLEMENTADO: botão `Copy` nos docs gerados, strip completo de markdown para colar no sistema da PC
+11. **OSINT Gratuito (BrasilAPI + CGU)** — ✅ IMPLEMENTADO (sessão 16/04 v2): `osint_gratuito_service.py`, endpoint `/agentes/osint/gratuito/`, `OsintGratuitoPanel` — roda ANTES do direct.data
 
-10. **Railway billing GraphQL** — queries atualizadas para Team (`me.teams.edges...`) e Hobby (`me.subscription...`) — aguarda validação em produção
+12. **Agente Sherlock** — ✅ IMPLEMENTADO + corrigido (`estado_atual`, commit `4f12f74`): `sherlock_service.py`, `PROMPT_SHERLOCK` (5 camadas), endpoint `POST /agentes/sherlock/{inq_id}`, painel no Workspace
+
+13. **OneDrive Picker** — ✅ IMPLEMENTADO (sessão 16/04 v3): `OneDrivePicker.tsx` + `/auth/onedrive`, PKCE flow, botão na ingestão e no workspace. Azure App: client `5434c90f`, tenant `a960e527`, redirect `https://escriv-o.vercel.app/auth/onedrive`
+
+14. **Copiar texto limpo** — ✅ IMPLEMENTADO: botão `Copy` nos docs gerados, strip completo de markdown para colar no sistema da PC
+
+15. **Harness (Celery + LLM)** — ✅ IMPLEMENTADO (sessão 18/04): task_failure Telegram alerts, telemetria `tempo_ms`/`status` em `consumo_api`, migration `o5p6q7r8s9t0`
+
+16. **Indicador visual docs em geração** — ✅ IMPLEMENTADO (sessão 18/04 v2): borda âmbar + spinner quando `em_processamento=true`; borda verde quando pronto; auto-poll 8s
+
+17. **Telegram investigativo** — ✅ IMPLEMENTADO (sessão 18/04): `_resposta_investigativa()` via CopilotoService; fix HTML parse failure; fix gemini-flash-latest
+
+18. **Railway billing GraphQL** — queries atualizadas para Team (`me.teams.edges...`) e Hobby (`me.subscription...`) — aguarda validação em produção
 
 ---
 
@@ -245,6 +257,9 @@ O Copiloto conversa naturalmente, sem diretrizes rígidas numeradas. Raciocina e
 - **Campo "Fato":** preenchido SOMENTE pela Seção 1 do Relatório Inicial. Não setar em outros lugares.
 - **Síntese Investigativa:** derivada do Relatório Inicial — fica obsoleta se o relatório for regenerado. Sempre regenerar a síntese depois de `forcar=true` no relatório.
 - **Relatório Complementar:** só faz sentido quando o MP devolveu o IP (Cota Ministerial presente nos autos). Não confundir com Relatório Final.
+- **DocGeradoListItem:** o endpoint de lista `GET /docs-gerados` NUNCA retorna `conteudo`. Estado de processamento é exposto via `em_processamento: bool` calculado no backend (`conteudo == "__PROCESSANDO__"`). Nunca checar `doc.conteudo` no frontend para detectar estado — usar `doc.em_processamento`.
+- **Telegram send_message:** re-envia como texto plano se HTML parse falhar (400 "can't parse entities"). Respostas do LLM podem conter `<>` não escapados que quebram o parse_mode=HTML.
+- **gemini-flash-latest bloqueado:** alias para gemini-1.5-flash, bloqueado para a chave atual. `intimacao_extractor.py` ainda usa este alias — pendente de correção.
 
 ---
 
