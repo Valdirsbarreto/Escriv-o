@@ -367,3 +367,17 @@ export const transcreverAudio = async (audioBlob: Blob, filename = "audio.webm")
   const response = await apiMultipart.post("/agentes/transcrever", form, { timeout: 60000 });
   return response.data as { transcricao: string };
 };
+
+/** Gera áudio TTS (Gemini — mesma voz do Telegram) e retorna URL de blob para tocar. */
+export const ttsVoz = async (texto: string): Promise<string> => {
+  const headers: Record<string, string> = {};
+  const secret = process.env.NEXT_PUBLIC_CHAT_SECRET || "";
+  if (secret) headers["x-chat-secret"] = secret;
+  const response = await api.post(
+    "/agent/tts",
+    { texto },
+    { responseType: "arraybuffer", timeout: 30000, headers }
+  );
+  const blob = new Blob([response.data], { type: "audio/wav" });
+  return URL.createObjectURL(blob);
+};

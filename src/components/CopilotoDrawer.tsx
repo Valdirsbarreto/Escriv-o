@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Send, Bot, User, Save, Paperclip, X, FileText, Image, RefreshCw, PenLine, Wand2, ChevronLeft, Mic, MicOff } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { agentChat, setAgentInquerito, clearAgentContext, createDocGerado, updateDocGerado, getDocsGerados, transcreverAudio } from "@/lib/api";
+import { agentChat, setAgentInquerito, clearAgentContext, createDocGerado, updateDocGerado, getDocsGerados, transcreverAudio, ttsVoz } from "@/lib/api";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -178,26 +178,39 @@ export function CopilotoDrawer() {
     return () => window.removeEventListener("copiloto:prefill", handler);
   }, [setCopilotoOpen]);
 
-  // Fala texto usando SpeechSynthesis do browser (pt-BR)
-  const falarResposta = useCallback((texto: string) => {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const limpo = texto
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&\w+;/g, " ")
-      .replace(/\*+/g, "")
-      .replace(/#{1,6}\s/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 600);
-    if (!limpo) return;
-    const u = new SpeechSynthesisUtterance(limpo);
-    u.lang = "pt-BR";
-    u.rate = 1.05;
-    u.onstart = () => setIsSpeaking(true);
-    u.onend = () => setIsSpeaking(false);
-    u.onerror = () => setIsSpeaking(false);
-    window.speechSynthesis.speak(u);
+  // Referência ao elemento de áudio atual para poder parar
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Fala usando Gemini TTS (mesma voz do Telegram) — fallback para speechSynthesis
+  const falarResposta = useCallback(async (texto: string) => {
+    // Para áudio anterior se estiver tocando
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    if (typeof window !== "undefined") window.speechSynthesis?.cancel();
+
+    setIsSpeaking(true);
+    try {
+      const url = await ttsVoz(texto);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => { setIsSpeaking(false); URL.revokeObjectURL(url); audioRef.current = null; };
+      audio.onerror = () => { setIsSpeaking(false); audioRef.current = null; };
+      await audio.play();
+    } catch {
+      // Fallback: speechSynthesis do browser
+      setIsSpeaking(false);
+      if (typeof window === "undefined" || !window.speechSynthesis) return;
+      const limpo = texto.replace(/<[^>]+>/g, " ").replace(/&\w+;/g, " ").replace(/\*+/g, "").replace(/\s+/g, " ").trim().slice(0, 400);
+      if (!limpo) return;
+      const u = new SpeechSynthesisUtterance(limpo);
+      u.lang = "pt-BR";
+      u.onstart = () => setIsSpeaking(true);
+      u.onend = () => setIsSpeaking(false);
+      u.onerror = () => setIsSpeaking(false);
+      window.speechSynthesis.speak(u);
+    }
   }, []);
 
   const handleSend = async (textoVoz?: string) => {
@@ -529,7 +542,11 @@ export function CopilotoDrawer() {
                 <span>Falando...</span>
               </div>
               <button
-                onClick={() => { window.speechSynthesis?.cancel(); setIsSpeaking(false); }}
+                onClick={() => {
+                  if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+                  window.speechSynthesis?.cancel();
+                  setIsSpeaking(false);
+                }}
                 className="text-xs text-zinc-500 hover:text-zinc-300"
               >
                 Parar

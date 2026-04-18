@@ -4,13 +4,16 @@ Endpoint para o widget de chat web usando CopilotoService (RAG completo).
 Substituiu TelegramCopilotoService que requeria Gemini Function Calling (403 no projeto).
 """
 
+import io
 import json
 import logging
 import re
+import struct
 from typing import Optional
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -194,6 +197,121 @@ async def clear_context(
     r = await _get_redis()
     await r.delete(f"agente_web:ctx:{session_id}")
     return {"ok": True}
+
+
+class TtsRequest(BaseModel):
+    texto: str
+
+
+@router.post("/tts", summary="TTS — converte texto em áudio Gemini (voz natural)")
+async def agent_tts(
+    body: TtsRequest,
+    x_chat_secret: str = Header(default=""),
+):
+    """
+    Converte uma resposta de texto em áudio WAV usando Gemini TTS.
+    Mesma voz usada no Telegram. Retorna audio/wav.
+    """
+    _check_auth(x_chat_secret)
+    if not body.texto.strip():
+        raise HTTPException(status_code=422, detail="Texto vazio")
+
+    texto_voz = await _resumir_para_voz(body.texto)
+    wav_bytes = await _gerar_audio_tts(texto_voz)
+    if not wav_bytes:
+        raise HTTPException(status_code=503, detail="TTS indisponível")
+
+    return Response(content=wav_bytes, media_type="audio/wav")
+
+
+# ── TTS helpers ────────────────────────────────────────────────────────────────
+
+
+def _pcm_para_wav(pcm_data: bytes, sample_rate: int = 24000) -> bytes:
+    n_canais, sample_width = 1, 2
+    buf = io.BytesIO()
+    buf.write(b"RIFF")
+    buf.write(struct.pack("<I", 36 + len(pcm_data)))
+    buf.write(b"WAVE")
+    buf.write(b"fmt ")
+    buf.write(struct.pack("<I", 16))
+    buf.write(struct.pack("<H", 1))
+    buf.write(struct.pack("<H", n_canais))
+    buf.write(struct.pack("<I", sample_rate))
+    buf.write(struct.pack("<I", sample_rate * n_canais * sample_width))
+    buf.write(struct.pack("<H", n_canais * sample_width))
+    buf.write(struct.pack("<H", sample_width * 8))
+    buf.write(b"data")
+    buf.write(struct.pack("<I", len(pcm_data)))
+    buf.write(pcm_data)
+    return buf.getvalue()
+
+
+async def _resumir_para_voz(texto_html: str) -> str:
+    texto_limpo = re.sub(r"<[^>]+>", " ", texto_html)
+    texto_limpo = re.sub(r"&\w+;", " ", texto_limpo)
+    texto_limpo = re.sub(r"\s+", " ", texto_limpo).strip()
+
+    if len(texto_limpo) <= 200:
+        return texto_limpo
+
+    try:
+        from google import genai as _genai
+        client = _genai.Client(api_key=settings.GEMINI_API_KEY)
+        response = await client.aio.models.generate_content(
+            model=settings.LLM_ECONOMICO_MODEL,
+            contents=(
+                "Você é um assistente de voz policial. "
+                "Transforme o texto abaixo em 1 a 3 frases curtas e naturais para serem FALADAS em voz alta.\n"
+                "Regras:\n"
+                "- Não mencione formatação, tags, listas, referências de folhas\n"
+                "- Se for confirmação de contexto de inquérito, diga apenas: "
+                "'Contexto do IP [número] carregado. Como posso ajudar, Comissário?'\n"
+                "- Para respostas analíticas, destaque apenas a conclusão principal\n"
+                "- Tom direto, como se estivesse falando com o Comissário\n"
+                "- Responda SOMENTE com o texto a ser falado, sem aspas, sem comentários\n\n"
+                f"TEXTO:\n{texto_limpo[:2000]}"
+            ),
+        )
+        return response.text.strip()
+    except Exception as e:
+        logger.warning(f"[TTS-WEB] Resumo falhou: {e}")
+        match = re.search(r"[A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ][^.!?]{15,180}[.!?]", texto_limpo)
+        return match.group(0) if match else texto_limpo[:250]
+
+
+async def _gerar_audio_tts(texto_para_falar: str) -> Optional[bytes]:
+    try:
+        from google import genai as _genai
+        from google.genai import types as _genai_types
+        import base64
+
+        texto = texto_para_falar.strip()
+        if not texto:
+            return None
+
+        client = _genai.Client(api_key=settings.GEMINI_API_KEY)
+        response = await client.aio.models.generate_content(
+            model="gemini-2.5-flash-preview-tts",
+            contents=texto,
+            config=_genai_types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=_genai_types.SpeechConfig(
+                    voice_config=_genai_types.VoiceConfig(
+                        prebuilt_voice_config=_genai_types.PrebuiltVoiceConfig(
+                            voice_name="Charon",
+                        )
+                    )
+                ),
+            ),
+        )
+        pcm_data = response.candidates[0].content.parts[0].inline_data.data
+        if isinstance(pcm_data, str):
+            pcm_data = base64.b64decode(pcm_data)
+        return _pcm_para_wav(pcm_data)
+    except Exception as e:
+        logger.warning(f"[TTS-WEB] Geração falhou: {e}")
+        return None
 
 
 # ── Helper ─────────────────────────────────────────────────────────────────────
