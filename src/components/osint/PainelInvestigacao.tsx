@@ -49,6 +49,64 @@ interface PersonagemAnalise {
   osint_realizado: boolean;
 }
 
+// ── Modal de confirmação para consultas pagas ─────────────────────────────────
+
+function ModalConfirmacaoOSINT({
+  nomePessoa,
+  modulosSelecionados,
+  custo,
+  onConfirm,
+  onCancel,
+}: {
+  nomePessoa: string;
+  modulosSelecionados: { label: string; custo: number }[];
+  custo: number;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-sm mx-4 p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-100">Confirmar consulta OSINT</h3>
+          <p className="text-xs text-zinc-400 mt-0.5 truncate">{nomePessoa}</p>
+        </div>
+
+        <div className="space-y-1">
+          <p className="text-xs text-zinc-600 uppercase tracking-wider mb-1.5">Módulos selecionados</p>
+          {modulosSelecionados.map((m, i) => (
+            <div key={i} className="flex items-center justify-between text-xs">
+              <span className="text-zinc-300">{m.label}</span>
+              <span className="font-mono text-zinc-400">R$ {m.custo.toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between border-t border-zinc-800 pt-3">
+          <div>
+            <p className="text-xs text-zinc-500">Total a debitar</p>
+            <p className="text-lg font-mono font-bold text-zinc-100">R$ {custo.toFixed(2)}</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={onCancel}
+              className="px-3 py-1.5 text-xs rounded-lg border border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={onConfirm}
+              className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
+            >
+              Confirmar consulta
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Constantes ────────────────────────────────────────────────────────────────
 
 const OSINT_MODULOS = [
@@ -614,12 +672,14 @@ function CardPersonagem({
   const [expandido, setExpandido] = useState(false);
   const [execIndividual, setExecIndividual] = useState(false);
   const [resIndividual, setResIndividual] = useState<any>(resultado);
+  const [confirmando, setConfirmando] = useState(false);
 
   const custo = modulos.reduce((sum, m) => sum + (OSINT_MODULOS.find(x => x.id === m)?.custo || 0), 0);
   const temCross = p.historico_inqueritos?.length > 0;
   const statusFinal = resIndividual || resultado;
 
-  const handleExecutar = async () => {
+  const doExecutar = async () => {
+    setConfirmando(false);
     setExecIndividual(true);
     try {
       const res = await osintLote(inqueritoId, [{ pessoa_id: p.pessoa_id, modulos }]);
@@ -778,7 +838,7 @@ function CardPersonagem({
                 : <span className="text-zinc-700">Nenhum módulo selecionado</span>}
             </span>
             <Button
-              onClick={handleExecutar}
+              onClick={() => modulos.length > 0 && setConfirmando(true)}
               disabled={modulos.length === 0 || execIndividual}
               size="sm"
               className="bg-blue-600 hover:bg-blue-700 h-7 text-xs gap-1.5"
@@ -788,6 +848,19 @@ function CardPersonagem({
                 : <><Play size={11} /> Executar OSINT</>}
             </Button>
           </div>
+
+          {/* Modal de confirmação individual */}
+          {confirmando && (
+            <ModalConfirmacaoOSINT
+              nomePessoa={p.nome}
+              modulosSelecionados={modulos
+                .map(id => OSINT_MODULOS.find(m => m.id === id))
+                .filter(Boolean) as { label: string; custo: number }[]}
+              custo={custo}
+              onConfirm={doExecutar}
+              onCancel={() => setConfirmando(false)}
+            />
+          )}
 
           {/* Resultado inline */}
           {statusFinal?.status === "concluido" && statusFinal?.dados && (
@@ -828,6 +901,7 @@ export function PainelInvestigacao({ inqueritoId }: { inqueritoId: string }) {
   const [modulos, setModulos] = useState<Record<string, string[]>>({});
   const [resultados, setResultados] = useState<Record<string, any>>({});
   const [executandoLote, setExecutandoLote] = useState(false);
+  const [confirmandoLote, setConfirmandoLote] = useState(false);
 
   useEffect(() => {
     setAnalise(null); setErro(null); setResultados({}); setModulos({});
@@ -868,7 +942,8 @@ export function PainelInvestigacao({ inqueritoId }: { inqueritoId: string }) {
     return acc + (modulos[p.pessoa_id] || []).reduce((s, m) => s + (OSINT_MODULOS.find(x => x.id === m)?.custo || 0), 0);
   }, 0);
 
-  const handleExecutarTodos = async () => {
+  const doExecutarTodos = async () => {
+    setConfirmandoLote(false);
     const itens = personagens
       .filter(p => (modulos[p.pessoa_id] || []).length > 0)
       .map(p => ({ pessoa_id: p.pessoa_id, modulos: modulos[p.pessoa_id] }));
@@ -928,7 +1003,7 @@ export function PainelInvestigacao({ inqueritoId }: { inqueritoId: string }) {
             </span>
           )}
           <Button
-            onClick={handleExecutarTodos}
+            onClick={() => custoTotal > 0 && setConfirmandoLote(true)}
             disabled={executandoLote || custoTotal === 0}
             size="sm"
             className="bg-blue-600 hover:bg-blue-700 h-8 text-xs gap-1.5"
@@ -954,6 +1029,26 @@ export function PainelInvestigacao({ inqueritoId }: { inqueritoId: string }) {
           />
         ))}
       </div>
+
+      {/* Modal de confirmação — executar todos */}
+      {confirmandoLote && (() => {
+        const todosModulos = personagens.flatMap(p =>
+          (modulos[p.pessoa_id] || []).map(id => OSINT_MODULOS.find(m => m.id === id)).filter(Boolean) as { label: string; custo: number }[]
+        );
+        const nomes = personagens
+          .filter(p => (modulos[p.pessoa_id] || []).length > 0)
+          .map(p => p.nome)
+          .join(", ");
+        return (
+          <ModalConfirmacaoOSINT
+            nomePessoa={`${personagens.filter(p => (modulos[p.pessoa_id] || []).length > 0).length} personagem(ns): ${nomes}`}
+            modulosSelecionados={todosModulos}
+            custo={custoTotal}
+            onConfirm={doExecutarTodos}
+            onCancel={() => setConfirmandoLote(false)}
+          />
+        );
+      })()}
     </div>
   );
 }
