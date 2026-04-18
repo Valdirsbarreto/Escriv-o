@@ -42,6 +42,7 @@ class DocGeradoListItem(BaseModel):
     titulo: str
     tipo: str
     created_at: str
+    em_processamento: bool = False  # True quando conteudo == "__PROCESSANDO__"
 
     model_config = {"from_attributes": True}
 
@@ -68,6 +69,7 @@ async def listar_docs_gerados(
             titulo=doc.titulo,
             tipo=doc.tipo,
             created_at=doc.created_at.isoformat() if doc.created_at else "",
+            em_processamento=(doc.conteudo == "__PROCESSANDO__"),
         )
         for doc in docs
     ]

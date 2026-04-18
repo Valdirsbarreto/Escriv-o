@@ -411,11 +411,9 @@ export default function InqueritoDetalhePage() {
     }
   }, [docsGeradosVersion]);
 
-  // Polling automático enquanto houver docs em geração (__PROCESSANDO__)
+  // Polling automático enquanto houver docs em geração (em_processamento=true)
   useEffect(() => {
-    const temProcessando = docsGerados.some(
-      (d: any) => d.conteudo === "__PROCESSANDO__" || (!d.conteudo && d.titulo)
-    );
+    const temProcessando = docsGerados.some((d: any) => d.em_processamento === true);
     if (!temProcessando) return;
     const timer = setTimeout(() => { if (inqId) fetchDocsGerados(); }, 8000);
     return () => clearTimeout(timer);
@@ -640,6 +638,7 @@ export default function InqueritoDetalhePage() {
   };
 
   const handleAbrirDocGerado = async (doc: any) => {
+    if (doc.em_processamento) return;  // doc ainda sendo gerado
     setDocGeradoViewer({ open: true, doc, conteudo: null, loading: true });
     try {
       const res = await getDocGerado(inqId, doc.id);
@@ -1256,8 +1255,8 @@ export default function InqueritoDetalhePage() {
             ) : (
               <div className="space-y-2">
                 {docsGerados.map((doc: any) => {
-                  const processando = doc.conteudo === "__PROCESSANDO__" || (!doc.conteudo && doc.titulo?.includes("—"));
-                  const pronto = !processando && doc.conteudo && doc.conteudo !== "__PROCESSANDO__";
+                  const processando = doc.em_processamento === true;
+                  const pronto = !processando;
                   return (
                   <div key={doc.id} className={`flex items-center justify-between rounded-xl px-4 py-3 transition-colors ${
                     processando
