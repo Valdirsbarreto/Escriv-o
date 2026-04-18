@@ -798,7 +798,7 @@ class TelegramCopilotoService:
             ip_str = f"\n📂 IP: <code>{_esc(inq.numero)}</code>" if inq else ""
             linhas.append(f"<b>{_esc(p.nome)}</b> — {tipo}{cpf_str}{ip_str}")
             if inq and inq.descricao:
-                linhas.append(f"  📌 {_esc(inq.descricao[:200])}")
+                linhas.append(f"  📌 {_esc(inq.descricao)}")
             if p.resumo_contexto:
                 linhas.append(f"<i>{_esc(p.resumo_contexto[:400])}</i>")
             if p.observacoes:
@@ -855,7 +855,7 @@ class TelegramCopilotoService:
                 if p.resumo_contexto:
                     partes.append(f"  <i>{_esc(p.resumo_contexto[:200])}</i>")
                 if inq and inq.descricao:
-                    partes.append(f"  📌 {_esc(inq.descricao[:150])}")
+                    partes.append(f"  📌 {_esc(inq.descricao)}")
                 if inq and inq.numero not in numeros_ip_encontrados:
                     numeros_ip_encontrados.append(inq.numero)
             partes.append("")
