@@ -127,6 +127,8 @@ export function CopilotoDrawer() {
   const [voiceMode, setVoiceMode] = useState(false); // TTS automático após resposta
   const micRecorderRef = useRef<MediaRecorder | null>(null);
   const micChunksRef = useRef<BlobPart[]>([]);
+  // Ref sempre atualizado para handleSend — evita closure stale no toggleMic
+  const handleSendRef = useRef<(textoVoz?: string) => Promise<void>>(async () => {});
 
   // ── Canvas de documento ────────────────────────────────────────────────────
   type CanvasDoc = { titulo: string; tipo: string; htmlOriginal: string; texto: string; modoEdicao: boolean; expandido: boolean; salvando: boolean; savedId: string | null };
@@ -249,6 +251,8 @@ export function CopilotoDrawer() {
       setLoading(false);
     }
   };
+  // Mantém ref sempre atualizada (evita closure stale no toggleMic)
+  handleSendRef.current = handleSend;
 
   const handleSalvar = async (index: number, text: string) => {
     if (!inqueritoAtivoId) return;
@@ -351,43 +355,49 @@ export function CopilotoDrawer() {
 
   const toggleMic = useCallback(async () => {
     if (isRecording) {
-      // Parar e transcrever
+      // Parar gravação — onstop configurado ANTES de chamar stop()
       const mr = micRecorderRef.current;
       if (!mr) return;
+      mr.onstop = async () => {
+        const mimeType = mr.mimeType || "audio/webm";
+        const ext = mimeType.includes("mp4") ? "audio.mp4" : mimeType.includes("ogg") ? "audio.ogg" : "audio.webm";
+        const blob = new Blob(micChunksRef.current, { type: mimeType });
+        micChunksRef.current = [];
+        setIsTranscribing(true);
+        try {
+          const r = await transcreverAudio(blob, ext);
+          const texto = r.transcricao?.trim();
+          if (texto) {
+            setIsTranscribing(false);
+            await handleSendRef.current(texto); // usa ref para evitar closure stale
+            return;
+          }
+        } catch (err) {
+          console.error("[Mic] Transcrição falhou:", err);
+        }
+        setIsTranscribing(false);
+      };
       mr.stop();
       mr.stream.getTracks().forEach(t => t.stop());
       micRecorderRef.current = null;
       setIsRecording(false);
-      mr.onstop = async () => {
-        const blob = new Blob(micChunksRef.current, { type: "audio/webm" });
-        micChunksRef.current = [];
-        setIsTranscribing(true);
-        try {
-          const r = await transcreverAudio(blob, "audio.webm");
-          const texto = r.transcricao.trim();
-          if (texto) {
-            // Auto-envia sem passar pelo campo de input
-            setIsTranscribing(false);
-            await handleSend(texto);
-            return;
-          }
-        } catch {
-          // silencia — cai para o campo manual
-        }
-        setIsTranscribing(false);
-      };
     } else {
-      // Iniciar gravação
+      // Iniciar gravação — detecta mimeType suportado pelo dispositivo
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mr = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+        const mimeType =
+          MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" :
+          MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" :
+          MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" :
+          "";
+        const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
         micChunksRef.current = [];
         mr.ondataavailable = (e) => { if (e.data.size > 0) micChunksRef.current.push(e.data); };
         mr.start(500);
         micRecorderRef.current = mr;
         setIsRecording(true);
       } catch {
-        // Permissão negada — ignora silenciosamente
+        // Permissão negada ou não suportado
       }
     }
   }, [isRecording]);
@@ -415,6 +425,18 @@ export function CopilotoDrawer() {
             <span>Escrivão AI</span>
           </div>
           <div className="flex items-center gap-2">
+            {/* Modo voz — ativa TTS automático em todas as respostas */}
+            <button
+              onClick={() => setVoiceMode(v => !v)}
+              title={voiceMode ? "Desativar modo voz" : "Ativar modo voz (respostas faladas)"}
+              className={`p-1.5 rounded-md border transition-colors ${
+                voiceMode
+                  ? "border-blue-500/60 text-blue-400 bg-blue-500/10"
+                  : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              <Mic size={13} />
+            </button>
             <button
               onClick={handleNovaConversa}
               title="Nova conversa"
