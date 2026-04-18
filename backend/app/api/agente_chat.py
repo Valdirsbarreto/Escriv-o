@@ -6,6 +6,7 @@ Substituiu TelegramCopilotoService que requeria Gemini Function Calling (403 no 
 
 import json
 import logging
+import re
 from typing import Optional
 
 import redis.asyncio as aioredis
@@ -114,10 +115,31 @@ async def agent_chat(
 
     inquerito_id = ctx.get("inquerito_id")
 
+    # Sem contexto: tenta resolver o IP pelo número mencionado na mensagem
     if not inquerito_id:
-        return ChatResponse(
-            resposta="Olá, Comissário! Abra um inquérito para que eu possa acessar os autos e ajudá-lo."
-        )
+        ip = await _resolver_inquerito_por_mensagem(body.mensagem, db)
+        if ip:
+            await _sync_inquerito_context(body.session_id, str(ip.id), db, ctx)
+            inquerito_id = str(ip.id)
+            logger.info(f"[AGENT-CHAT] IP resolvido por texto: {ip.numero}")
+        else:
+            res = await db.execute(
+                select(Inquerito.numero, Inquerito.descricao)
+                .order_by(Inquerito.updated_at.desc())
+                .limit(8)
+            )
+            ips = res.all()
+            if ips:
+                lista = "\n".join(
+                    f"• {r.numero}" + (f" — {r.descricao[:60]}" if r.descricao else "")
+                    for r in ips
+                )
+                return ChatResponse(
+                    resposta=f"Qual inquérito, Comissário? Informe o número do IP.\n\nIPs disponíveis:\n{lista}"
+                )
+            return ChatResponse(
+                resposta="Nenhum inquérito encontrado. Importe os autos pela aba Importar."
+            )
 
     try:
         resultado = await _get_copiloto().processar_mensagem(
@@ -175,6 +197,30 @@ async def clear_context(
 
 
 # ── Helper ─────────────────────────────────────────────────────────────────────
+
+
+async def _resolver_inquerito_por_mensagem(mensagem: str, db: AsyncSession) -> Optional[Inquerito]:
+    """
+    Extrai número de inquérito da mensagem e busca no banco.
+    Tenta padrões do mais específico para o menos específico.
+    """
+    padroes = [
+        r'\d{3}[-.]?\d{5}[-/]\d{4}',   # 911-00209/2019 ou 911.00209.2019
+        r'\d{3}[-.]?\d{5}',             # 911-00209
+        r'\d{5}[-/]\d{4}',              # 00209/2019
+        r'\b0+\d{3,5}\b',               # 00209, 0209
+        r'\b\d{3,5}\b',                 # 209, 2280
+    ]
+    for padrao in padroes:
+        for match in re.findall(padrao, mensagem):
+            termo = re.sub(r'[-./]', '', match)  # normaliza para busca
+            result = await db.execute(
+                select(Inquerito).where(Inquerito.numero.ilike(f"%{termo}%"))
+            )
+            ip = result.scalars().first()
+            if ip:
+                return ip
+    return None
 
 
 async def _sync_inquerito_context(

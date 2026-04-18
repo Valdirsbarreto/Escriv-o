@@ -123,6 +123,8 @@ export function CopilotoDrawer() {
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false); // TTS automático após resposta
   const micRecorderRef = useRef<MediaRecorder | null>(null);
   const micChunksRef = useRef<BlobPart[]>([]);
 
@@ -174,33 +176,60 @@ export function CopilotoDrawer() {
     return () => window.removeEventListener("copiloto:prefill", handler);
   }, [setCopilotoOpen]);
 
-  const handleSend = async () => {
-    if (!input.trim() && !anexo) return;
+  // Fala texto usando SpeechSynthesis do browser (pt-BR)
+  const falarResposta = useCallback((texto: string) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const limpo = texto
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&\w+;/g, " ")
+      .replace(/\*+/g, "")
+      .replace(/#{1,6}\s/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 600);
+    if (!limpo) return;
+    const u = new SpeechSynthesisUtterance(limpo);
+    u.lang = "pt-BR";
+    u.rate = 1.05;
+    u.onstart = () => setIsSpeaking(true);
+    u.onend = () => setIsSpeaking(false);
+    u.onerror = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(u);
+  }, []);
 
-    const userText = input.trim() || (anexo ? `Analise o arquivo: ${anexo.name}` : "");
-    setInput("");
-    setAnexo(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  const handleSend = async (textoVoz?: string) => {
+    const era_voz = !!textoVoz;
+    const userText = textoVoz || input.trim() || (anexo ? `Analise o arquivo: ${anexo.name}` : "");
+    if (!userText) return;
+
+    if (!textoVoz) {
+      setInput("");
+      setAnexo(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
 
     // Garante que o contexto do inquérito está sincronizado antes de enviar
     if (inqueritoAtivoId && sessionId !== "ssr") {
       await setAgentInquerito(sessionId, inqueritoAtivoId).catch(() => {});
     }
 
-    const userLabel = anexo ? `📎 ${anexo.name}\n${userText}` : userText;
+    const userLabel = anexo && !textoVoz ? `📎 ${anexo.name}\n${userText}` : userText;
     setMessages(prev => [...prev, { role: "user", text: userLabel }]);
     setLoading(true);
 
     try {
       const data = await agentChat(userText, sessionId, inqueritoAtivoId);
       const botText = data.resposta;
-      const newIndex = messages.length + 1;
 
       // Detecta e executa comando <ABRIR_PECA peca_id="uuid"/>
       const pecaId = detectarAbrirPeca(botText);
       if (pecaId) setPecaParaAbrir({ pecaId, ts: Date.now() });
 
       setMessages(prev => [...prev, { role: "bot", text: removerTagsXML(botText) }]);
+
+      // Fala a resposta se veio de voz ou modo voz ativo
+      if (era_voz || voiceMode) falarResposta(botText);
 
       // Agente salvou documento via function calling — atualiza Área de Trabalho
       if (inqueritoAtivoId && /documento salvo|✅.*salvo/i.test(botText)) {
@@ -209,7 +238,6 @@ export function CopilotoDrawer() {
       }
 
       // Abre canvas quando o usuário pediu para criar um documento
-      // Não auto-salva — o usuário decide clicando em "Salvar" no canvas
       if (pediriaDocumento(userText) && botText.length > 300) {
         const titulo = detectarTitulo(botText);
         const tipo = detectarTipo(botText);
@@ -336,12 +364,17 @@ export function CopilotoDrawer() {
         setIsTranscribing(true);
         try {
           const r = await transcreverAudio(blob, "audio.webm");
-          setInput(prev => (prev ? prev + " " : "") + r.transcricao);
+          const texto = r.transcricao.trim();
+          if (texto) {
+            // Auto-envia sem passar pelo campo de input
+            setIsTranscribing(false);
+            await handleSend(texto);
+            return;
+          }
         } catch {
-          // silencia — usuário digita manualmente
-        } finally {
-          setIsTranscribing(false);
+          // silencia — cai para o campo manual
         }
+        setIsTranscribing(false);
       };
     } else {
       // Iniciar gravação
@@ -462,6 +495,22 @@ export function CopilotoDrawer() {
                 className="text-zinc-500 hover:text-zinc-300 transition-colors ml-1 shrink-0"
               >
                 <X size={13} />
+              </button>
+            </div>
+          )}
+
+          {/* Indicador TTS falando */}
+          {isSpeaking && (
+            <div className="flex items-center justify-between bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-1.5">
+              <div className="flex items-center gap-2 text-xs text-blue-400">
+                <span className="animate-pulse">🔊</span>
+                <span>Falando...</span>
+              </div>
+              <button
+                onClick={() => { window.speechSynthesis?.cancel(); setIsSpeaking(false); }}
+                className="text-xs text-zinc-500 hover:text-zinc-300"
+              >
+                Parar
               </button>
             </div>
           )}
