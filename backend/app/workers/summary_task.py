@@ -369,10 +369,10 @@ def generate_analise_task(self, inquerito_id: str):
                     messages=[{"role": "user", "content": prompt}],
                     tier="premium",
                     temperature=0.2,
-                    max_tokens=8000,  # 10 seções — 4000 truncava a síntese
+                    max_tokens=16000,  # 10 seções com CoT verbose — 8000 truncava na seção 8
                     agente="Sintese",
                 ),
-                timeout=270,
+                timeout=420,  # 7 min — 16k tokens leva mais que os 270s anteriores
             )
             sintese_texto = result_llm["content"].strip()
 
