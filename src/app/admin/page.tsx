@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BiometricSetup } from "@/components/BiometricSetup";
 import { Badge } from "@/components/ui/badge";
 import {
   DollarSign, Zap, BarChart2, RefreshCw, AlertTriangle, CheckCircle,
@@ -281,6 +282,12 @@ export default function AdminPage() {
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-8">
+      {/* Segurança do dispositivo */}
+      <div>
+        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">Segurança</h2>
+        <BiometricSetup />
+      </div>
+
       {/* Cabeçalho */}
       <div className="flex items-center justify-between">
         <div>

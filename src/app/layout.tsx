@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { CopilotoDrawer } from "@/components/CopilotoDrawer";
 import { MobileNav } from "@/components/MobileNav";
 import { SWRegister } from "@/components/SWRegister";
+import { BiometricLock } from "@/components/BiometricLock";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -39,6 +40,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} min-h-screen bg-zinc-950 text-zinc-50 antialiased`}>
         <SWRegister />
+        <BiometricLock />
         <TooltipProvider>
           {/* Desktop: sidebar lateral + main + drawer */}
           <div className="flex bg-zinc-950 min-h-screen">
