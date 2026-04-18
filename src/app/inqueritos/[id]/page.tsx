@@ -411,6 +411,16 @@ export default function InqueritoDetalhePage() {
     }
   }, [docsGeradosVersion]);
 
+  // Polling automático enquanto houver docs em geração (__PROCESSANDO__)
+  useEffect(() => {
+    const temProcessando = docsGerados.some(
+      (d: any) => d.conteudo === "__PROCESSANDO__" || (!d.conteudo && d.titulo)
+    );
+    if (!temProcessando) return;
+    const timer = setTimeout(() => { if (inqId) fetchDocsGerados(); }, 8000);
+    return () => clearTimeout(timer);
+  }, [docsGerados, inqId]);
+
   // Trava scroll do body quando qualquer modal estiver aberto
   useEffect(() => {
     const anyOpen = docGeradoViewer.open || docViewer.open || deleteDialogOpen || showIntimacaoModal || citacoes.open || pecaViewer.open;
@@ -1245,16 +1255,28 @@ export default function InqueritoDetalhePage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {docsGerados.map((doc: any) => (
-                  <div key={doc.id} className="flex items-center justify-between border border-zinc-800 rounded-xl px-4 py-3 bg-zinc-900/40 hover:border-zinc-700 transition-colors">
+                {docsGerados.map((doc: any) => {
+                  const processando = doc.conteudo === "__PROCESSANDO__" || (!doc.conteudo && doc.titulo?.includes("—"));
+                  const pronto = !processando && doc.conteudo && doc.conteudo !== "__PROCESSANDO__";
+                  return (
+                  <div key={doc.id} className={`flex items-center justify-between rounded-xl px-4 py-3 transition-colors ${
+                    processando
+                      ? "border border-amber-500/40 bg-amber-950/20"
+                      : pronto
+                        ? "border border-emerald-600/40 bg-emerald-950/10 hover:border-emerald-500/60"
+                        : "border border-zinc-800 bg-zinc-900/40 hover:border-zinc-700"
+                  }`}>
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className="p-1.5 rounded border bg-zinc-950 text-blue-400 border-zinc-800 shrink-0">
-                        <Bot size={15} />
+                      <div className={`p-1.5 rounded border bg-zinc-950 shrink-0 ${processando ? "text-amber-400 border-amber-700/40" : pronto ? "text-emerald-400 border-emerald-700/40" : "text-blue-400 border-zinc-800"}`}>
+                        {processando ? <Loader2 size={15} className="animate-spin" /> : <Bot size={15} />}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-zinc-200 truncate">{doc.titulo}</p>
+                        <p className={`text-sm font-medium truncate ${processando ? "text-amber-200" : pronto ? "text-emerald-100" : "text-zinc-200"}`}>{doc.titulo}</p>
                         <p className="text-xs text-zinc-500 mt-0.5">
-                          {new Date(doc.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          {processando
+                            ? <span className="text-amber-500/80 animate-pulse">Gerando documento…</span>
+                            : new Date(doc.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                          }
                         </p>
                       </div>
                     </div>
@@ -1262,21 +1284,28 @@ export default function InqueritoDetalhePage() {
                       <span className={`text-xs px-2 py-0.5 rounded-full border ${TIPO_GERADO_COLOR[doc.tipo] || TIPO_GERADO_COLOR["outro"]}`}>
                         {TIPO_GERADO_LABEL[doc.tipo] || doc.tipo}
                       </span>
-                      <button onClick={() => handleAbrirDocGerado(doc)} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-blue-400 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors">
-                        <Eye size={11} /> Ver
-                      </button>
+                      {processando ? (
+                        <span className="flex items-center gap-1 text-xs text-amber-500/70 px-2 py-1 rounded border border-amber-700/30 cursor-not-allowed">
+                          <Loader2 size={11} className="animate-spin" /> Gerando…
+                        </span>
+                      ) : (
+                        <button onClick={() => handleAbrirDocGerado(doc)} className="flex items-center gap-1 text-xs text-zinc-400 hover:text-blue-400 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors">
+                          <Eye size={11} /> Ver
+                        </button>
+                      )}
                       <button
                         onClick={() => handleCopiarTextoLimpo(doc)}
-                        className="p-1.5 rounded transition-colors"
+                        disabled={processando}
+                        className="p-1.5 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                         title="Copiar texto limpo (para colar no sistema)"
                         style={{ color: copiadoDocId === doc.id ? "#34d399" : "#52525b" }}
                       >
                         {copiadoDocId === doc.id ? <ClipboardCheck size={13} /> : <Copy size={13} />}
                       </button>
-                      <button onClick={() => handleExportarDocGeradoPDF(doc)} className="p-1.5 rounded text-zinc-600 hover:text-red-400 transition-colors" title="Exportar como PDF">
+                      <button onClick={() => handleExportarDocGeradoPDF(doc)} disabled={processando} className="p-1.5 rounded text-zinc-600 hover:text-red-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed" title="Exportar como PDF">
                         <FileText size={13} />
                       </button>
-                      <button onClick={() => handleAbrirEditDocGerado(doc)} className="p-1.5 rounded text-zinc-600 hover:text-amber-400 transition-colors" title="Editar documento">
+                      <button onClick={() => handleAbrirEditDocGerado(doc)} disabled={processando} className="p-1.5 rounded text-zinc-600 hover:text-amber-400 transition-colors disabled:opacity-30 disabled:cursor-not-allowed" title="Editar documento">
                         <Pencil size={13} />
                       </button>
                       <button onClick={() => handleDeletarDocGerado(doc.id)} disabled={deletingDocGerado === doc.id} className="p-1.5 rounded text-zinc-600 hover:text-red-400 transition-colors disabled:opacity-40" title="Excluir documento">
@@ -1284,7 +1313,8 @@ export default function InqueritoDetalhePage() {
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

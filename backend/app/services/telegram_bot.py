@@ -29,16 +29,29 @@ class TelegramBotService:
         text: str,
         parse_mode: str = "HTML",
     ) -> dict:
-        """Envia mensagem de texto. Trunca automaticamente ao limite do Telegram (4096 chars)."""
+        """Envia mensagem de texto. Trunca automaticamente ao limite do Telegram (4096 chars).
+        Se o HTML for inválido (400 'can't parse entities'), re-envia como texto plano."""
         if len(text) > 4090:
             text = text[:4087] + "..."
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
-                r = await client.post(
-                    self._url("sendMessage"),
-                    json={"chat_id": chat_id, "text": text, "parse_mode": parse_mode},
-                )
-                return r.json()
+                payload: dict = {"chat_id": chat_id, "text": text}
+                if parse_mode:
+                    payload["parse_mode"] = parse_mode
+                r = await client.post(self._url("sendMessage"), json=payload)
+                result = r.json()
+                # Telegram retorna HTTP 200 mesmo em erro lógico (ok=false)
+                if not result.get("ok") and parse_mode:
+                    desc = result.get("description", "")
+                    if "parse" in desc.lower() or "entity" in desc.lower() or "can't" in desc.lower():
+                        # HTML inválido → re-enviar sem parse_mode (texto plano)
+                        logger.warning(f"[TELEGRAM] HTML inválido — re-enviando como texto plano: {desc}")
+                        r2 = await client.post(
+                            self._url("sendMessage"),
+                            json={"chat_id": chat_id, "text": text},
+                        )
+                        return r2.json()
+                return result
             except Exception as e:
                 logger.error(f"[TELEGRAM] Erro ao enviar mensagem: {e}")
                 return {"ok": False, "error": str(e)}
