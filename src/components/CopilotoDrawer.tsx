@@ -373,7 +373,7 @@ export function CopilotoDrawer() {
       `}</style>
 
       <aside
-        className="w-[420px] shrink-0 bg-zinc-950 border-l border-zinc-800 flex flex-col max-h-screen sticky top-0"
+        className="w-full md:w-[420px] shrink-0 bg-zinc-950 border-l border-zinc-800 flex flex-col max-h-screen md:sticky top-0 fixed md:relative inset-0 z-40 md:z-auto pb-16 md:pb-0"
         onWheel={(e) => e.stopPropagation()}
       >
         <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
