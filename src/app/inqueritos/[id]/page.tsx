@@ -1439,6 +1439,13 @@ export default function InqueritoDetalhePage() {
 
             {sherlockAnalise && (
               <div className="space-y-3">
+                {/* Aviso de análise incompleta (JSON truncado) */}
+                {sherlockAnalise._erro && (
+                  <div className="flex items-start gap-2 text-sm text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
+                    <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                    <span>{sherlockAnalise._erro}</span>
+                  </div>
+                )}
                 {/* Resumo executivo */}
                 <div className="bg-violet-500/5 border border-violet-500/20 rounded-xl px-5 py-4">
                   <p className="text-sm font-semibold text-violet-300 mb-1 flex items-center gap-1.5">

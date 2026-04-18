@@ -71,15 +71,17 @@ def _recuperar_json_truncado(raw: str) -> dict:
         return result
     except json.JSONDecodeError as e:
         logger.error(f"[SHERLOCK] Falha ao recuperar JSON truncado: {e}")
-        # Retorna estrutura mínima para não quebrar o frontend
+        # Retorna estrutura mínima com campos corretos para não quebrar o frontend
         return {
-            "_erro": "JSON truncado — contexto muito longo. Tente novamente.",
-            "resumo_estrategico": "Análise incompleta devido ao tamanho do contexto.",
+            "_erro": "JSON truncado — contexto muito longo. Use 'Regenerar' para tentar novamente.",
+            "resumo_executivo": "⚠️ Análise incompleta — o contexto do inquérito excedeu o limite de tokens. Clique em 'Regenerar' para nova tentativa.",
+            "recomendacao_final": "Regenerar a análise Sherlock com o botão 'Regenerar' acima.",
+            "crimes_identificados": [],
             "contradicoes": [],
-            "lacunas_tipicidade": [],
+            "checklist_tipicidade": [],
             "backlog_diligencias": [],
             "tese_autoria": "",
-            "advogado_diabo": [],
+            "vulnerabilidades_defesa": [],
         }
 
 
@@ -128,9 +130,9 @@ class SherlockService:
         )
         for doc in res_docs.scalars().all():
             if doc.tipo == "relatorio_inicial" and not ctx["relatorio_inicial"]:
-                ctx["relatorio_inicial"] = doc.conteudo[:12000]
+                ctx["relatorio_inicial"] = doc.conteudo[:8000]
             elif doc.tipo == "sintese_investigativa" and not ctx["sintese"]:
-                ctx["sintese"] = doc.conteudo[:5000]
+                ctx["sintese"] = doc.conteudo[:3000]
 
         # Pessoas
         res_pessoas = await db.execute(
@@ -163,10 +165,11 @@ class SherlockService:
         except Exception:
             pass
 
-        # Peças indexadas
+        # Peças indexadas (máximo 20 — evita contexto gigante em casos com muitas peças)
         res_docs2 = await db.execute(
             select(Documento.nome_arquivo, Documento.tipo_peca, Documento.status_processamento)
             .where(Documento.inquerito_id == inquerito_id)
+            .limit(20)
         )
         for row in res_docs2.all():
             ctx["pecas"].append({
