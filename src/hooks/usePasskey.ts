@@ -7,9 +7,15 @@ function b64url(bytes: ArrayBuffer): string {
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
 
-function b64urlDecode(s: string): Uint8Array {
+function b64urlDecode(s: string): ArrayBuffer {
   const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
-  return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const binary = atob(b64);
+  const buf = new ArrayBuffer(binary.length);
+  const view = new Uint8Array(buf);
+  for (let i = 0; i < binary.length; i++) {
+    view[i] = binary.charCodeAt(i);
+  }
+  return buf;
 }
 
 /** Verifica se o browser suporta WebAuthn com autenticador de plataforma (biometria). */
