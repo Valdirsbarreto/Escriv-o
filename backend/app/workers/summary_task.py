@@ -369,7 +369,8 @@ def generate_analise_task(self, inquerito_id: str):
                     messages=[{"role": "user", "content": prompt}],
                     tier="premium",
                     temperature=0.2,
-                    max_tokens=4000,
+                    max_tokens=8000,  # 10 seções — 4000 truncava a síntese
+                    agente="Sintese",
                 ),
                 timeout=270,
             )
