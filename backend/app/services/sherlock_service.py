@@ -335,7 +335,7 @@ class SherlockService:
             messages=[{"role": "user", "content": prompt}],
             tier="premium",
             temperature=0.2,
-            max_tokens=16000,
+            max_tokens=24000,
             json_mode=True,
             agente="Sherlock",
         )

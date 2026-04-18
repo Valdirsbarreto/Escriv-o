@@ -1608,8 +1608,12 @@ Retorne EXCLUSIVAMENTE um JSON válido com esta estrutura:
 REGRAS OBRIGATÓRIAS:
 - Baseie-se EXCLUSIVAMENTE nos dados fornecidos. Não invente fatos, nomes ou provas.
 - Se dados forem insuficientes para uma camada, preencha com {{"status": "dados insuficientes", "motivo": "..."}}.
-- contradicoes: mínimo 1 item se houver depoimentos nos autos; lista vazia apenas se só há documentos unilaterais.
-- backlog_diligencias: mínimo 2 itens — sempre há algo a fazer.
-- advogado_diabo.vulnerabilidades: mínimo 1 item — toda tese tem algum ponto fraco.
-- JSON apenas — sem texto antes ou depois.
+- contradicoes: mínimo 1 item se houver depoimentos nos autos; máximo 6 itens — priorize as CRÍTICAS.
+- checklist_tipicidade: máximo 8 itens — só os elementos mais relevantes para o indiciamento.
+- backlog_diligencias: mínimo 2, máximo 7 itens — priorize URGENTES e IMPRESCINDÍVEIS.
+- advogado_diabo.vulnerabilidades: mínimo 1, máximo 5 itens.
+- cadeia_provas: máximo 6 itens.
+- papel_por_pessoa: inclua apenas pessoas com papel definido (AUTOR/COAUTOR/PARTÍCIPE), máximo 8.
+- BREVIDADE: cada campo de texto: máximo 2 frases curtas. Seja telegráfico.
+- JSON apenas — sem texto antes ou depois, sem markdown.
 """
