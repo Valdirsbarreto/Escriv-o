@@ -34,6 +34,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" className="dark">
+      <head>
+        <link rel="manifest" href="/manifest.webmanifest" />
+      </head>
       <body className={`${inter.className} min-h-screen bg-zinc-950 text-zinc-50 antialiased`}>
         <SWRegister />
         <TooltipProvider>
