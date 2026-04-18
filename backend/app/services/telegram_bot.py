@@ -4,6 +4,7 @@ Wrapper fino para a API do Telegram Bot (envio de mensagens, ações, configura�
 """
 
 import logging
+import re
 
 import httpx
 
@@ -15,6 +16,34 @@ logger = logging.getLogger(__name__)
 def _esc(text: str) -> str:
     """Escapa caracteres especiais HTML para uso em parse_mode=HTML."""
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _md_para_html(text: str) -> str:
+    """
+    Converte markdown básico do LLM para HTML do Telegram.
+    Ordem importa: processar do mais específico para o mais genérico.
+    """
+    # Escapa HTML primeiro (< > &)
+    text = _esc(text)
+
+    # Código inline `` `code` `` → <code>
+    text = re.sub(r"`([^`\n]+)`", r"<code>\1</code>", text)
+
+    # Negrito: **texto** ou __texto__ → <b>
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text, flags=re.DOTALL)
+    text = re.sub(r"__(.+?)__", r"<b>\1</b>", text, flags=re.DOTALL)
+
+    # Itálico: *texto* ou _texto_ → <i>  (só se não for negrito)
+    text = re.sub(r"\*([^*\n]+?)\*", r"<i>\1</i>", text)
+    text = re.sub(r"(?<![_\w])_([^_\n]+?)_(?![_\w])", r"<i>\1</i>", text)
+
+    # Cabeçalhos markdown: ### Título → <b>Título</b>
+    text = re.sub(r"^#{1,6}\s+(.+)$", r"<b>\1</b>", text, flags=re.MULTILINE)
+
+    # Linhas horizontais --- ou *** → separador leve
+    text = re.sub(r"^[-*]{3,}\s*$", "—————", text, flags=re.MULTILINE)
+
+    return text
 
 
 class TelegramBotService:
@@ -31,6 +60,9 @@ class TelegramBotService:
     ) -> dict:
         """Envia mensagem de texto. Trunca automaticamente ao limite do Telegram (4096 chars).
         Se o HTML for inválido (400 'can't parse entities'), re-envia como texto plano."""
+        # Converte markdown do LLM para HTML antes de enviar
+        if parse_mode == "HTML":
+            text = _md_para_html(text)
         if len(text) > 4090:
             text = text[:4087] + "..."
         async with httpx.AsyncClient(timeout=30.0) as client:
