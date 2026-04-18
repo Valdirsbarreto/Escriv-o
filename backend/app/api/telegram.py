@@ -62,27 +62,66 @@ def _pcm_para_wav(pcm_data: bytes, sample_rate: int = 24000) -> bytes:
     return buf.getvalue()
 
 
-async def _gerar_audio_tts(texto: str) -> Optional[bytes]:
+async def _resumir_para_voz(texto_html: str) -> str:
+    """
+    Converte resposta escrita (HTML, detalhada) em 1-3 frases naturais para voz.
+    Usa Flash Lite (barato) para resumo conversacional.
+    Regra principal: se for confirmação de contexto de inquérito, diz o número e pergunta como pode ajudar.
+    """
+    # Remove HTML
+    texto_limpo = re.sub(r"<[^>]+>", " ", texto_html)
+    texto_limpo = re.sub(r"&\w+;", " ", texto_limpo)
+    texto_limpo = re.sub(r"\s+", " ", texto_limpo).strip()
+
+    # Se o texto já for curto (≤ 200 chars), usa diretamente
+    if len(texto_limpo) <= 200:
+        return texto_limpo
+
+    try:
+        from google import genai as _genai
+
+        client = _genai.Client(api_key=settings.GEMINI_API_KEY)
+        response = await client.aio.models.generate_content(
+            model=settings.LLM_ECONOMICO_MODEL,  # gemini-2.5-flash-lite
+            contents=(
+                "Você é um assistente de voz policial. "
+                "Transforme o texto abaixo em 1 a 3 frases curtas e naturais para serem FALADAS em voz alta.\n"
+                "Regras:\n"
+                "- Não mencione formatação, tags, listas, referências de folhas\n"
+                "- Se o texto for uma confirmação de contexto (carregando dados de inquérito), "
+                "diga apenas: 'Contexto do IP [número] carregado. Como posso ajudar, Comissário?'\n"
+                "- Para respostas analíticas, destaque apenas a conclusão principal\n"
+                "- Tom direto, como se estivesse falando com o Comissário\n"
+                "- Responda SOMENTE com o texto a ser falado, sem aspas, sem comentários\n\n"
+                f"TEXTO:\n{texto_limpo[:2000]}"
+            ),
+        )
+        return response.text.strip()
+    except Exception as e:
+        logger.warning(f"[TELEGRAM] Resumo TTS falhou: {e}")
+        # Fallback: primeira frase limpa
+        match = re.search(r"[A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ][^.!?]{15,180}[.!?]", texto_limpo)
+        return match.group(0) if match else texto_limpo[:250]
+
+
+async def _gerar_audio_tts(texto_para_falar: str) -> Optional[bytes]:
     """
     Gera áudio TTS via Gemini 2.5 Flash TTS.
+    Recebe texto já pronto para voz (sem HTML, curto e conversacional).
     Retorna WAV bytes ou None se falhar.
-    Texto é truncado a 800 chars para respostas ágeis.
     """
     try:
         from google import genai as _genai
         from google.genai import types as _genai_types
 
-        # Remove HTML e limita tamanho
-        texto_limpo = re.sub(r"<[^>]+>", "", texto)
-        texto_limpo = texto_limpo.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-        texto_limpo = texto_limpo[:800].strip()
-        if not texto_limpo:
+        texto = texto_para_falar.strip()
+        if not texto:
             return None
 
         client = _genai.Client(api_key=settings.GEMINI_API_KEY)
         response = await client.aio.models.generate_content(
             model="gemini-2.5-flash-preview-tts",
-            contents=texto_limpo,
+            contents=texto,
             config=_genai_types.GenerateContentConfig(
                 response_modalities=["AUDIO"],
                 speech_config=_genai_types.SpeechConfig(
@@ -95,7 +134,6 @@ async def _gerar_audio_tts(texto: str) -> Optional[bytes]:
             ),
         )
         pcm_data = response.candidates[0].content.parts[0].inline_data.data
-        # inline_data.data pode ser base64 str ou bytes
         if isinstance(pcm_data, str):
             import base64
             pcm_data = base64.b64decode(pcm_data)
@@ -230,7 +268,9 @@ async def telegram_webhook(
     # Se o usuário enviou um áudio, responder também em áudio (TTS)
     if era_voz:
         await _get_bot().send_chat_action(chat_id, "upload_voice")
-        audio_bytes = await _gerar_audio_tts(resposta)
+        texto_voz = await _resumir_para_voz(resposta)
+        logger.info(f"[TELEGRAM] TTS texto: {texto_voz[:120]}")
+        audio_bytes = await _gerar_audio_tts(texto_voz)
         if audio_bytes:
             r = await _get_bot().send_audio(chat_id, audio_bytes)
             if not r.get("ok"):
