@@ -110,9 +110,7 @@ export function CopilotoDrawer() {
   const { isCopilotoOpen, setCopilotoOpen, inqueritoAtivoId, bumpDocsGerados, setPecaParaAbrir } = useAppStore();
 
   const [sessionId] = useState<string>(() => getOrCreateSessionId());
-  const [messages, setMessages] = useState<{ role: "user" | "bot"; text: string }[]>([
-    { role: "bot", text: "Olá, Comissário! Sou o <b>Escrivão AI</b>. Posso buscar nos autos, gerar cautelares, consultar OSINT, despachar inquéritos e muito mais.\n\nDiga <i>'ajuda'</i> para ver o que posso fazer." }
-  ]);
+  const [messages, setMessages] = useState<{ role: "user" | "bot"; text: string }[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [anexo, setAnexo] = useState<File | null>(null);
@@ -336,15 +334,10 @@ export function CopilotoDrawer() {
         className="w-[420px] shrink-0 bg-zinc-950 border-l border-zinc-800 flex flex-col max-h-screen sticky top-0"
         onWheel={(e) => e.stopPropagation()}
       >
-        <div className="p-6 border-b border-zinc-800 flex items-start justify-between">
-          <div>
-            <h2 className="flex items-center gap-2 text-zinc-100 font-semibold">
-              <Bot className="text-blue-500" />
-              Agente Investigativo
-            </h2>
-            <p className="text-sm text-zinc-500 mt-1">
-              {inqueritoAtivoId ? "Inquérito em foco • Function Calling ativo" : "Nenhum inquérito ativo."}
-            </p>
+        <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-zinc-400 text-sm">
+            <Bot size={15} className="text-blue-500" />
+            <span>Escrivão AI</span>
           </div>
           <div className="flex items-center gap-2">
             <button
