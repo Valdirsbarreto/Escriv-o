@@ -4,6 +4,7 @@ RAG pipeline: query → embed → Qdrant → contexto → LLM → resposta com c
 Conforme blueprint §7.3 e especificação §5.
 """
 
+import json
 import logging
 import time
 import uuid
@@ -193,7 +194,8 @@ class CopilotoService:
                             papel = f" [{p.tipo_pessoa}]" if p.tipo_pessoa else ""
                             cpf = f" CPF: {p.cpf}" if p.cpf else ""
                             obs = f" — {p.observacoes}" if p.observacoes else ""
-                            bloco.append(f"- {p.nome}{papel}{cpf}{obs}")
+                            # Incluir ID para que o Copiloto possa acionar OSINT Web por pessoa
+                            bloco.append(f"- {p.nome}{papel}{cpf}{obs} [id:{p.id}]")
 
                     if empresas:
                         bloco.append("\n**Pessoas jurídicas:**")
@@ -289,6 +291,112 @@ class CopilotoService:
             except Exception as e:
                 logger.warning(f"[COPILOTO] Falha ao buscar docs gerados: {e}")
 
+        # Injetar resultados dos agentes de inteligência (Sherlock, OSINT, fichas)
+        # São o núcleo da análise investigativa — Copiloto é o centro de comando
+        if db is not None:
+            try:
+                from sqlalchemy import select as sa_select  # noqa: F811
+                from app.models.resultado_agente import ResultadoAgente
+
+                agentes_res = await db.execute(
+                    sa_select(ResultadoAgente)
+                    .where(ResultadoAgente.inquerito_id == uuid.UUID(inquerito_id))
+                    .order_by(ResultadoAgente.created_at.desc())
+                )
+                todos_agentes = agentes_res.scalars().all()
+
+                # ── Sherlock (análise estratégica de 5 camadas) ──────────────
+                sherlock_rec = next(
+                    (r for r in todos_agentes if r.tipo_agente == "sherlock"), None
+                )
+                if sherlock_rec:
+                    d = sherlock_rec.resultado_json or {}
+                    bloco_sh = ["### Análise Sherlock — Estratégia Investigativa\n"]
+                    if d.get("resumo_executivo"):
+                        bloco_sh.append(f"**Resumo:** {d['resumo_executivo'][:600]}")
+                    if d.get("tese_autoria"):
+                        bloco_sh.append(f"**Tese de Autoria:** {d['tese_autoria'][:500]}")
+                    if d.get("crimes_identificados"):
+                        crimes_str = ", ".join(str(c) for c in d["crimes_identificados"][:5])
+                        bloco_sh.append(f"**Crimes identificados:** {crimes_str}")
+                    if d.get("contradicoes"):
+                        bloco_sh.append(f"**Contradições:** {len(d['contradicoes'])} identificadas")
+                    if d.get("backlog_diligencias"):
+                        bloco_sh.append(f"**Diligências prioritárias:** {len(d['backlog_diligencias'])} pendentes")
+                    if d.get("vulnerabilidades_defesa"):
+                        bloco_sh.append(f"**Vulnerabilidades da defesa:** {len(d['vulnerabilidades_defesa'])} mapeadas")
+                    if d.get("recomendacao_final"):
+                        bloco_sh.append(f"**Recomendação:** {d['recomendacao_final'][:300]}")
+                    bloco_sh.append("\n---")
+                    contexto_partes.append("\n".join(bloco_sh))
+                    logger.info("[COPILOTO] Análise Sherlock injetada no contexto")
+
+                # ── OSINT, fichas, análises preliminares ─────────────────────
+                fichas = [r for r in todos_agentes if r.tipo_agente in ("ficha_pessoa", "ficha_empresa")]
+                osint_web = [r for r in todos_agentes if r.tipo_agente == "osint_web_pessoa"]
+                osint_grat = [r for r in todos_agentes if r.tipo_agente == "osint_gratuito"]
+                analises_prel = [r for r in todos_agentes if r.tipo_agente in ("analise_preliminar_pessoa", "analise_preliminar_empresa")]
+
+                bloco_intel = []
+                vistos = set()
+
+                for r in fichas[:6]:
+                    ref = str(r.referencia_id)
+                    if ref in vistos:
+                        continue
+                    vistos.add(ref)
+                    d = r.resultado_json or {}
+                    if d.get("nivel_risco") or d.get("alertas"):
+                        alertas_str = json.dumps((d.get("alertas") or [])[:3], ensure_ascii=False)
+                        bloco_intel.append(
+                            f"[FICHA {r.tipo_agente.replace('ficha_', '').upper()}] "
+                            f"Risco: {d.get('nivel_risco', '?')} | Alertas: {alertas_str}"
+                        )
+
+                for r in analises_prel[:4]:
+                    ref = str(r.referencia_id)
+                    if ref in vistos:
+                        continue
+                    vistos.add(ref)
+                    d = r.resultado_json or {}
+                    if d.get("nivel_risco") or d.get("alertas"):
+                        alertas_str = json.dumps((d.get("alertas") or [])[:3], ensure_ascii=False)
+                        bloco_intel.append(
+                            f"[ANÁLISE PRELIMINAR] Risco: {d.get('nivel_risco', '?')} | "
+                            f"Alertas: {alertas_str}"
+                        )
+
+                for r in osint_web[:3]:
+                    d = r.resultado_json or {}
+                    alertas = (d.get("alertas") or [])[:2]
+                    juridicas = (d.get("mencoes_juridicas") or [])[:2]
+                    if alertas or juridicas:
+                        bloco_intel.append(
+                            f"[OSINT WEB] Presença: {d.get('presenca_digital', '?')} | "
+                            f"Alertas: {json.dumps(alertas, ensure_ascii=False)} | "
+                            f"Jurídico: {json.dumps(juridicas, ensure_ascii=False)}"
+                        )
+
+                for r in osint_grat[:3]:
+                    d = r.resultado_json or {}
+                    alertas = (d.get("alertas") or [])[:2]
+                    if alertas or d.get("situacao_cadastral"):
+                        bloco_intel.append(
+                            f"[OSINT RECEITA FEDERAL] Situação: {d.get('situacao_cadastral', '?')} | "
+                            f"Alertas: {json.dumps(alertas, ensure_ascii=False)}"
+                        )
+
+                if bloco_intel:
+                    contexto_partes.append(
+                        "### Inteligência sobre Personagens (OSINT + Fichas)\n\n"
+                        + "\n".join(bloco_intel)
+                        + "\n\n---"
+                    )
+                    logger.info(f"[COPILOTO] {len(bloco_intel)} entradas de inteligência injetadas")
+
+            except Exception as e:
+                logger.warning(f"[COPILOTO] Falha ao injetar resultados de agentes: {e}")
+
         for i, r in enumerate(resultados, 1):
             payload = r.get("payload", {})
             texto_preview = payload.get("texto_preview", "")
@@ -345,21 +453,30 @@ class CopilotoService:
             contexto_rag=contexto_rag,
         )
 
-        # ── Injetar instrução de ferramenta (OSINT Tool) ─────────
+        # ── Instruções de ferramentas disponíveis ─────────────────────────────
         tool_instruction = (
-            "FERRAMENTA OSINT DISPONÍVEL:\n"
-            "Se o Comissário solicitar buscar uma placa, CPF, CNPJ, capivara ou investigar dados que "
-            "NÃO CONSTAM nos autos/contexto acima, você PODE usar inteligência externa DirectData.\n"
-            "Para isso, sua resposta deve ser EXCLUSIVAMENTE uma tag XML <OSINT_CALL> contendo JSON "
-            "com os atributos de busca (cpf, cnpj, placa, ou nome).\n"
-            "Exemplo: <OSINT_CALL>{\"cpf\": \"123.456.789-00\"}</OSINT_CALL> ou <OSINT_CALL>{\"placa\": \"ABC1234\"}</OSINT_CALL>\n"
-            "Se você usar a tag, o sistema vai interromper, buscar os dados e devolver para você analisar na próxima rodada.\n"
-            "Se você usar a tag, o sistema vai interromper, buscar os dados e devolver para você analisar na próxima rodada.\n"
-            "IMPORTANTE: Se você usar a tag, não escreva mais NADA além dela!\n\n"
-            "NOVA FERRAMENTA CRIPTO/BLOCKCHAIN:\n"
-            "Se detectar endereços de carteiras (Ex: 0x...) para investigação de lavagem de dinheiro,\n"
-            "use a tag <CRIPTO_CALL>{\"address\": \"0x...\"}</CRIPTO_CALL>.\n"
-            "O sistema fará a varredura no Chainabuse e Etherscan para você."
+            "FERRAMENTAS DISPONÍVEIS — você é o centro de comando investigativo do Comissário:\n\n"
+
+            "1. OSINT DirectData (dados cadastrais externos — CPF, CNPJ, placa, nome):\n"
+            "   Use quando precisar de dados NÃO constantes nos autos.\n"
+            "   Resposta EXCLUSIVAMENTE: <OSINT_CALL>{\"cpf\": \"123.456.789-00\"}</OSINT_CALL>\n"
+            "   Variantes: {\"cnpj\": \"...\"} | {\"placa\": \"ABC1234\"} | {\"nome\": \"...\"}\n\n"
+
+            "2. Agente Sherlock (análise estratégica em 5 camadas — contradições, tese de autoria, diligências, advogado do diabo):\n"
+            "   Use quando o Comissário pedir análise estratégica do caso, tese de autoria, ou 'quais são as fraquezas da investigação'.\n"
+            "   Resposta EXCLUSIVAMENTE: <SHERLOCK_CALL>{}</SHERLOCK_CALL>\n\n"
+
+            "3. OSINT Web — fontes abertas (Google, JusBrasil, Escavador, DOU, notícias) para UMA pessoa:\n"
+            "   Use quando precisar de menções públicas sobre um personagem. Informe o ID da pessoa.\n"
+            "   Resposta EXCLUSIVAMENTE: <OSINT_WEB_CALL>{\"pessoa_id\": \"uuid-da-pessoa\"}</OSINT_WEB_CALL>\n"
+            "   (Os IDs estão no índice de pessoas acima, no campo [id:...])\n\n"
+
+            "4. Blockchain/Cripto (Chainabuse + Etherscan):\n"
+            "   Use ao detectar endereços de carteiras (0x...) em investigações de lavagem.\n"
+            "   Resposta EXCLUSIVAMENTE: <CRIPTO_CALL>{\"address\": \"0x...\"}</CRIPTO_CALL>\n\n"
+
+            "REGRA OBRIGATÓRIA: Se usar qualquer ferramenta acima, sua resposta deve conter SOMENTE a tag XML, "
+            "sem texto antes ou depois. O sistema executará, devolverá os dados e você analisará na rodada seguinte."
         )
         system_prompt += f"\n\n{tool_instruction}"
         
@@ -444,16 +561,16 @@ class CopilotoService:
                         cripto = CriptoService()
                         res_cripto = await cripto.analisar_carteira_completa(args.get("address"))
                         res_str = json.dumps(res_cripto, ensure_ascii=False, indent=2)
-                        
+
                         # Injetar o prompt especializado para a análise final
                         from app.core.prompts import SYSTEM_PROMPT_CRIPTO
                         messages.append({"role": "model", "content": resposta})
                         messages.append({
-                            "role": "user", 
+                            "role": "user",
                             "content": f"{SYSTEM_PROMPT_CRIPTO}\n\n[DADOS BRUTOS DA BLOCKCHAIN]\n{res_str[:15000]}\n"
                                        f"Analise os dados e gere o relatório final do Comissário IA."
                         })
-                        
+
                         llm_result2 = await self.llm_service.chat_completion(
                             messages=messages,
                             tier="premium",
@@ -467,6 +584,80 @@ class CopilotoService:
                         llm_result["custo_estimado"] += llm_result2["custo_estimado"]
                     except Exception as e:
                         logger.error(f"[COPILOTO] Erro na ferramenta Cripto: {e}")
+
+            # ── Ferramenta Sherlock ────────────────────────────────────────────
+            if "<SHERLOCK_CALL>" in resposta and db is not None:
+                try:
+                    logger.info("[COPILOTO] Acionando Agente Sherlock")
+                    from app.services.sherlock_service import SherlockService
+                    sherlock_svc = SherlockService()
+                    analise = await sherlock_svc.gerar_estrategia(db, uuid.UUID(inquerito_id))
+                    res_str = json.dumps(analise, ensure_ascii=False, indent=2)
+                    messages.append({"role": "model", "content": resposta})
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            f"[RETORNO DO AGENTE SHERLOCK — ANÁLISE ESTRATÉGICA EM 5 CAMADAS]\n"
+                            f"{res_str[:12000]}\n[FIM DO RETORNO]\n\n"
+                            "Com base nessa análise, responda ao Comissário de forma objetiva e acionável. "
+                            "Destaque as contradições mais críticas, a tese de autoria principal e as "
+                            "diligências mais urgentes."
+                        ),
+                    })
+                    llm_result2 = await self.llm_service.chat_completion(
+                        messages=messages,
+                        tier="premium",
+                        temperature=0.3,
+                        max_tokens=4000,
+                        agente="Copiloto",
+                    )
+                    resposta = llm_result2["content"]
+                    llm_result["tokens_prompt"] += llm_result2["tokens_prompt"]
+                    llm_result["tokens_resposta"] += llm_result2["tokens_resposta"]
+                    llm_result["custo_estimado"] += llm_result2["custo_estimado"]
+                    logger.info("[COPILOTO] Resposta Sherlock incorporada")
+                except Exception as e:
+                    logger.error(f"[COPILOTO] Erro ao acionar Sherlock: {e}")
+
+            # ── Ferramenta OSINT Web ───────────────────────────────────────────
+            if "<OSINT_WEB_CALL>" in resposta and db is not None:
+                match = re.search(r"<OSINT_WEB_CALL>(.*?)</OSINT_WEB_CALL>", resposta, re.DOTALL)
+                if match:
+                    try:
+                        args = json.loads(match.group(1).strip())
+                        pessoa_id_str = args.get("pessoa_id", "")
+                        logger.info(f"[COPILOTO] Acionando OSINT Web para pessoa {pessoa_id_str}")
+                        from app.services.agente_ficha import AgenteFicha
+                        ficha_svc = AgenteFicha()
+                        res_osint_web = await ficha_svc.gerar_osint_web_pessoa(
+                            db, uuid.UUID(inquerito_id), uuid.UUID(pessoa_id_str)
+                        )
+                        res_str = json.dumps(res_osint_web, ensure_ascii=False, indent=2)
+                        messages.append({"role": "model", "content": resposta})
+                        messages.append({
+                            "role": "user",
+                            "content": (
+                                f"[RETORNO OSINT WEB — FONTES ABERTAS (Google, JusBrasil, Escavador, DOU)]\n"
+                                f"{res_str[:8000]}\n[FIM DO RETORNO]\n\n"
+                                "Analise os resultados e responda ao Comissário destacando o que é mais "
+                                "relevante para a investigação: alertas em notícias, menções jurídicas e "
+                                "cruzamentos com os autos."
+                            ),
+                        })
+                        llm_result2 = await self.llm_service.chat_completion(
+                            messages=messages,
+                            tier="premium",
+                            temperature=0.3,
+                            max_tokens=3000,
+                            agente="Copiloto",
+                        )
+                        resposta = llm_result2["content"]
+                        llm_result["tokens_prompt"] += llm_result2["tokens_prompt"]
+                        llm_result["tokens_resposta"] += llm_result2["tokens_resposta"]
+                        llm_result["custo_estimado"] += llm_result2["custo_estimado"]
+                        logger.info("[COPILOTO] Resposta OSINT Web incorporada")
+                    except Exception as e:
+                        logger.error(f"[COPILOTO] Erro ao acionar OSINT Web: {e}")
 
 
         except Exception as e:
