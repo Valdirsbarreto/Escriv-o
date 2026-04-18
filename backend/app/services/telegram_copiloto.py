@@ -46,10 +46,24 @@ Responda em português informal, direto e eficiente — como um assistente de co
 Ao receber um número de IP, sempre use o inquerito_atual do contexto se o usuário não informar um novo.
 Quando o usuário pedir algo sobre "ele", "ela", "esse cara", "o endereço", "mais dados" sem especificar quem,
 use o último_alvo do contexto (CPF ou nome da última pesquisa).
-Se faltar alguma informação para executar uma ação, pergunte de forma concisa e aguarde a resposta.
 
-## Abertura de Peças no PDF
-Quando o usuário pedir para ABRIR, VER, MOSTRAR ou EXIBIR uma peça específica dos autos (ex: "abre o termo do João", "mostra o laudo", "exibe essa peça"), use a ferramenta abrir_peca_no_pdf com o UUID da peça encontrada via busca_autos. NUNCA invente UUIDs."""
+## Quando usar ferramentas vs. responder com texto
+
+USE FERRAMENTAS para ações específicas:
+- listar_inqueritos, status_inquerito, despachar_inquerito → gestão de IPs
+- buscar_pessoa_sistema, ficha_pessoa, osint_avulso → busca de pessoas e OSINT
+- gerar_cautelar, salvar_documento → geração de atos processuais
+- agenda → consulta de oitivas agendadas
+- abrir_peca_no_pdf → abrir peça no PDF viewer (use busca_autos para encontrar o UUID primeiro)
+
+RESPONDA COM TEXTO (SEM chamar ferramenta) quando a pergunta for investigativa/analítica e houver inquérito em foco:
+- "o que temos sobre X?", "como chego à autoria?", "quais diligências faltam?", "analise o caso"
+- "qual a teoria do crime?", "o que o Daniel disse?", "quem são os suspeitos?"
+- "me ajuda a montar um roteiro de oitiva para João"
+- Qualquer pergunta que exige raciocínio sobre os fatos do inquérito
+Nestas situações, o sistema interno irá processar sua resposta com acesso completo aos autos.
+
+Se faltar alguma informação para executar uma ação, pergunte de forma concisa e aguarde a resposta."""
 
 
 # ── Tool declarations (lazy) ───────────────────────────────────────────────────
@@ -307,9 +321,18 @@ class TelegramCopilotoService:
         # Dispatcher via Gemini Function Calling
         fc_name, fc_args, texto_resposta = await self._dispatch_fc(mensagem, ctx)
 
-        # Se Gemini respondeu com texto (pergunta de clarificação ou conversa)
+        # Se Gemini respondeu com texto (pergunta analítica/investigativa ou conversa)
         if fc_name is None:
-            resposta = texto_resposta or "Como posso ajudar, Valdir?"
+            if ctx.get("inquerito_atual"):
+                # Inquérito em foco → raciocínio pleno sobre os autos via CopilotoService
+                resposta = await self._resposta_investigativa(mensagem, ctx, db)
+            else:
+                # Sem inquérito em foco → resposta de orientação
+                resposta = texto_resposta or (
+                    "Qual inquérito você quer trabalhar?\n"
+                    "Use <i>listar inquéritos</i> para ver os disponíveis "
+                    "ou informe o número do IP diretamente."
+                )
             ctx["historico"].append({"role": "user", "content": mensagem[:200]})
             ctx["historico"].append({"role": "model", "content": resposta[:300]})
             if len(ctx["historico"]) > 20:
@@ -497,6 +520,66 @@ class TelegramCopilotoService:
             erro_tipo = type(e).__name__
             logger.error(f"[TG-COPILOTO] Dispatcher FC falhou [{erro_tipo}]: {e}", exc_info=True)
             return None, {}, f"[DEBUG] {erro_tipo}: {str(e)[:200]}"
+
+    # ── Raciocínio investigativo pleno (CopilotoService) ─────────────────────
+
+    async def _resposta_investigativa(
+        self, mensagem: str, ctx: dict, db: AsyncSession
+    ) -> str:
+        """
+        Responde perguntas analíticas/investigativas usando o CopilotoService completo:
+        RAG nos autos, relatório inicial, fichas, OSINT — mesmo motor da interface web.
+        Chamado quando Gemini decide que a mensagem é uma pergunta sobre o caso
+        (não uma ação específica) e há um inquérito em foco no contexto.
+        """
+        numero = ctx.get("inquerito_atual", "")
+        result = await db.execute(
+            select(Inquerito).where(Inquerito.numero.ilike(f"%{numero.strip()}%"))
+        )
+        ip = result.scalars().first()
+        if not ip:
+            return (
+                f"❌ Inquérito <code>{_esc(numero)}</code> não encontrado.\n"
+                "Use <i>listar inquéritos</i> para ver os disponíveis."
+            )
+
+        if ip.total_documentos == 0:
+            return (
+                f"⚠️ O IP <code>{_esc(ip.numero)}</code> ainda não tem documentos indexados.\n"
+                "Faça o upload dos autos na interface web para habilitar a análise."
+            )
+
+        try:
+            resultado = await self._get_copiloto().processar_mensagem(
+                query=mensagem,
+                inquerito_id=str(ip.id),
+                historico=[
+                    {"role": h.get("role", "user"), "content": h.get("content", "")}
+                    for h in ctx.get("historico", [])[-6:]
+                ],
+                numero_inquerito=ip.numero,
+                estado_atual=ip.estado_atual,
+                total_paginas=ip.total_paginas,
+                total_documentos=ip.total_documentos,
+                auditar=False,
+                db=db,
+            )
+        except Exception as e:
+            logger.error(f"[TG-COPILOTO] Erro CopilotoService investigativo: {e}", exc_info=True)
+            return f"⚠️ Erro ao consultar os autos: {_esc(str(e)[:200])}"
+
+        resposta_texto = resultado.get("resposta", "Sem resposta.")
+
+        # Salva no contexto caso o usuário queira depois "salva esse documento"
+        if len(resposta_texto) > 200:
+            ctx["ultimo_documento_conteudo"] = resposta_texto
+            ctx["ultimo_documento_titulo"] = f"Análise — IP {ip.numero}"
+            ctx["ultimo_documento_tipo"] = "relatorio"
+
+        if len(resposta_texto) > 3800:
+            resposta_texto = resposta_texto[:3797] + "\n\n<i>… (acesse a interface web para a análise completa)</i>"
+
+        return f"🔎 <b>IP {_esc(ip.numero)}</b>\n\n{resposta_texto}"
 
     # ── Ação: listar inquéritos ───────────────────────────────────────────────
 

@@ -54,7 +54,7 @@ def _normalizar_nome(nome: str) -> str:
     return re.sub(r"\s+", " ", nome).strip().lower()
 
 
-@celery_app.task(bind=True, max_retries=2, default_retry_delay=60, time_limit=700, soft_time_limit=660)
+@celery_app.task(bind=True, max_retries=1, default_retry_delay=30, time_limit=1200, soft_time_limit=1140)
 def gerar_relatorio_inicial_task(self, inquerito_id: str):
     """Gera o Relatório Inicial de Investigação para o inquérito."""
     logger.info(f"[REL-INICIAL] Iniciando — inquerito={inquerito_id}")
@@ -247,7 +247,7 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
                     max_tokens=8000,
                     agente="RelatorioInicial",
                 ),
-                timeout=300,
+                timeout=540,  # 9 min — contexto grande pode levar >5 min no Gemini
             )
             relatorio_rascunho = result_llm["content"].strip()
 
