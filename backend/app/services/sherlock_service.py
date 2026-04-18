@@ -109,14 +109,14 @@ class SherlockService:
 
         # Peças indexadas
         res_docs2 = await db.execute(
-            select(Documento.nome_arquivo, Documento.tipo_peca, Documento.status)
+            select(Documento.nome_arquivo, Documento.tipo_peca, Documento.status_processamento)
             .where(Documento.inquerito_id == inquerito_id)
         )
         for row in res_docs2.all():
             ctx["pecas"].append({
                 "nome": row.nome_arquivo,
                 "tipo": row.tipo_peca,
-                "status": row.status,
+                "status": row.status_processamento,
             })
 
         # ResultadoAgente — fichas, OSINT, análises
