@@ -394,7 +394,6 @@ export default function InqueritoDetalhePage() {
   useEffect(() => {
     if (inqId) {
       fetchDados();
-      setCopilotoOpen(true);
       setSidebarCollapsed(true);
     }
     return () => {
