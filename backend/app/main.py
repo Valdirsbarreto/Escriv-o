@@ -23,6 +23,7 @@ from app.api.documentos_gerados import router as docs_gerados_router
 from app.api.pecas_extraidas import router as pecas_router
 from app.api.agente_chat import router as agente_chat_router
 from app.api.casos_gold import router as casos_gold_router
+from app.api.oitiva import router as oitiva_router
 
 
 async def _diagnostico_embeddings():
@@ -101,6 +102,7 @@ app.include_router(docs_gerados_router, prefix="/api/v1")
 app.include_router(pecas_router, prefix="/api/v1")
 app.include_router(agente_chat_router, prefix="/api/v1")
 app.include_router(casos_gold_router, prefix="/api/v1")
+app.include_router(oitiva_router)
 
 
 @app.get("/health", tags=["Sistema"])

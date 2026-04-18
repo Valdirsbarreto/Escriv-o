@@ -340,3 +340,30 @@ export const sherlockAnalise = async (inqueritoId: string, forcar = false) => {
   );
   return response.data as { status: string; analise: any };
 };
+
+// APIs Oitiva
+export const transcreverOitiva = async (audioBlob: Blob, filename = "oitiva.webm") => {
+  const form = new FormData();
+  form.append("audio", audioBlob, filename);
+  const response = await apiMultipart.post("/oitiva/transcrever", form, { timeout: 300000 });
+  return response.data as { transcricao: string; tamanho_bytes: number };
+};
+
+export const lavrarTermo = async (body: {
+  transcricao: string;
+  data_hora?: string;
+  local?: string;
+  comissario?: string;
+  qualificacao?: string;
+  papel?: string;
+}) => {
+  const response = await api.post("/oitiva/lavrar", body, { timeout: 120000 });
+  return response.data as { termo: string; modelo: string; chars: number };
+};
+
+export const transcreverAudio = async (audioBlob: Blob, filename = "audio.webm") => {
+  const form = new FormData();
+  form.append("audio", audioBlob, filename);
+  const response = await apiMultipart.post("/agentes/transcrever", form, { timeout: 60000 });
+  return response.data as { transcricao: string };
+};

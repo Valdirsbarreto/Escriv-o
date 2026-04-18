@@ -137,3 +137,35 @@ class TelegramBotService:
             r = await client.get(url)
             r.raise_for_status()
             return r.content
+
+    async def send_voice(self, chat_id: int, audio_bytes: bytes, caption: str = "") -> dict:
+        """Envia mensagem de voz via sendVoice (espera OGG/Opus)."""
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            try:
+                files = {"voice": ("voice.ogg", audio_bytes, "audio/ogg")}
+                data: dict = {"chat_id": str(chat_id)}
+                if caption:
+                    data["caption"] = caption[:1024]
+                r = await client.post(self._url("sendVoice"), data=data, files=files)
+                result = r.json()
+                if not result.get("ok"):
+                    logger.warning(f"[TELEGRAM] sendVoice falhou: {result.get('description')}")
+                return result
+            except Exception as e:
+                logger.error(f"[TELEGRAM] Erro ao enviar voz: {e}")
+                return {"ok": False, "error": str(e)}
+
+    async def send_audio(self, chat_id: int, audio_bytes: bytes, title: str = "Escrivão AI") -> dict:
+        """Envia arquivo de áudio via sendAudio (aparece como player de música)."""
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            try:
+                files = {"audio": ("resposta.wav", audio_bytes, "audio/wav")}
+                data: dict = {"chat_id": str(chat_id), "title": title, "performer": "Escrivão AI"}
+                r = await client.post(self._url("sendAudio"), data=data, files=files)
+                result = r.json()
+                if not result.get("ok"):
+                    logger.warning(f"[TELEGRAM] sendAudio falhou: {result.get('description')}")
+                return result
+            except Exception as e:
+                logger.error(f"[TELEGRAM] Erro ao enviar áudio: {e}")
+                return {"ok": False, "error": str(e)}

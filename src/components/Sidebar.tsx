@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FolderOpen, Bot, UploadCloud, CalendarDays, ShieldAlert, ChevronRight, LogOut } from "lucide-react";
+import { FolderOpen, Bot, UploadCloud, CalendarDays, ShieldAlert, ChevronRight, LogOut, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { usePathname, useRouter } from "next/navigation";
@@ -63,6 +63,7 @@ export function Sidebar() {
       <nav className={cn("flex-1 space-y-1 transition-all duration-300", sidebarCollapsed ? "px-2" : "px-4")}>
         <NavItem href="/" icon={<FolderOpen size={18} />} label="Inquéritos" active={pathname === "/"} collapsed={sidebarCollapsed} />
         <NavItem href="/intimacoes" icon={<CalendarDays size={18} />} label="Intimações" active={pathname === "/intimacoes"} collapsed={sidebarCollapsed} />
+        <NavItem href="/oitiva" icon={<Mic size={18} />} label="Modo Oitiva" active={pathname === "/oitiva"} collapsed={sidebarCollapsed} />
       </nav>
 
       {/* Footer */}

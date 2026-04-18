@@ -8,7 +8,7 @@ import logging
 import uuid
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 logger = logging.getLogger(__name__)
 from pydantic import BaseModel, ConfigDict
@@ -649,3 +649,49 @@ async def sherlock_analise(
     except Exception as e:
         logger.exception(f"[SHERLOCK] Erro para inquérito {inquerito_id}")
         raise HTTPException(status_code=500, detail=f"Erro Sherlock: {str(e)[:300]}")
+
+
+# ── Transcrição de Áudio ──────────────────────────────────────────────────────
+
+
+async def _transcrever_audio_servico(audio_bytes: bytes, filename: str) -> str:
+    """Transcreve áudio usando Gemini (reutilizável por outros endpoints)."""
+    from google import genai as _genai
+    from google.genai import types as _genai_types
+    from app.core.config import settings as _s
+
+    client = _genai.Client(api_key=_s.GEMINI_API_KEY)
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "webm"
+    mime_map = {
+        "ogg": "audio/ogg", "mp3": "audio/mpeg", "m4a": "audio/mp4",
+        "wav": "audio/wav", "mp4": "video/mp4", "webm": "audio/webm",
+        "mpeg": "audio/mpeg",
+    }
+    mime = mime_map.get(ext, "audio/webm")
+    part = _genai_types.Part.from_bytes(data=audio_bytes, mime_type=mime)
+    response = await client.aio.models.generate_content(
+        model=_s.LLM_STANDARD_MODEL,
+        contents=[
+            "Transcreva fielmente o que foi dito neste áudio em português. "
+            "Retorne apenas a transcrição, sem comentários adicionais.",
+            part,
+        ],
+    )
+    return response.text.strip()
+
+
+@router.post("/transcrever", summary="Transcreve áudio para texto")
+async def transcrever_audio(audio: UploadFile = File(...)):
+    """
+    Transcreve um arquivo de áudio usando Gemini.
+    Aceita WebM, OGG, MP3, WAV, M4A.
+    Retorna o texto transcrito.
+    """
+    audio_bytes = await audio.read()
+    filename = audio.filename or "audio.webm"
+    try:
+        transcricao = await _transcrever_audio_servico(audio_bytes, filename)
+        return {"transcricao": transcricao}
+    except Exception as e:
+        logger.error(f"[TRANSCREVER] Erro: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro na transcrição: {str(e)[:200]}")

@@ -1641,3 +1641,58 @@ REGRAS OBRIGATÓRIAS:
 - BREVIDADE: cada campo de texto: máximo 2 frases curtas. Seja telegráfico.
 - JSON apenas — sem texto antes ou depois, sem markdown.
 """
+
+# ── Modo Oitiva — Termo de Oitiva ─────────────────────────────────────────────
+
+PROMPT_OITIVA = """Você é um escrivão policial especializado na lavratura de termos de oitiva da Polícia Civil.
+
+Sua tarefa é transformar a transcrição bruta de uma oitiva policial em um TERMO DE OITIVA formal, seguindo o padrão da Polícia Civil do Rio de Janeiro.
+
+=== TRANSCRIÇÃO BRUTA DA OITIVA ===
+{transcricao}
+
+=== DADOS DO ATO (preenchidos pelo Comissário) ===
+Data/Hora: {data_hora}
+Local: {local}
+Comissário responsável: {comissario}
+Qualificação do declarante: {qualificacao}
+Papel nos autos: {papel}  (vítima | testemunha | investigado | informante)
+
+=== INSTRUÇÕES DE LAVRAÇÃO ===
+
+1. CABEÇALHO obrigatório:
+   "Aos [data por extenso], às [hora] horas, na [local completo], compareceu perante o(a) Comissário(a) [nome], o(a) [qualificação completa do declarante], a seguir qualificado(a):"
+   Seguido da qualificação formal: nome completo, filiação (se constar), naturalidade, profissão, estado civil, CPF/RG, endereço.
+
+2. CORPO do termo — formato PERGUNTA/RESPOSTA:
+   - "Perguntado(a) sobre [assunto], respondeu que [resposta em terceira pessoa]."
+   - "Indagado(a) se [assunto], respondeu que [resposta]."
+   - "Instado(a) a esclarecer [assunto], declarou que [esclarecimento]."
+   - Quando o declarante confirmar algo: "Respondeu afirmativamente."
+   - Quando negar: "Respondeu negativamente."
+   - Identifique automaticamente as perguntas (tom interrogativo, quem pergunta) e as respostas.
+   - Converta linguagem coloquial em linguagem técnico-policial formal.
+   - Preserve datas, horas, nomes, endereços e valores mencionados.
+   - Omita "uhm", "né", hesitações e repetições desnecessárias.
+
+3. ENCERRAMENTO obrigatório:
+   "Nada mais havendo a declarar, foi encerrado o presente termo, que, lido e achado conforme, vai assinado pelo(a) declarante e pelo(a) Comissário(a) subscritor(a)."
+
+4. ASSINATURAS (bloco final):
+   ___________________________
+   [Nome do declarante]
+   Declarante
+
+   ___________________________
+   [Nome do Comissário]
+   Comissário(a) de Polícia
+   Mat. XXXXXXXXX
+
+REGRAS CRÍTICAS:
+- Nunca invente informações não presentes na transcrição.
+- Se uma informação de qualificação não constar na transcrição, use "[não declarado]".
+- Mantenha a ordem cronológica das declarações.
+- Se identificar contradição interna no depoimento, inclua a declaração como está — não corrija.
+- Linguagem deve ser formal, impessoal, no pretérito perfeito.
+- Retorne APENAS o texto do termo, sem comentários ou explicações adicionais.
+"""

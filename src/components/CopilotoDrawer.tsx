@@ -3,9 +3,9 @@
 import { useAppStore } from "@/store/app";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Send, Bot, User, Save, Paperclip, X, FileText, Image, RefreshCw, PenLine, Wand2, ChevronLeft } from "lucide-react";
+import { Send, Bot, User, Save, Paperclip, X, FileText, Image, RefreshCw, PenLine, Wand2, ChevronLeft, Mic, MicOff } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { agentChat, setAgentInquerito, clearAgentContext, createDocGerado, updateDocGerado, getDocsGerados } from "@/lib/api";
+import { agentChat, setAgentInquerito, clearAgentContext, createDocGerado, updateDocGerado, getDocsGerados, transcreverAudio } from "@/lib/api";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -121,6 +121,10 @@ export function CopilotoDrawer() {
   const [confirmReplace, setConfirmReplace] = useState<{ index: number; text: string; titulo: string; tipo: string; existingDoc: any } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const micRecorderRef = useRef<MediaRecorder | null>(null);
+  const micChunksRef = useRef<BlobPart[]>([]);
 
   // ── Canvas de documento ────────────────────────────────────────────────────
   type CanvasDoc = { titulo: string; tipo: string; htmlOriginal: string; texto: string; modoEdicao: boolean; expandido: boolean; salvando: boolean; savedId: string | null };
@@ -317,6 +321,44 @@ export function CopilotoDrawer() {
     }
   };
 
+  const toggleMic = useCallback(async () => {
+    if (isRecording) {
+      // Parar e transcrever
+      const mr = micRecorderRef.current;
+      if (!mr) return;
+      mr.stop();
+      mr.stream.getTracks().forEach(t => t.stop());
+      micRecorderRef.current = null;
+      setIsRecording(false);
+      mr.onstop = async () => {
+        const blob = new Blob(micChunksRef.current, { type: "audio/webm" });
+        micChunksRef.current = [];
+        setIsTranscribing(true);
+        try {
+          const r = await transcreverAudio(blob, "audio.webm");
+          setInput(prev => (prev ? prev + " " : "") + r.transcricao);
+        } catch {
+          // silencia — usuário digita manualmente
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+    } else {
+      // Iniciar gravação
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mr = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+        micChunksRef.current = [];
+        mr.ondataavailable = (e) => { if (e.data.size > 0) micChunksRef.current.push(e.data); };
+        mr.start(500);
+        micRecorderRef.current = mr;
+        setIsRecording(true);
+      } catch {
+        // Permissão negada — ignora silenciosamente
+      }
+    }
+  }, [isRecording]);
+
   if (!isCopilotoOpen && !canvasDoc) return null;
 
   return (
@@ -445,12 +487,32 @@ export function CopilotoDrawer() {
             >
               <Paperclip size={16} />
             </button>
+            <button
+              type="button"
+              onClick={toggleMic}
+              disabled={loading || isTranscribing}
+              title={isRecording ? "Parar gravação" : "Gravar mensagem de voz"}
+              className={`shrink-0 p-2 rounded-md border transition-colors disabled:opacity-40 ${
+                isRecording
+                  ? "border-red-500/60 text-red-400 bg-red-500/10 animate-pulse"
+                  : isTranscribing
+                  ? "border-amber-500/40 text-amber-400 bg-amber-500/10"
+                  : "border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600"
+              }`}
+            >
+              {isRecording ? <MicOff size={16} /> : <Mic size={16} />}
+            </button>
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={anexo ? "Instrução para o arquivo (opcional)..." : "Pergunte, ordene ou solicite..."}
+              placeholder={
+                isRecording ? "Gravando... clique para parar" :
+                isTranscribing ? "Transcrevendo..." :
+                anexo ? "Instrução para o arquivo (opcional)..." :
+                "Pergunte, ordene ou solicite..."
+              }
               className="bg-zinc-900 border-zinc-800 focus-visible:ring-blue-500"
-              disabled={loading}
+              disabled={loading || isTranscribing}
             />
             <Button
               type="submit"

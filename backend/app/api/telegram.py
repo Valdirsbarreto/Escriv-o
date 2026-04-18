@@ -3,7 +3,11 @@ Escrivão AI — API: Telegram Bot Webhook
 Recebe updates do Telegram, autentica e despacha para o TelegramCopilotoService.
 """
 
+import io
 import logging
+import re
+import struct
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +40,70 @@ async def _transcrever_audio(audio_bytes: bytes, file_path: str) -> str:
         ],
     )
     return response.text.strip()
+
+def _pcm_para_wav(pcm_data: bytes, sample_rate: int = 24000) -> bytes:
+    """Empacota PCM16 bruto em container WAV (sem dependências externas)."""
+    n_canais, sample_width = 1, 2
+    buf = io.BytesIO()
+    buf.write(b"RIFF")
+    buf.write(struct.pack("<I", 36 + len(pcm_data)))
+    buf.write(b"WAVE")
+    buf.write(b"fmt ")
+    buf.write(struct.pack("<I", 16))
+    buf.write(struct.pack("<H", 1))  # PCM
+    buf.write(struct.pack("<H", n_canais))
+    buf.write(struct.pack("<I", sample_rate))
+    buf.write(struct.pack("<I", sample_rate * n_canais * sample_width))
+    buf.write(struct.pack("<H", n_canais * sample_width))
+    buf.write(struct.pack("<H", sample_width * 8))
+    buf.write(b"data")
+    buf.write(struct.pack("<I", len(pcm_data)))
+    buf.write(pcm_data)
+    return buf.getvalue()
+
+
+async def _gerar_audio_tts(texto: str) -> Optional[bytes]:
+    """
+    Gera áudio TTS via Gemini 2.5 Flash TTS.
+    Retorna WAV bytes ou None se falhar.
+    Texto é truncado a 800 chars para respostas ágeis.
+    """
+    try:
+        from google import genai as _genai
+        from google.genai import types as _genai_types
+
+        # Remove HTML e limita tamanho
+        texto_limpo = re.sub(r"<[^>]+>", "", texto)
+        texto_limpo = texto_limpo.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+        texto_limpo = texto_limpo[:800].strip()
+        if not texto_limpo:
+            return None
+
+        client = _genai.Client(api_key=settings.GEMINI_API_KEY)
+        response = await client.aio.models.generate_content(
+            model="gemini-2.5-flash-preview-tts",
+            contents=texto_limpo,
+            config=_genai_types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=_genai_types.SpeechConfig(
+                    voice_config=_genai_types.VoiceConfig(
+                        prebuilt_voice_config=_genai_types.PrebuiltVoiceConfig(
+                            voice_name="Charon",
+                        )
+                    )
+                ),
+            ),
+        )
+        pcm_data = response.candidates[0].content.parts[0].inline_data.data
+        # inline_data.data pode ser base64 str ou bytes
+        if isinstance(pcm_data, str):
+            import base64
+            pcm_data = base64.b64decode(pcm_data)
+        return _pcm_para_wav(pcm_data)
+    except Exception as e:
+        logger.warning(f"[TELEGRAM] TTS falhou: {e}")
+        return None
+
 
 _bot = None
 _copiloto = None
@@ -103,6 +171,7 @@ async def telegram_webhook(
     user_id: int = message.get("from", {}).get("id")
     text: str = (message.get("text") or "").strip()
     voice = message.get("voice") or message.get("audio") or message.get("video_note")
+    era_voz: bool = bool(voice)
 
     if not chat_id:
         return {"ok": True}
@@ -157,6 +226,17 @@ async def telegram_webhook(
         resposta = "⚠️ Erro interno. Tente novamente ou acesse a interface web."
 
     await _get_bot().send_message(chat_id, resposta)
+
+    # Se o usuário enviou um áudio, responder também em áudio (TTS)
+    if era_voz:
+        await _get_bot().send_chat_action(chat_id, "upload_voice")
+        audio_bytes = await _gerar_audio_tts(resposta)
+        if audio_bytes:
+            r = await _get_bot().send_audio(chat_id, audio_bytes)
+            if not r.get("ok"):
+                logger.warning(f"[TELEGRAM] TTS sendAudio falhou, usando sendVoice: {r.get('description')}")
+                await _get_bot().send_voice(chat_id, audio_bytes)
+
     return {"ok": True}
 
 
