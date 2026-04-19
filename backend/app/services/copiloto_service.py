@@ -895,14 +895,23 @@ class CopilotoService:
                 linhas.append(f"- **{r['numero']}** (id:`{r['inquerito_id']}`){desc}{mencoes}")
             contexto_resultados = "\n".join(linhas)
 
+        # Quando há resultados pré-computados, o LLM só precisa formatá-los —
+        # não expor a instrução de BUSCA_GLOBAL_CALL para evitar que reacione
+        if resultados_precomputados:
+            ferramenta_instrucao = ""
+        else:
+            ferramenta_instrucao = (
+                "FERRAMENTA DISPONÍVEL:\n"
+                "- Busca Global: <BUSCA_GLOBAL_CALL>{\"termo\": \"nome ou CPF\"}</BUSCA_GLOBAL_CALL>\n"
+                "  Use quando precisar pesquisar alguém sem saber o número do IP.\n\n"
+            )
+
         system_prompt = (
             "Você é o Copiloto Investigativo do Comissário da Polícia Civil. "
             "Nenhum inquérito específico está em foco agora.\n\n"
             + (contexto_resultados + "\n\n" if contexto_resultados else "")
-            + "FERRAMENTA DISPONÍVEL:\n"
-            "- Busca Global: <BUSCA_GLOBAL_CALL>{\"termo\": \"nome ou CPF\"}</BUSCA_GLOBAL_CALL>\n"
-            "  Use quando precisar pesquisar alguém sem saber o número do IP.\n\n"
-            "Responda de forma natural e direta ao Comissário. "
+            + ferramenta_instrucao
+            + "Responda de forma natural e direta ao Comissário. "
             "Se encontrou a pessoa em múltiplos IPs, liste todos com o que há de relevante. "
             "Se apenas um IP, diga o número e o que foi encontrado. "
             "Nunca anuncie que 'o contexto foi carregado'. "
