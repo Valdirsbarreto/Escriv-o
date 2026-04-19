@@ -213,9 +213,9 @@ O Copiloto conversa naturalmente, sem diretrizes rígidas numeradas. Raciocina e
 
 5. **CGU_API_TOKEN** — configurar no Railway para OSINT gratuito (sanções CEIS)
 
-6. **`intimacao_extractor.py`** — ainda usa `model="gemini-flash-latest"` (gemini-1.5-flash, bloqueado) em duas chamadas — corrigir para `settings.LLM_STANDARD_MODEL`
+6. **`intimacao_extractor.py`** — ✅ já usa `settings.LLM_STANDARD_MODEL` (verificado 19/04)
 
-7. **Testar Telegram investigativo** — verificar raciocínio pleno via CopilotoService após fixes de 18/04
+7. **Testar Telegram investigativo** — ✅ fix total_documentos real aplicado em 19/04 (commit `1e3ae8f`); busca de apelidos/alcunhas em Chunks adicionada (`3775457`)
 
 8. **OSINT Web (Serper.dev)** — ✅ IMPLEMENTADO: `serper_service.py`, `gerar_osint_web_pessoa`, endpoint `/agentes/osint/web/`, `OsintWebPanel` no `PainelInvestigacao.tsx`
 
@@ -238,6 +238,12 @@ O Copiloto conversa naturalmente, sem diretrizes rígidas numeradas. Raciocina e
 17. **Telegram investigativo** — ✅ IMPLEMENTADO (sessão 18/04): `_resposta_investigativa()` via CopilotoService; fix HTML parse failure; fix gemini-flash-latest
 
 18. **Railway billing GraphQL** — queries atualizadas para Team (`me.teams.edges...`) e Hobby (`me.subscription...`) — aguarda validação em produção
+
+19. **Voz no Copiloto web** — ✅ IMPLEMENTADO (sessão 19/04): mic → MediaRecorder → TTS Gemini voz Charon; `handleSendRef` evita stale closure; `onstop` antes de `stop()`
+
+20. **Vision + intimações** — ✅ IMPLEMENTADO (sessão 19/04): `POST /agent/analisar-documento` (Gemini Vision) detecta mandados → `<CRIAR_INTIMACAO>` → `POST /intimacoes/manual`
+
+21. **BUSCA_GLOBAL_CALL** — ✅ IMPLEMENTADO (sessão 19/04): ferramenta nativa #5 no Copiloto; `_buscar_global()` em `copiloto_service.py`; `processar_mensagem_global()` sem inquerito; Telegram: `buscar_pessoa_sistema` estendida com Chunks
 
 ---
 
