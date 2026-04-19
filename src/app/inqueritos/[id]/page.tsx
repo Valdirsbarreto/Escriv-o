@@ -509,11 +509,29 @@ export default function InqueritoDetalhePage() {
     setCatalogando(true);
     try {
       await api.post(`/inqueritos/${inqId}/reextrair-pecas-lote`);
-      alert("Catalogação iniciada. As peças aparecerão em alguns minutos.");
-      await fetchPecasExtraidas();
+
+      // Polling a cada 6s por até 4 min — a task Celery é assíncrona
+      let tentativas = 0;
+      const poll = setInterval(async () => {
+        tentativas++;
+        try {
+          const res = await api.get(`/inqueritos/${inqId}/pecas-extraidas`);
+          const pecas = res.data;
+          if (pecas.length > 0) {
+            setPecasExtraidas(pecas);
+            clearInterval(poll);
+            setCatalogando(false);
+            return;
+          }
+        } catch { /* erro silencioso */ }
+
+        if (tentativas >= 40) { // ~4 min
+          clearInterval(poll);
+          setCatalogando(false);
+        }
+      }, 6000);
     } catch {
       alert("Erro ao iniciar catalogação.");
-    } finally {
       setCatalogando(false);
     }
   };
