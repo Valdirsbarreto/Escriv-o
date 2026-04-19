@@ -193,10 +193,7 @@ O Copiloto conversa naturalmente, sem diretrizes rígidas numeradas. Raciocina e
 
 ## Pendências abertas
 
-1. **Síntese do IP 911-00009-2020** — relatório inicial CONCLUÍDO (18/04) — disparar síntese:
-   ```
-   POST /inqueritos/f1d47601-133e-4687-8d15-7b6a14802deb/gerar-sintese
-   ```
+1. **Síntese do IP 911-00009-2020** — ✅ CONCLUÍDO (19/04)
 
 2. **Síntese do IP 911-00209/2019** — regenerar:
    ```
