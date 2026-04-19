@@ -212,30 +212,13 @@ def reconcile_pipeline_task(self):
                 gerar_relatorio_inicial_task.delay(str(inq_id))
                 stats["relatorios_redespachados"] += 1
 
-        # ── 5. Placeholder de síntese travado (> 30 min) ─────────────────────
-        DG_sint = aliased(DocumentoGerado)
-        placeholders_sintese = db.execute(
-            select(DocumentoGerado)
-            .where(
-                and_(
-                    DocumentoGerado.tipo == "sintese_investigativa",
-                    DocumentoGerado.conteudo == "__PROCESSANDO__",
-                    DocumentoGerado.updated_at < limite_sintese,
-                )
-            )
-        ).scalars().all()
+        # ── 5. Inquéritos com relatório inicial mas sem síntese ──────────────
+        # Síntese é salva como Documento(tipo_peca='sintese_investigativa'), não DocumentoGerado.
+        # generate_analise_task não usa placeholder — se não existe, foi interrompida antes de salvar.
+        from app.models.documento import Documento as _Documento
 
-        for placeholder in placeholders_sintese:
-            logger.warning(
-                f"[RECONCILE] Placeholder síntese travado removido — inq={placeholder.inquerito_id}"
-            )
-            db.delete(placeholder)
-            stats["placeholders_removidos"] += 1
-        db.commit()
-
-        # ── 6. Inquéritos com relatório inicial mas sem síntese ──────────────
         DG_rel = aliased(DocumentoGerado)
-        DG_sint2 = aliased(DocumentoGerado)
+        Doc_sint = aliased(_Documento)
 
         inqueritos_sem_sintese = db.execute(
             select(DG_rel.inquerito_id)
@@ -245,10 +228,10 @@ def reconcile_pipeline_task(self):
                     DG_rel.conteudo != "__PROCESSANDO__",
                     DG_rel.updated_at < limite_sintese,
                     ~exists(
-                        select(DG_sint2.id).where(
+                        select(Doc_sint.id).where(
                             and_(
-                                DG_sint2.inquerito_id == DG_rel.inquerito_id,
-                                DG_sint2.tipo == "sintese_investigativa",
+                                Doc_sint.inquerito_id == DG_rel.inquerito_id,
+                                Doc_sint.tipo_peca == "sintese_investigativa",
                             )
                         )
                     ),
