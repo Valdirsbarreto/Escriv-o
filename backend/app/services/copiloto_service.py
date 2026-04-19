@@ -727,6 +727,12 @@ class CopilotoService:
             'consta', 'autos', 'nome', 'chamado', 'alguma', 'pessoa', 'disse',
             'suas', 'seus', 'este', 'esta', 'esse', 'essa', 'pelo', 'pela',
             'sobre', 'falar', 'fala', 'falou', 'dizer', 'fazer',
+            # Palavras comuns que poluem a busca textual
+            'temos', 'nosso', 'nossa', 'nossos', 'nossas', 'voce', 'você',
+            'isso', 'aqui', 'mais', 'muito', 'pouco', 'algo', 'outra', 'outro',
+            'pode', 'seria', 'seria', 'quer', 'sabe', 'saber', 'quero', 'queria',
+            'fale', 'diga', 'diga', 'falar', 'fala', 'conte', 'conta',
+            'informações', 'informacao', 'informacoes', 'dados', 'detalhes',
         }
 
         def _strip_accents(s: str) -> str:
@@ -735,41 +741,55 @@ class CopilotoService:
                 if unicodedata.category(c) != 'Mn'
             )
 
-        # Extrair nomes próprios capitalizados primeiro
-        palavras = re.findall(r'\b[A-ZÀ-Úa-zà-ú][a-zà-ú]{2,}\b', query)
-        # Filtrar stopwords e palavras curtas
-        palavras = [w for w in palavras if _strip_accents(w.lower()) not in _STOPWORDS and len(w) >= 4]
+        # Preferência por NOMES PRÓPRIOS: palavras capitalizadas que não sejam
+        # a primeira palavra da frase (mais prováveis de ser nomes de pessoas/lugares)
+        tokens = re.findall(r'\S+', query)
+        proprios = [
+            w for w in re.findall(r'\b[A-ZÀ-Ú][a-zà-ú]{1,}\b', query)
+            if _strip_accents(w.lower()) not in _STOPWORDS and len(w) >= 3
+            and w != tokens[0]  # ignora primeira palavra da frase (pode ser maiúscula por padrão)
+        ]
+
+        # Fallback: qualquer palavra relevante com ≥4 chars
+        todas = re.findall(r'\b[A-ZÀ-Úa-zà-ú][a-zà-ú]{2,}\b', query)
+        comuns = [w for w in todas if _strip_accents(w.lower()) not in _STOPWORDS and len(w) >= 4]
+
+        # Usar nomes próprios se existirem, caso contrário palavras comuns
+        palavras = proprios if proprios else comuns
 
         if not palavras:
             return []
 
-        # Usar unaccent do PostgreSQL para match robusto (ignora acentos em ambos os lados)
-        # Ex: query "flavio" → bate com "Flávio" no banco
-        palavras_norm = [_strip_accents(p.lower()) for p in palavras[:5]]
+        # Nomes próprios buscam com AND (todos devem aparecer) se forem ≤ 2 termos
+        # Caso contrário, OR — para não ser restritivo demais
+        palavras_norm = [_strip_accents(p.lower()) for p in palavras[:4]]
         filtros_unaccent = [
             func.unaccent(func.lower(Chunk.texto)).ilike(f"%{pn}%")
             for pn in palavras_norm
         ]
-        filtros_plain = [Chunk.texto.ilike(f"%{p}%") for p in palavras[:5]]
+        filtros_plain = [Chunk.texto.ilike(f"%{p}%") for p in palavras[:4]]
+
+        # AND quando há 1-2 nomes próprios (busca focada); OR para 3+
+        from sqlalchemy import and_ as sa_and
+        combinar = sa_and if (proprios and len(palavras_norm) <= 2) else or_
 
         try:
             result = await db.execute(
                 sa_select(Chunk)
                 .where(
                     Chunk.inquerito_id == uuid.UUID(inquerito_id),
-                    or_(*filtros_unaccent),
+                    combinar(*filtros_unaccent),
                 )
                 .order_by(Chunk.pagina_inicial)
                 .limit(limit)
             )
         except Exception:
-            # fallback sem unaccent caso extensão não esteja instalada
             logger.warning("[COPILOTO] unaccent não disponível, usando ILIKE simples")
             result = await db.execute(
                 sa_select(Chunk)
                 .where(
                     Chunk.inquerito_id == uuid.UUID(inquerito_id),
-                    or_(*filtros_plain),
+                    combinar(*filtros_plain),
                 )
                 .order_by(Chunk.pagina_inicial)
                 .limit(limit)
