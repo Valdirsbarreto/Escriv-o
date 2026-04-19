@@ -543,7 +543,19 @@ class TelegramCopilotoService:
                 "Use <i>listar inquéritos</i> para ver os disponíveis."
             )
 
-        if ip.total_documentos == 0:
+        # Contar docs reais (ip.total_documentos pode estar desatualizado)
+        from sqlalchemy import func as _sa_func
+        from app.models.documento import Documento as _Documento
+        _cnt = await db.execute(
+            select(_sa_func.count(_Documento.id), _sa_func.sum(_Documento.total_paginas))
+            .where(_Documento.inquerito_id == ip.id)
+            .where(_Documento.status_processamento == "concluido")
+        )
+        _real_docs, _real_pgs = _cnt.one()
+        _real_docs = _real_docs or 0
+        _real_pgs = _real_pgs or 0
+
+        if _real_docs == 0:
             return (
                 f"⚠️ O IP <code>{_esc(ip.numero)}</code> ainda não tem documentos indexados.\n"
                 "Faça o upload dos autos na interface web para habilitar a análise."
@@ -559,8 +571,8 @@ class TelegramCopilotoService:
                 ],
                 numero_inquerito=ip.numero,
                 estado_atual=ip.estado_atual,
-                total_paginas=ip.total_paginas,
-                total_documentos=ip.total_documentos,
+                total_paginas=_real_pgs,
+                total_documentos=_real_docs,
                 auditar=False,
                 db=db,
             )
@@ -668,7 +680,18 @@ class TelegramCopilotoService:
         if not ip:
             return f"❌ Inquérito <code>{_esc(numero)}</code> não encontrado."
 
-        if ip.total_documentos == 0:
+        from sqlalchemy import func as _sa_func2
+        from app.models.documento import Documento as _Documento2
+        _cnt2 = await db.execute(
+            select(_sa_func2.count(_Documento2.id), _sa_func2.sum(_Documento2.total_paginas))
+            .where(_Documento2.inquerito_id == ip.id)
+            .where(_Documento2.status_processamento == "concluido")
+        )
+        _real_docs2, _real_pgs2 = _cnt2.one()
+        _real_docs2 = _real_docs2 or 0
+        _real_pgs2 = _real_pgs2 or 0
+
+        if _real_docs2 == 0:
             return (
                 f"📂 O IP <code>{_esc(ip.numero)}</code> ainda não tem documentos indexados.\n"
                 "Faça o upload dos autos na interface web para habilitar a busca."
@@ -684,8 +707,8 @@ class TelegramCopilotoService:
                 ],
                 numero_inquerito=ip.numero,
                 estado_atual=ip.estado_atual,
-                total_paginas=ip.total_paginas,
-                total_documentos=ip.total_documentos,
+                total_paginas=_real_pgs2,
+                total_documentos=_real_docs2,
                 auditar=False,
                 db=db,
             )
