@@ -243,6 +243,13 @@ def generate_analise_task(self, inquerito_id: str):
 
             resumos_str = "\n\n---\n\n".join(resumos_partes)
 
+            # Limita contexto total (~120k chars ≈ 30k tokens) para evitar janela enorme
+            # que faz o modelo truncar a saída antes de terminar as 10 seções
+            LIMITE_RESUMOS = 120_000
+            if len(resumos_str) > LIMITE_RESUMOS:
+                resumos_str = resumos_str[:LIMITE_RESUMOS] + "\n\n[... contexto truncado por limite de janela ...]"
+                logger.warning(f"[SINTESE-TASK] resumos_str truncado em {LIMITE_RESUMOS} chars")
+
             # ── 1b. Auto-substituição de número TEMP ────────────────────────────
             if inq.numero.startswith("TEMP-"):
                 _IP_PATS = [
