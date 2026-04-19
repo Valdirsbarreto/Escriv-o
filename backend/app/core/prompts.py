@@ -629,6 +629,26 @@ Seja criterioso, objetivo e fundamentado exclusivamente no material dos autos ab
 
 ---
 
+## FILTRO DE RELEVÂNCIA INVESTIGATIVA (aplique a TODO o documento)
+
+**IGNORE completamente** os seguintes eventos e documentos por serem meramente procedimentais, sem valor investigativo:
+- Requisições de prazo, prorrogações de prazo, despachos de prorrogação
+- Ofícios e respostas sobre vista dos autos (ex.: "Promotora requisita vista conjunta")
+- Remessas ao MP e devoluções por questões procedimentais/administrativas
+- Comunicações sobre andamento processual sem conteúdo de mérito
+- Despachos de recebimento, protocolo, numeração de folhas
+- Portarias de mero expediente (abertura de prazo, designação de servidor)
+
+**INCLUA apenas** eventos com valor investigativo direto:
+- Declarações de vítimas, testemunhas, investigados (o que disseram)
+- Laudos e perícias (resultados e conclusões)
+- Quebras de sigilo (o que revelaram)
+- Apreensões (o que foi encontrado e onde)
+- Flagrantes, prisões, medidas cautelares efetivadas
+- Fatos do crime propriamente dito e atos de execução
+
+---
+
 ## INSTRUÇÕES DE RACIOCÍNIO (Chain of Thought — siga rigorosamente)
 
 Antes de redigir cada seção, execute mentalmente estes passos:
@@ -661,6 +681,7 @@ Descreva o crime/fato investigado: o quê, quando, onde, como ocorreu. Indique o
 
 ### 2. DINÂMICA DOS FATOS
 Narrativa cronológica dos acontecimentos com base nos documentos indexados. O que os autos revelam sobre a sequência, o modo de execução e as circunstâncias do fato.
+**Atenção:** inclua SOMENTE eventos com valor investigativo (atos do crime, depoimentos, perícias, apreensões). EXCLUA eventos procedimentais como prorrogações de prazo, requisições de vista, ofícios de andamento e despachos administrativos — esses não pertencem à narrativa do fato.
 
 ### 3. PERSONAGENS E SEUS PAPÉIS
 Para cada pessoa e empresa identificada: papel no fato, grau de envolvimento aparente conforme os autos, dados conhecidos e principais lacunas de informação sobre cada um.
