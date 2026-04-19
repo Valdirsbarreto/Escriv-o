@@ -129,23 +129,65 @@ async def agent_chat(
             inquerito_id = str(ip.id)
             logger.info(f"[AGENT-CHAT] IP resolvido por texto: {ip.numero}")
         else:
-            res = await db.execute(
-                select(Inquerito.numero, Inquerito.descricao)
-                .order_by(Inquerito.updated_at.desc())
-                .limit(8)
-            )
-            ips = res.all()
-            if ips:
-                lista = "\n".join(
-                    f"• {r.numero}" + (f" — {r.descricao[:60]}" if r.descricao else "")
-                    for r in ips
+            # Tenta busca global por nome/apelido/CPF em todos os inquéritos
+            resultados_global = await _buscar_global(body.mensagem, db)
+            if resultados_global:
+                # Se resultado único — carrega o inquérito automaticamente e segue
+                if len(resultados_global) == 1 and resultados_global[0]["inquerito_id"]:
+                    await _sync_inquerito_context(
+                        body.session_id, resultados_global[0]["inquerito_id"], db, ctx
+                    )
+                    inquerito_id = resultados_global[0]["inquerito_id"]
+                    logger.info(f"[AGENT-CHAT] IP resolvido por busca global: {resultados_global[0]['numero']}")
+                else:
+                    # Múltiplos IPs — injeta resultados como contexto e deixa o LLM responder
+                    import json as _json
+                    ctx_global = _json.dumps(resultados_global, ensure_ascii=False, indent=2)
+                    try:
+                        res_lm = await _get_copiloto().processar_mensagem_global(
+                            query=body.mensagem,
+                            db=db,
+                            historico=ctx.get("historico", []),
+                            resultados_precomputados=resultados_global,
+                        )
+                        resposta_global = res_lm.get("resposta", "")
+                    except Exception as e:
+                        logger.warning(f"[AGENT-CHAT] processar_mensagem_global falhou: {e}")
+                        linhas = [
+                            f"• **{r['numero']}**" +
+                            (f" — {r['descricao'][:60]}" if r.get('descricao') else "") +
+                            (f"\n  {', '.join(r['mencoes'][:2])}" if r.get('mencoes') else "")
+                            for r in resultados_global[:8]
+                        ]
+                        resposta_global = f"Encontrei menções em {len(resultados_global)} inquérito(s):\n\n" + "\n".join(linhas) + "\n\nQual deseja abrir, Comissário?"
+
+                    # Atualiza histórico
+                    hist = ctx.get("historico", [])
+                    hist.append({"role": "user", "content": body.mensagem[:1000]})
+                    hist.append({"role": "model", "content": resposta_global[:2000]})
+                    if len(hist) > 30:
+                        hist = hist[-30:]
+                    ctx["historico"] = hist
+                    await _save_ctx(body.session_id, ctx)
+                    return ChatResponse(resposta=resposta_global, inquerito_id=None)
+            if not inquerito_id:
+                res = await db.execute(
+                    select(Inquerito.numero, Inquerito.descricao)
+                    .order_by(Inquerito.updated_at.desc())
+                    .limit(8)
                 )
+                ips = res.all()
+                if ips:
+                    lista = "\n".join(
+                        f"• {r.numero}" + (f" — {r.descricao[:60]}" if r.descricao else "")
+                        for r in ips
+                    )
+                    return ChatResponse(
+                        resposta=f"Qual inquérito, Comissário? Informe o número do IP.\n\nIPs disponíveis:\n{lista}"
+                    )
                 return ChatResponse(
-                    resposta=f"Qual inquérito, Comissário? Informe o número do IP.\n\nIPs disponíveis:\n{lista}"
+                    resposta="Nenhum inquérito encontrado. Importe os autos pela aba Importar."
                 )
-            return ChatResponse(
-                resposta="Nenhum inquérito encontrado. Importe os autos pela aba Importar."
-            )
 
     try:
         resultado = await _get_copiloto().processar_mensagem(
@@ -436,6 +478,136 @@ async def _resolver_inquerito_por_mensagem(mensagem: str, db: AsyncSession) -> O
             if ip:
                 return ip
     return None
+
+
+async def _buscar_global(mensagem: str, db: AsyncSession) -> list:
+    """
+    Busca nome, apelido ou CPF em TODOS os inquéritos.
+    Retorna lista de dicts {inquerito_id, numero, descricao, mencoes[]}.
+    Usado quando o Comissário pergunta sobre alguém sem saber o número do IP.
+    """
+    import unicodedata
+    from sqlalchemy import func as sa_func, or_
+    from app.models.pessoa import Pessoa
+    from app.models.chunk import Chunk
+
+    # Extrair termos de busca: nomes próprios (caps) e possível CPF
+    termos = []
+
+    # CPF: sequência de 11 dígitos ou formatado
+    cpf_match = re.findall(r'\d{3}[\.\-]?\d{3}[\.\-]?\d{3}[\-\.]?\d{2}', mensagem)
+    for c in cpf_match:
+        termos.append(re.sub(r'[\.\-]', '', c))
+
+    # Nomes próprios: palavras capitalizadas com ≥ 3 chars que não sejam stopwords comuns
+    _SW = {'que', 'tem', 'tem', 'sobre', 'para', 'como', 'qual', 'quem',
+           'tem', 'algum', 'alguma', 'sabe', 'saber', 'existe', 'existir',
+           'ver', 'veja', 'voce', 'você', 'sim', 'não', 'nao', 'este', 'esse',
+           'esse', 'isso', 'aqui', 'ali', 'lembro', 'acho', 'inquerito', 'policial',
+           'nacional', 'conhecido', 'apelido', 'alcunha', 'nome', 'pessoa'}
+
+    def strip_acc(s):
+        return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+
+    tokens = mensagem.split()
+    for i, tok in enumerate(tokens):
+        palavra = re.sub(r'[^\w]', '', tok)
+        if len(palavra) < 3:
+            continue
+        if strip_acc(palavra.lower()) in _SW:
+            continue
+        # Aceita palavras capitalizadas (nomes) OU qualquer palavra entre aspas/parênteses
+        if palavra[0].isupper() and i > 0:
+            termos.append(palavra)
+        # Palavras entre aspas na mensagem original
+        quoted = re.findall(r'["\']([^"\']{3,})["\']', mensagem)
+        termos.extend(quoted)
+
+    # Remove duplicatas e normaliza
+    termos_norm = list({strip_acc(t.lower()) for t in termos if len(t) >= 3})
+    if not termos_norm:
+        return []
+
+    logger.info(f"[BUSCA-GLOBAL] Termos: {termos_norm}")
+
+    # ── 1. Busca na tabela Pessoa (nome, observações, CPF) ────────────────────
+    filtros_pessoa = [
+        sa_func.unaccent(sa_func.lower(Pessoa.nome)).ilike(f"%{t}%")
+        for t in termos_norm[:4]
+    ] + [
+        sa_func.unaccent(sa_func.lower(Pessoa.observacoes)).ilike(f"%{t}%")
+        for t in termos_norm[:2] if Pessoa.observacoes is not None
+    ] + [Pessoa.cpf.ilike(f"%{t}%") for t in termos_norm if t.isdigit()]
+
+    try:
+        res_pessoas = await db.execute(
+            select(Pessoa.inquerito_id, Pessoa.nome, Pessoa.tipo_pessoa)
+            .where(or_(*filtros_pessoa))
+            .limit(20)
+        )
+        rows_pessoas = res_pessoas.all()
+    except Exception:
+        rows_pessoas = []
+
+    # ── 2. Busca em chunks (apelidos / menções não cadastradas) ───────────────
+    filtros_chunk = [
+        sa_func.unaccent(sa_func.lower(Chunk.texto)).ilike(f"%{t}%")
+        for t in termos_norm[:3]
+    ]
+    try:
+        from sqlalchemy import and_ as sa_and
+        combinar = sa_and if len(filtros_chunk) <= 2 else or_
+        res_chunks = await db.execute(
+            select(Chunk.inquerito_id, Chunk.texto)
+            .where(combinar(*filtros_chunk))
+            .limit(30)
+        )
+        rows_chunks = res_chunks.all()
+    except Exception:
+        rows_chunks = []
+
+    # ── Agrupar por inquérito ─────────────────────────────────────────────────
+    por_inquerito: dict = {}
+    for row in rows_pessoas:
+        iid = str(row.inquerito_id)
+        por_inquerito.setdefault(iid, {"mencoes": set()})
+        por_inquerito[iid]["mencoes"].add(f"{row.nome} [{row.tipo_pessoa or 'pessoa'}]")
+
+    for row in rows_chunks:
+        iid = str(row.inquerito_id)
+        por_inquerito.setdefault(iid, {"mencoes": set()})
+        # Extrai trecho do contexto ao redor do termo
+        texto = row.texto
+        for t in termos_norm:
+            idx = strip_acc(texto.lower()).find(t)
+            if idx >= 0:
+                inicio = max(0, idx - 40)
+                fim = min(len(texto), idx + len(t) + 60)
+                por_inquerito[iid]["mencoes"].add(f"...{texto[inicio:fim].strip()}...")
+                break
+
+    if not por_inquerito:
+        return []
+
+    # Enriquecer com dados do inquérito
+    ids = [uuid.UUID(i) for i in por_inquerito.keys()]
+    res_inq = await db.execute(
+        select(Inquerito.id, Inquerito.numero, Inquerito.descricao)
+        .where(Inquerito.id.in_(ids))
+        .order_by(Inquerito.updated_at.desc())
+    )
+    resultado = []
+    for inq in res_inq.all():
+        iid = str(inq.id)
+        resultado.append({
+            "inquerito_id": iid,
+            "numero": inq.numero,
+            "descricao": inq.descricao or "",
+            "mencoes": list(por_inquerito[iid]["mencoes"])[:3],
+        })
+
+    logger.info(f"[BUSCA-GLOBAL] {len(resultado)} inquérito(s) encontrado(s)")
+    return resultado
 
 
 async def _sync_inquerito_context(

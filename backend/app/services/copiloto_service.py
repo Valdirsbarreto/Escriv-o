@@ -475,6 +475,11 @@ class CopilotoService:
             "   Use ao detectar endereços de carteiras (0x...) em investigações de lavagem.\n"
             "   Resposta EXCLUSIVAMENTE: <CRIPTO_CALL>{\"address\": \"0x...\"}</CRIPTO_CALL>\n\n"
 
+            "5. Busca Global — pesquisa nome, apelido ou CPF em TODOS os inquéritos do sistema:\n"
+            "   Use quando o Comissário perguntar se uma pessoa aparece em outros inquéritos, ou quando\n"
+            "   buscar alguém sem saber em qual IP está (ex: 'tem algum inquérito sobre o Peixão?').\n"
+            "   Resposta EXCLUSIVAMENTE: <BUSCA_GLOBAL_CALL>{\"termo\": \"nome ou CPF\"}</BUSCA_GLOBAL_CALL>\n\n"
+
             "REGRA OBRIGATÓRIA: Se usar qualquer ferramenta acima, sua resposta deve conter SOMENTE a tag XML, "
             "sem texto antes ou depois. O sistema executará, devolverá os dados e você analisará na rodada seguinte."
         )
@@ -659,6 +664,51 @@ class CopilotoService:
                     except Exception as e:
                         logger.error(f"[COPILOTO] Erro ao acionar OSINT Web: {e}")
 
+            # ── Ferramenta Busca Global ────────────────────────────────────────
+            if "<BUSCA_GLOBAL_CALL>" in resposta and db is not None:
+                match = re.search(r"<BUSCA_GLOBAL_CALL>(.*?)</BUSCA_GLOBAL_CALL>", resposta, re.DOTALL)
+                if match:
+                    try:
+                        args = json.loads(match.group(1).strip())
+                        termo = args.get("termo", "")
+                        logger.info(f"[COPILOTO] Acionando Busca Global para: '{termo}'")
+                        resultados = await self._buscar_global(db, termo)
+                        res_str = json.dumps(resultados, ensure_ascii=False, indent=2)
+                        messages.append({"role": "model", "content": resposta})
+                        if resultados:
+                            messages.append({
+                                "role": "user",
+                                "content": (
+                                    f"[RETORNO DA BUSCA GLOBAL — '{termo}']\n"
+                                    f"{res_str[:6000]}\n[FIM DO RETORNO]\n\n"
+                                    "Com base nesses resultados, responda ao Comissário de forma natural. "
+                                    "Indique em qual(is) inquérito(s) a pessoa aparece, seu papel e trechos relevantes. "
+                                    "Se aparecer em múltiplos IPs, liste todos."
+                                ),
+                            })
+                        else:
+                            messages.append({
+                                "role": "user",
+                                "content": (
+                                    f"[RETORNO DA BUSCA GLOBAL]\nNenhum resultado encontrado para '{termo}' "
+                                    "em nenhum inquérito do sistema.\n\n"
+                                    "Informe ao Comissário que não há registros e sugira verificar o nome completo ou CPF."
+                                ),
+                            })
+                        llm_result2 = await self.llm_service.chat_completion(
+                            messages=messages,
+                            tier="premium",
+                            temperature=0.3,
+                            max_tokens=2000,
+                            agente="Copiloto",
+                        )
+                        resposta = llm_result2["content"]
+                        llm_result["tokens_prompt"] += llm_result2["tokens_prompt"]
+                        llm_result["tokens_resposta"] += llm_result2["tokens_resposta"]
+                        llm_result["custo_estimado"] += llm_result2["custo_estimado"]
+                        logger.info("[COPILOTO] Busca Global incorporada na resposta")
+                    except Exception as e:
+                        logger.error(f"[COPILOTO] Erro na Busca Global: {e}")
 
         except Exception as e:
             logger.error(f"[COPILOTO] LLM indisponível: {e}")
@@ -821,6 +871,210 @@ class CopilotoService:
             }
             for c in chunks
         ]
+
+    async def processar_mensagem_global(
+        self,
+        query: str,
+        db,
+        historico: list = None,
+        resultados_precomputados: list = None,
+    ) -> Dict[str, Any]:
+        """
+        Responde ao Comissário quando não há inquérito em contexto.
+        Se resultados_precomputados vier preenchido, formata a resposta usando o LLM (natural).
+        Caso contrário, o LLM decide chamar BUSCA_GLOBAL_CALL ele mesmo.
+        """
+        import re, json
+
+        contexto_resultados = ""
+        if resultados_precomputados:
+            linhas = ["### Resultados da busca nos inquéritos do sistema\n"]
+            for r in resultados_precomputados:
+                desc = f" — {r['descricao'][:60]}" if r.get("descricao") else ""
+                mencoes = ("\n  Menções: " + " | ".join(r["mencoes"][:3])) if r.get("mencoes") else ""
+                linhas.append(f"- **{r['numero']}** (id:`{r['inquerito_id']}`){desc}{mencoes}")
+            contexto_resultados = "\n".join(linhas)
+
+        system_prompt = (
+            "Você é o Copiloto Investigativo do Comissário da Polícia Civil. "
+            "Nenhum inquérito específico está em foco agora.\n\n"
+            + (contexto_resultados + "\n\n" if contexto_resultados else "")
+            + "FERRAMENTA DISPONÍVEL:\n"
+            "- Busca Global: <BUSCA_GLOBAL_CALL>{\"termo\": \"nome ou CPF\"}</BUSCA_GLOBAL_CALL>\n"
+            "  Use quando precisar pesquisar alguém sem saber o número do IP.\n\n"
+            "Responda de forma natural e direta ao Comissário. "
+            "Se encontrou a pessoa em múltiplos IPs, liste todos com o que há de relevante. "
+            "Se apenas um IP, diga o número e o que foi encontrado. "
+            "Nunca anuncie que 'o contexto foi carregado'. "
+            "Nunca use 'Doutor' — o tratamento correto é 'Comissário'."
+        )
+
+        messages = [{"role": "system", "content": system_prompt}]
+        if historico:
+            messages.extend(historico[-10:])
+        messages.append({"role": "user", "content": query})
+
+        llm_result = await self.llm_service.chat_completion(
+            messages=messages,
+            tier="premium",
+            temperature=0.3,
+            max_tokens=1500,
+            agente="CopilotoGlobal",
+        )
+        resposta = llm_result["content"]
+
+        # Se o LLM decidiu fazer a busca global (sem resultados precomputados)
+        if "<BUSCA_GLOBAL_CALL>" in resposta and db is not None and not resultados_precomputados:
+            match = re.search(r"<BUSCA_GLOBAL_CALL>(.*?)</BUSCA_GLOBAL_CALL>", resposta, re.DOTALL)
+            if match:
+                try:
+                    args = json.loads(match.group(1).strip())
+                    termo = args.get("termo", query)
+                    resultados = await self._buscar_global(db, termo)
+                    res_str = json.dumps(resultados, ensure_ascii=False, indent=2)
+                    messages.append({"role": "model", "content": resposta})
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            f"[RETORNO DA BUSCA GLOBAL]\n{res_str[:5000]}\n[FIM]\n\n"
+                            "Responda ao Comissário de forma natural indicando onde a pessoa aparece."
+                        ),
+                    })
+                    llm_result2 = await self.llm_service.chat_completion(
+                        messages=messages, tier="premium", temperature=0.3,
+                        max_tokens=1500, agente="CopilotoGlobal",
+                    )
+                    resposta = llm_result2["content"]
+                except Exception as e:
+                    logger.error(f"[COPILOTO-GLOBAL] Erro na ferramenta: {e}")
+
+        return {"resposta": resposta, "fontes": [], "modelo": llm_result.get("model", "")}
+
+    async def _buscar_global(self, db, termo: str) -> list:
+        """
+        Pesquisa nome, apelido ou CPF em TODOS os inquéritos do sistema.
+        Retorna lista de dicts {inquerito_id, numero, descricao, mencoes[]}.
+        Usada pelo handler de <BUSCA_GLOBAL_CALL>.
+        """
+        import re as _re
+        import unicodedata
+        from sqlalchemy import select as sa_select, func as sa_func, or_
+        from sqlalchemy import and_ as sa_and
+        from app.models.pessoa import Pessoa
+        from app.models.chunk import Chunk
+        from app.models.inquerito import Inquerito
+
+        _SW = {
+            'que', 'tem', 'sobre', 'para', 'como', 'qual', 'quem', 'algum', 'alguma',
+            'sabe', 'saber', 'existe', 'existir', 'ver', 'veja', 'voce', 'você',
+            'sim', 'não', 'nao', 'este', 'esse', 'isso', 'aqui', 'ali',
+            'lembro', 'acho', 'inquerito', 'policial', 'nacional', 'conhecido',
+            'apelido', 'alcunha', 'nome', 'pessoa', 'tem',
+        }
+
+        def strip_acc(s: str) -> str:
+            return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+
+        # Extrair termos: CPF + nomes próprios
+        termos = []
+        for c in _re.findall(r'\d{3}[\.\-]?\d{3}[\.\-]?\d{3}[\-\.]?\d{2}', termo):
+            termos.append(_re.sub(r'[\.\-]', '', c))
+
+        # Quoted strings first (highest priority)
+        for q in _re.findall(r'["\']([^"\']{3,})["\']', termo):
+            termos.append(q)
+
+        tokens = termo.split()
+        for i, tok in enumerate(tokens):
+            palavra = _re.sub(r'[^\w]', '', tok)
+            if len(palavra) < 3 or strip_acc(palavra.lower()) in _SW:
+                continue
+            # Capitalizada (não a primeira palavra) → provável nome próprio
+            if palavra[0].isupper() and i > 0:
+                termos.append(palavra)
+            # Qualquer palavra ≥ 4 chars como fallback
+            elif len(palavra) >= 4:
+                termos.append(palavra)
+
+        termos_norm = list({strip_acc(t.lower()) for t in termos if len(t) >= 3})
+        if not termos_norm:
+            # fallback: usa todas as palavras ≥ 4 chars sem stopword
+            termos_norm = [
+                strip_acc(w.lower()) for w in termo.split()
+                if len(w) >= 4 and strip_acc(w.lower()) not in _SW
+            ]
+        if not termos_norm:
+            return []
+
+        logger.info(f"[BUSCA-GLOBAL] Termos normalizados: {termos_norm}")
+
+        # ── Busca Pessoa ──────────────────────────────────────────────────────
+        filtros_p = [sa_func.unaccent(sa_func.lower(Pessoa.nome)).ilike(f"%{t}%") for t in termos_norm[:4]]
+        filtros_p += [sa_func.unaccent(sa_func.lower(Pessoa.observacoes)).ilike(f"%{t}%") for t in termos_norm[:2]]
+        filtros_p += [Pessoa.cpf.ilike(f"%{t}%") for t in termos_norm if t.isdigit()]
+        try:
+            rp = await db.execute(
+                sa_select(Pessoa.inquerito_id, Pessoa.nome, Pessoa.tipo_pessoa)
+                .where(or_(*filtros_p))
+                .limit(25)
+            )
+            rows_p = rp.all()
+        except Exception:
+            rows_p = []
+
+        # ── Busca Chunk ───────────────────────────────────────────────────────
+        filtros_c = [sa_func.unaccent(sa_func.lower(Chunk.texto)).ilike(f"%{t}%") for t in termos_norm[:3]]
+        try:
+            combinar = sa_and if len(filtros_c) <= 2 else or_
+            rc = await db.execute(
+                sa_select(Chunk.inquerito_id, Chunk.texto)
+                .where(combinar(*filtros_c))
+                .limit(30)
+            )
+            rows_c = rc.all()
+        except Exception:
+            rows_c = []
+
+        # ── Agrupar por inquérito ─────────────────────────────────────────────
+        por_inq: dict = {}
+        for row in rows_p:
+            iid = str(row.inquerito_id)
+            por_inq.setdefault(iid, {"mencoes": set()})
+            por_inq[iid]["mencoes"].add(f"{row.nome} [{row.tipo_pessoa or 'pessoa'}]")
+
+        for row in rows_c:
+            iid = str(row.inquerito_id)
+            por_inq.setdefault(iid, {"mencoes": set()})
+            texto = row.texto
+            for t in termos_norm:
+                idx = strip_acc(texto.lower()).find(t)
+                if idx >= 0:
+                    ini = max(0, idx - 40)
+                    fim = min(len(texto), idx + len(t) + 60)
+                    por_inq[iid]["mencoes"].add(f"…{texto[ini:fim].strip()}…")
+                    break
+
+        if not por_inq:
+            return []
+
+        ids = [uuid.UUID(i) for i in por_inq.keys()]
+        res_inq = await db.execute(
+            sa_select(Inquerito.id, Inquerito.numero, Inquerito.descricao)
+            .where(Inquerito.id.in_(ids))
+            .order_by(Inquerito.updated_at.desc())
+        )
+        resultado = []
+        for inq in res_inq.all():
+            iid = str(inq.id)
+            resultado.append({
+                "inquerito_id": iid,
+                "numero": inq.numero,
+                "descricao": inq.descricao or "",
+                "mencoes": list(por_inq[iid]["mencoes"])[:4],
+            })
+
+        logger.info(f"[BUSCA-GLOBAL] {len(resultado)} inquérito(s) com resultados")
+        return resultado
 
     async def _auditar_resposta(
         self,
