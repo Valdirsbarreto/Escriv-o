@@ -235,13 +235,58 @@ export const agentChat = async (
   mensagem: string,
   sessionId: string,
   inqueritoId?: string | null,
+  textoAnexo?: string | null,
+  nomeAnexo?: string | null,
 ) => {
   const response = await api.post(
     "/agent/chat",
-    { mensagem, session_id: sessionId, inquerito_id: inqueritoId ?? null },
+    {
+      mensagem,
+      session_id: sessionId,
+      inquerito_id: inqueritoId ?? null,
+      texto_anexo: textoAnexo ?? null,
+      nome_anexo: nomeAnexo ?? null,
+    },
     { headers: { "X-Chat-Secret": CHAT_SECRET }, timeout: 90000 },
   );
-  return response.data as { resposta: string };
+  return response.data as { resposta: string; inquerito_id?: string | null };
+};
+
+export interface AnalisarDocumentoResult {
+  descricao: string;
+  tipo: "intimacao" | "outro";
+  nome: string;
+  dados_intimacao?: {
+    intimado_nome: string;
+    data_oitiva: string | null;
+    local_oitiva: string | null;
+    numero_inquerito: string | null;
+    qualificacao: string | null;
+  } | null;
+}
+
+/** Envia imagem ou PDF para Gemini Vision e retorna descrição + dados estruturados. */
+export const analisarDocumento = async (arquivo: Blob, filename: string): Promise<AnalisarDocumentoResult> => {
+  const form = new FormData();
+  form.append("arquivo", arquivo, filename);
+  const response = await apiMultipart.post("/agent/analisar-documento", form, {
+    headers: { "X-Chat-Secret": CHAT_SECRET },
+    timeout: 60000,
+  });
+  return response.data as AnalisarDocumentoResult;
+};
+
+/** Cria intimação manual e agenda no Google Calendar. */
+export const criarIntimacaoManual = async (dados: {
+  intimado_nome: string;
+  data_oitiva: string;
+  local_oitiva?: string | null;
+  numero_inquerito_extraido?: string | null;
+  intimado_qualificacao?: string | null;
+  inquerito_id?: string | null;
+}) => {
+  const response = await api.post("/intimacoes/manual", dados);
+  return response.data;
 };
 
 export const setAgentInquerito = async (sessionId: string, inqueritoId: string) => {

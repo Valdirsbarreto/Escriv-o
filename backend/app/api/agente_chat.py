@@ -57,10 +57,13 @@ class ChatRequest(BaseModel):
     mensagem: str
     session_id: str
     inquerito_id: Optional[str] = None
+    texto_anexo: Optional[str] = None   # texto/descrição de arquivo já processado
+    nome_anexo: Optional[str] = None    # nome original do arquivo
 
 
 class ChatResponse(BaseModel):
     resposta: str
+    inquerito_id: Optional[str] = None  # IP resolvido (para atualizar store no frontend)
 
 
 class SetInqueritoRequest(BaseModel):
@@ -153,8 +156,10 @@ async def agent_chat(
             estado_atual=ctx.get("estado_atual", ""),
             total_documentos=ctx.get("total_documentos", 0),
             total_paginas=ctx.get("total_paginas", 0),
-            auditar=False,  # auditoria desabilitada no chat web para latência menor
+            auditar=False,
             db=db,
+            texto_anexo=body.texto_anexo,
+            nome_anexo=body.nome_anexo,
         )
     except Exception as e:
         logger.error(f"[AGENT-CHAT] Erro ao processar mensagem: {e}", exc_info=True)
@@ -162,16 +167,16 @@ async def agent_chat(
 
     resposta = resultado.get("resposta", "Não consegui processar. Tente novamente.")
 
-    # Atualizar histórico
+    # Atualizar histórico (limites maiores para manter contexto conversacional)
     historico = ctx.get("historico", [])
-    historico.append({"role": "user", "content": body.mensagem[:300]})
-    historico.append({"role": "model", "content": resposta[:500]})
-    if len(historico) > 20:
-        historico = historico[-20:]
+    historico.append({"role": "user", "content": body.mensagem[:1000]})
+    historico.append({"role": "model", "content": resposta[:2000]})
+    if len(historico) > 30:
+        historico = historico[-30:]
     ctx["historico"] = historico
     await _save_ctx(body.session_id, ctx)
 
-    return ChatResponse(resposta=resposta)
+    return ChatResponse(resposta=resposta, inquerito_id=inquerito_id)
 
 
 @router.post("/chat/set-inquerito")
@@ -197,6 +202,99 @@ async def clear_context(
     r = await _get_redis()
     await r.delete(f"agente_web:ctx:{session_id}")
     return {"ok": True}
+
+
+from fastapi import UploadFile, File
+
+
+@router.post("/analisar-documento", summary="Vision — analisa imagem/PDF e detecta mandados de intimação")
+async def analisar_documento(
+    arquivo: UploadFile = File(...),
+    x_chat_secret: str = Header(default=""),
+):
+    """
+    Recebe imagem (JPEG/PNG/WEBP) ou PDF e retorna análise via Gemini.
+    Se for mandado de intimação/oitiva com data e hora, extrai dados para agenda.
+    Funciona com qualquer formato de documento policial.
+    """
+    _check_auth(x_chat_secret)
+
+    conteudo = await arquivo.read()
+    if len(conteudo) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Arquivo muito grande (máx 20MB)")
+
+    mime = arquivo.content_type or "application/octet-stream"
+    nome = arquivo.filename or "documento"
+
+    # Normaliza mime types comuns
+    ext = nome.rsplit(".", 1)[-1].lower() if "." in nome else ""
+    if ext == "pdf" or "pdf" in mime:
+        mime = "application/pdf"
+    elif ext in ("jpg", "jpeg") or "jpeg" in mime:
+        mime = "image/jpeg"
+    elif ext == "png" or "png" in mime:
+        mime = "image/png"
+    elif ext == "webp" or "webp" in mime:
+        mime = "image/webp"
+
+    # Gemini suporta imagens e PDFs inline
+    suportado = mime in ("image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf")
+    if not suportado:
+        return {"descricao": f"Arquivo {nome} recebido (formato {ext} não suportado para análise automática).", "tipo": "outro", "dados_intimacao": None, "nome": nome}
+
+    try:
+        from google import genai as _genai
+        from google.genai import types as _genai_types
+
+        client = _genai.Client(api_key=settings.GEMINI_API_KEY)
+        part = _genai_types.Part.from_bytes(data=conteudo, mime_type=mime)
+
+        prompt = (
+            "Analise este documento cuidadosamente. Responda SOMENTE em JSON com este formato:\n"
+            "{\n"
+            '  "descricao": "transcrição ou descrição detalhada do conteúdo",\n'
+            '  "tipo": "intimacao" ou "outro",\n'
+            '  "dados_intimacao": null ou {\n'
+            '    "intimado_nome": "nome completo do intimado/convocado",\n'
+            '    "data_oitiva": "YYYY-MM-DDTHH:MM:00",\n'
+            '    "local_oitiva": "endereço/local completo" ou null,\n'
+            '    "numero_inquerito": "número do IP/inquérito" ou null,\n'
+            '    "qualificacao": "cargo/qualificação" ou null\n'
+            "  }\n"
+            "}\n\n"
+            "REGRAS:\n"
+            "- tipo='intimacao' se o documento for mandado de intimação, convocação para oitiva/depoimento, "
+            "citação judicial ou policial COM data e hora marcadas para comparecer\n"
+            "- Se for intimação mas SEM data/hora definida: tipo='intimacao', data_oitiva=null\n"
+            "- Para qualquer outro documento (laudo, boletim, foto, etc.): tipo='outro'\n"
+            "- Para data_oitiva: formato ISO 8601. Se só tiver a data sem hora, use T09:00:00\n"
+            "- Se o PDF tiver múltiplas páginas, analise todas e extraia o que for mais relevante\n"
+            "- Retorne SOMENTE o JSON, sem markdown, sem explicações"
+        )
+
+        response = await client.aio.models.generate_content(
+            model=settings.LLM_STANDARD_MODEL,
+            contents=[prompt, part],
+        )
+
+        raw = response.text.strip()
+        if raw.startswith("```"):
+            raw = re.sub(r"^```\w*\n?", "", raw).rstrip("`").strip()
+
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            parsed = {"descricao": raw, "tipo": "outro", "dados_intimacao": None}
+
+        return {
+            "descricao": parsed.get("descricao", raw),
+            "tipo": parsed.get("tipo", "outro"),
+            "dados_intimacao": parsed.get("dados_intimacao"),
+            "nome": nome,
+        }
+    except Exception as e:
+        logger.error(f"[VISION] Erro ao analisar documento: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Erro ao analisar documento")
 
 
 class TtsRequest(BaseModel):

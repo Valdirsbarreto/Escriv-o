@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Send, Bot, User, Save, Paperclip, X, FileText, Image, RefreshCw, PenLine, Wand2, ChevronLeft, Mic, MicOff } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { agentChat, setAgentInquerito, clearAgentContext, createDocGerado, updateDocGerado, getDocsGerados, transcreverAudio, ttsVoz } from "@/lib/api";
+import { agentChat, setAgentInquerito, clearAgentContext, createDocGerado, updateDocGerado, getDocsGerados, transcreverAudio, ttsVoz, analisarDocumento, criarIntimacaoManual, AnalisarDocumentoResult } from "@/lib/api";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -63,8 +63,17 @@ function detectarAbrirPeca(text: string): string | null {
   return match ? match[1] : null;
 }
 
+function detectarCriarIntimacao(text: string): Record<string, string> | null {
+  const match = text.match(/<CRIAR_INTIMACAO>([\s\S]*?)<\/CRIAR_INTIMACAO>/i);
+  if (!match) return null;
+  try { return JSON.parse(match[1].trim()); } catch { return null; }
+}
+
 function removerTagsXML(text: string): string {
-  return text.replace(/<ABRIR_PECA\s+peca_id="[^"]+"\s*\/?>/gi, '').trim();
+  return text
+    .replace(/<ABRIR_PECA\s+peca_id="[^"]+"\s*\/?>/gi, '')
+    .replace(/<CRIAR_INTIMACAO>[\s\S]*?<\/CRIAR_INTIMACAO>/gi, '')
+    .trim();
 }
 
 function pediriaDocumento(texto: string): boolean {
@@ -107,7 +116,7 @@ function AgentBotMessage({ html }: { html: string }) {
 // ── Componente principal ───────────────────────────────────────────────────────
 
 export function CopilotoDrawer() {
-  const { isCopilotoOpen, setCopilotoOpen, inqueritoAtivoId, bumpDocsGerados, setPecaParaAbrir } = useAppStore();
+  const { isCopilotoOpen, setCopilotoOpen, inqueritoAtivoId, setInqueritoAtivoId, bumpDocsGerados, setPecaParaAbrir } = useAppStore();
 
   const [sessionId] = useState<string>(() => getOrCreateSessionId());
   const [messages, setMessages] = useState<{ role: "user" | "bot"; text: string }[]>([]);
@@ -215,8 +224,10 @@ export function CopilotoDrawer() {
 
   const handleSend = async (textoVoz?: string) => {
     const era_voz = !!textoVoz;
-    const userText = textoVoz || input.trim() || (anexo ? `Analise o arquivo: ${anexo.name}` : "");
-    if (!userText) return;
+    const baseText = textoVoz || input.trim();
+    if (!baseText && !anexo) return;
+
+    const arquivoAnexado = !textoVoz ? anexo : null;
 
     if (!textoVoz) {
       setInput("");
@@ -229,17 +240,89 @@ export function CopilotoDrawer() {
       await setAgentInquerito(sessionId, inqueritoAtivoId).catch(() => {});
     }
 
-    const userLabel = anexo && !textoVoz ? `📎 ${anexo.name}\n${userText}` : userText;
-    setMessages(prev => [...prev, { role: "user", text: userLabel }]);
-    setLoading(true);
+    // Processar anexo: Gemini analisa imagem/PDF e detecta intimações
+    let textoAnexo: string | null = null;
+    let nomeAnexo: string | null = null;
+    let pendingIntimacao: AnalisarDocumentoResult["dados_intimacao"] = null;
+
+    if (arquivoAnexado) {
+      nomeAnexo = arquivoAnexado.name;
+      const isImagem = arquivoAnexado.type.startsWith("image/");
+      const isPdf = arquivoAnexado.type === "application/pdf" || arquivoAnexado.name.endsWith(".pdf");
+      const emoji = isImagem ? "📷" : isPdf ? "📄" : "📎";
+      setMessages(prev => [...prev, { role: "user", text: `${emoji} ${arquivoAnexado.name}\n${baseText || "Analise este documento."}` }]);
+      setLoading(true);
+
+      if (isImagem || isPdf) {
+        try {
+          const resultado = await analisarDocumento(arquivoAnexado, arquivoAnexado.name);
+          nomeAnexo = resultado.nome;
+
+          if (resultado.tipo === "intimacao" && resultado.dados_intimacao?.data_oitiva) {
+            // Intimação com data marcada → instrui Copiloto a perguntar sobre agenda
+            pendingIntimacao = resultado.dados_intimacao;
+            const d = resultado.dados_intimacao;
+            const dataFormatada = d.data_oitiva
+              ? new Date(d.data_oitiva).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
+              : "data não identificada";
+            textoAnexo =
+              `[MANDADO DE INTIMAÇÃO/OITIVA DETECTADO]\n` +
+              `Intimado: ${d.intimado_nome}\n` +
+              `Data/hora: ${dataFormatada}\n` +
+              (d.local_oitiva ? `Local: ${d.local_oitiva}\n` : "") +
+              (d.numero_inquerito ? `IP: ${d.numero_inquerito}\n` : "") +
+              (d.qualificacao ? `Qualificação: ${d.qualificacao}\n` : "") +
+              `\nConteúdo completo:\n${resultado.descricao}\n\n` +
+              `[INSTRUÇÃO IMPORTANTE: Confirme os dados ao Comissário e PERGUNTE se deseja adicionar ao calendário de oitivas. ` +
+              `Se ele confirmar ("sim", "pode", "coloca", "adiciona"), output EXATAMENTE: ` +
+              `<CRIAR_INTIMACAO>{"intimado_nome":"${d.intimado_nome}","data_oitiva":"${d.data_oitiva}","local_oitiva":${JSON.stringify(d.local_oitiva)},"numero_inquerito_extraido":${JSON.stringify(d.numero_inquerito)},"intimado_qualificacao":${JSON.stringify(d.qualificacao)}}</CRIAR_INTIMACAO>]`;
+          } else {
+            // Documento comum — descrição para o Copiloto analisar
+            textoAnexo = resultado.descricao;
+          }
+        } catch {
+          textoAnexo = `[Documento: ${arquivoAnexado.name} — análise indisponível]`;
+        }
+      } else {
+        textoAnexo = null;
+      }
+    } else {
+      const userLabel = baseText || "";
+      setMessages(prev => [...prev, { role: "user", text: userLabel }]);
+      setLoading(true);
+    }
+
+    const userText = baseText || (arquivoAnexado ? `Analise o arquivo: ${arquivoAnexado.name}` : "");
 
     try {
-      const data = await agentChat(userText, sessionId, inqueritoAtivoId);
+      const data = await agentChat(userText, sessionId, inqueritoAtivoId, textoAnexo, nomeAnexo);
       const botText = data.resposta;
+
+      // Se backend resolveu IP por texto, atualizar store para próximas mensagens
+      if (data.inquerito_id && !inqueritoAtivoId) {
+        setInqueritoAtivoId(data.inquerito_id);
+      }
 
       // Detecta e executa comando <ABRIR_PECA peca_id="uuid"/>
       const pecaId = detectarAbrirPeca(botText);
       if (pecaId) setPecaParaAbrir({ pecaId, ts: Date.now() });
+
+      // Detecta e executa <CRIAR_INTIMACAO>{...}</CRIAR_INTIMACAO>
+      const intimacaoData = detectarCriarIntimacao(botText);
+      if (intimacaoData?.intimado_nome && intimacaoData?.data_oitiva) {
+        try {
+          await criarIntimacaoManual({
+            intimado_nome: intimacaoData.intimado_nome,
+            data_oitiva: intimacaoData.data_oitiva,
+            local_oitiva: intimacaoData.local_oitiva || null,
+            numero_inquerito_extraido: intimacaoData.numero_inquerito_extraido || null,
+            intimado_qualificacao: intimacaoData.intimado_qualificacao || null,
+            inquerito_id: inqueritoAtivoId || null,
+          });
+        } catch (err) {
+          console.error("[Copiloto] Falha ao criar intimação:", err);
+        }
+      }
 
       setMessages(prev => [...prev, { role: "bot", text: removerTagsXML(botText) }]);
 
@@ -559,7 +642,7 @@ export function CopilotoDrawer() {
               ref={fileInputRef}
               type="file"
               className="hidden"
-              accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.tiff,.webp"
+              accept=".pdf,.png,.jpg,.jpeg,.webp,.tiff,.txt,.md"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) setAnexo(f); }}
             />
             <button
