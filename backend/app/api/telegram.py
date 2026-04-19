@@ -20,6 +20,36 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/telegram", tags=["Telegram Bot"])
 
 
+async def _analisar_imagem(image_bytes: bytes, mime_type: str, caption: str = "") -> str:
+    """
+    Envia imagem ao Gemini Vision e retorna texto extraído + análise.
+    Usado para fotos de documentos, ofícios, intimações, laudos, etc.
+    """
+    from google import genai as _genai
+    from google.genai import types as _genai_types
+
+    client = _genai.Client(api_key=settings.GEMINI_API_KEY)
+    instrucao = (
+        "Analise esta imagem com olhar investigativo policial.\n"
+        "1. Se for um documento (ofício, mandado, intimação, laudo, termo, RG, CNH, etc.): "
+        "transcreva TODO o texto visível, preservando estrutura (cabeçalhos, parágrafos, assinaturas).\n"
+        "2. Identifique e destaque: datas, nomes completos, CPFs, CNPJs, endereços, "
+        "números de processo/IP, valores monetários.\n"
+        "3. Se houver texto manuscrito, transcreva fielmente (mesmo que parcialmente ilegível — indique [ilegível]).\n"
+        "4. Ao final, em uma linha separada: 'RESUMO: [tipo do documento] — [1 frase sobre o conteúdo]'.\n"
+        "Responda em português. Seja completo e preciso."
+    )
+    if caption:
+        instrucao += f"\n\nLegenda enviada pelo usuário: {caption}"
+
+    part_img = _genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+    response = await client.aio.models.generate_content(
+        model=settings.LLM_STANDARD_MODEL,
+        contents=[instrucao, part_img],
+    )
+    return response.text.strip()
+
+
 async def _transcrever_audio(audio_bytes: bytes, file_path: str) -> str:
     """Transcreve áudio de voz usando Gemini Vision (suporta OGG/MP3/M4A)."""
     from google import genai as _genai
@@ -207,13 +237,16 @@ async def telegram_webhook(
     chat_id: int = message.get("chat", {}).get("id")
     user_id: int = message.get("from", {}).get("id")
     text: str = (message.get("text") or "").strip()
+    caption: str = (message.get("caption") or "").strip()
     voice = message.get("voice") or message.get("audio") or message.get("video_note")
+    photo = message.get("photo")  # lista de tamanhos; último = maior resolução
+    document = message.get("document")
     era_voz: bool = bool(voice)
 
     if not chat_id:
         return {"ok": True}
 
-    # Transcrever áudio se não houver texto
+    # ── Transcrever áudio ──────────────────────────────────────────────────────
     if not text and voice:
         file_id = voice.get("file_id")
         if file_id:
@@ -233,6 +266,59 @@ async def telegram_webhook(
                 logger.error(f"[TELEGRAM] Erro ao transcrever áudio: {e}", exc_info=True)
                 await _get_bot().send_message(chat_id, f"⚠️ Erro ao transcrever áudio: {type(e).__name__}. Tente enviar como texto.")
                 return {"ok": True}
+
+    # ── Analisar imagem / documento via Gemini Vision ─────────────────────────
+    if not text and (photo or document):
+        try:
+            await _get_bot().send_chat_action(chat_id, "typing")
+
+            if photo:
+                # Telegram envia lista ordenada por resolução — último = maior
+                file_id = photo[-1]["file_id"]
+                mime_type = "image/jpeg"
+            else:
+                file_id = document["file_id"]
+                mime_type = document.get("mime_type") or "application/octet-stream"
+
+            file_meta = await _get_bot().get_file(file_id)
+            file_path_dl = file_meta.get("result", {}).get("file_path", "")
+            if not file_path_dl:
+                await _get_bot().send_message(chat_id, "⚠️ Não consegui baixar a imagem. Tente novamente.")
+                return {"ok": True}
+
+            img_bytes = await _get_bot().download_file(file_path_dl)
+
+            # Tipos suportados pelo Gemini Vision
+            _MIME_SUPORTADOS = {
+                "image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif",
+                "application/pdf",
+            }
+            if mime_type not in _MIME_SUPORTADOS:
+                await _get_bot().send_message(
+                    chat_id,
+                    f"⚠️ Formato <code>{mime_type}</code> não suportado para análise visual.\n"
+                    "Envie imagens (JPG/PNG) ou PDFs.",
+                )
+                return {"ok": True}
+
+            analise = await _analisar_imagem(img_bytes, mime_type, caption)
+            logger.info(f"[TELEGRAM] Imagem analisada: {analise[:120]}")
+
+            # Monta mensagem para o Copiloto — texto extraído + legenda do usuário
+            partes = []
+            if caption:
+                partes.append(f"[Usuário escreveu]: {caption}")
+            partes.append(f"[Conteúdo extraído da imagem/documento]:\n{analise}")
+            partes.append(
+                "\nSe houver datas identificadas, verifique se alguma é relevante para agendamento "
+                "e pergunte ao Comissário se deseja incluir na agenda de diligências."
+            )
+            text = "\n\n".join(partes)
+
+        except Exception as e:
+            logger.error(f"[TELEGRAM] Erro ao analisar imagem: {e}", exc_info=True)
+            await _get_bot().send_message(chat_id, f"⚠️ Não consegui analisar a imagem: {type(e).__name__}.")
+            return {"ok": True}
 
     if not text:
         return {"ok": True}

@@ -63,6 +63,14 @@ RESPONDA COM TEXTO (SEM chamar ferramenta) quando a pergunta for investigativa/a
 - Qualquer pergunta que exige raciocínio sobre os fatos do inquérito
 Nestas situações, o sistema interno irá processar sua resposta com acesso completo aos autos.
 
+## Quando receber conteúdo extraído de imagem ou documento
+
+Quando a mensagem iniciar com "[Conteúdo extraído da imagem/documento]":
+- Analise o conteúdo como se fosse um documento recebido pelo Comissário
+- Identifique o tipo (intimação, ofício, mandado, laudo, etc.)
+- Se houver datas futuras relevantes (oitiva marcada, prazo, diligência), pergunte se deseja adicionar à agenda
+- Se identificar nomes, CPFs ou placas, ofereça buscar na base do inquérito em foco
+
 Se faltar alguma informação para executar uma ação, pergunte de forma concisa e aguarde a resposta."""
 
 
