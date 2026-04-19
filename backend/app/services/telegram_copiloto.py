@@ -76,7 +76,7 @@ Se faltar alguma informação para executar uma ação, pergunte de forma concis
 
 # ── Tool declarations (lazy) ───────────────────────────────────────────────────
 
-_FC_TOOLS = None
+_FC_TOOLS = None  # rebuilt on first call each deploy
 
 
 def _get_fc_tools():
@@ -229,6 +229,23 @@ def _get_fc_tools():
                     ),
                 },
                 required=["numero_ip", "titulo", "tipo"],
+            ),
+        ),
+        _gt.FunctionDeclaration(
+            name="criar_inquerito",
+            description=(
+                "Cadastra um novo inquérito no sistema quando o número informado não existe ainda. "
+                "Use quando o usuário pedir 'cria esse IP', 'cadastra esse inquérito', 'abre um IP', "
+                "ou quando um documento mencionar um IP que não está no sistema."
+            ),
+            parameters=_gt.Schema(
+                type=_gt.Type.OBJECT,
+                properties={
+                    "numero_ip": _gt.Schema(type=_gt.Type.STRING, description="Número do IP a criar, ex: 915-00123/2024"),
+                    "descricao": _gt.Schema(type=_gt.Type.STRING, description="Breve descrição do fato apurado (opcional)"),
+                    "delegacia": _gt.Schema(type=_gt.Type.STRING, description="Nome da delegacia (opcional)"),
+                },
+                required=["numero_ip"],
             ),
         ),
         _gt.FunctionDeclaration(
@@ -424,6 +441,12 @@ class TelegramCopilotoService:
                     ctx["ultimo_alvo"] = f"placa {placa}"
                 resposta = await self._osint_avulso(fc_args)
 
+            elif fc_name == "criar_inquerito":
+                numero = fc_args.get("numero_ip", "")
+                descricao = fc_args.get("descricao", "")
+                delegacia = fc_args.get("delegacia", "")
+                resposta = await self._criar_inquerito(numero, descricao, delegacia, ctx, db)
+
             elif fc_name == "salvar_documento":
                 numero = fc_args.get("numero_ip") or ctx.get("inquerito_atual", "")
                 titulo = fc_args.get("titulo", "Documento sem título")
@@ -547,8 +570,9 @@ class TelegramCopilotoService:
         ip = result.scalars().first()
         if not ip:
             return (
-                f"❌ Inquérito <code>{_esc(numero)}</code> não encontrado.\n"
-                "Use <i>listar inquéritos</i> para ver os disponíveis."
+                f"❌ IP <code>{_esc(numero)}</code> não encontrado no sistema.\n\n"
+                f"💡 Diga <i>cria esse IP</i> para cadastrá-lo agora, "
+                "ou <i>lista inquéritos</i> para ver os disponíveis."
             )
 
         # Contar docs reais (ip.total_documentos pode estar desatualizado)
@@ -635,7 +659,10 @@ class TelegramCopilotoService:
         )
         ip = result.scalars().first()
         if not ip:
-            return f"❌ Inquérito <code>{_esc(numero)}</code> não encontrado."
+            return (
+                f"❌ IP <code>{_esc(numero)}</code> não encontrado no sistema.\n\n"
+                f"💡 Diga <i>cria esse IP</i> para cadastrá-lo agora."
+            )
 
         estado = ESTADO_LABEL.get(ip.estado_atual, ip.estado_atual)
         delegacia = ip.delegacia_atual_nome or ip.delegacia or "—"
@@ -1233,6 +1260,68 @@ class TelegramCopilotoService:
             f"{_esc(preview)}\n\n"
             f"💾 <i>Diga 'salva esse documento' para guardar na área de trabalho do inquérito.</i>"
         )
+
+    # ── Ação: criar inquérito ─────────────────────────────────────────────────
+
+    async def _criar_inquerito(
+        self, numero: str, descricao: str, delegacia: str, ctx: dict, db: AsyncSession
+    ) -> str:
+        """Cadastra um novo inquérito no sistema com o número informado."""
+        import re as _re
+
+        numero = numero.strip()
+        if not numero:
+            return "ℹ️ Informe o número do IP para cadastrar. Ex: <i>cria o IP 915-00123/2024</i>"
+
+        # Verificar se já existe
+        existing = (await db.execute(
+            select(Inquerito).where(Inquerito.numero.ilike(f"%{numero}%"))
+        )).scalars().first()
+        if existing:
+            ctx["inquerito_atual"] = existing.numero
+            return (
+                f"ℹ️ O IP <code>{_esc(existing.numero)}</code> já está cadastrado no sistema.\n"
+                f"📌 Estado: {ESTADO_LABEL.get(existing.estado_atual, existing.estado_atual)}\n"
+                f"Inquérito definido como foco atual."
+            )
+
+        # Extrair ano do número (ex: 915-00123/2024 → 2024)
+        ano = None
+        m = _re.search(r"[/\-](\d{4})$", numero)
+        if m:
+            try:
+                ano = int(m.group(1))
+            except ValueError:
+                pass
+
+        from app.core.state_machine import EstadoInquerito as _Estado
+        novo_ip = Inquerito(
+            numero=numero,
+            ano=ano,
+            descricao=descricao or None,
+            delegacia=delegacia or None,
+            estado_atual=_Estado.RECEBIDO.value,
+        )
+        db.add(novo_ip)
+        await db.flush()
+        await db.refresh(novo_ip)
+        await db.commit()
+
+        ctx["inquerito_atual"] = numero
+        logger.info(f"[TG-COPILOTO] Inquérito criado via Telegram: {numero} (id={novo_ip.id})")
+
+        partes = [
+            f"✅ IP <code>{_esc(numero)}</code> cadastrado com sucesso.",
+            f"🆔 ID: <code>{str(novo_ip.id)[:8]}…</code>",
+            f"📌 Estado: <b>Recebido</b>",
+        ]
+        if descricao:
+            partes.append(f"📝 {_esc(descricao[:200])}")
+        partes.append(
+            "\n📤 <i>Para iniciar a análise, faça o upload dos autos na interface web "
+            "ou envie os documentos por aqui.</i>"
+        )
+        return "\n".join(partes)
 
     # ── Ação: salvar documento ────────────────────────────────────────────────
 
