@@ -57,6 +57,7 @@ class LLMService:
         max_tokens: int = 2000,
         json_mode: bool = False,
         agente: str = "Desconhecido",
+        thinking_budget: int = -1,
     ) -> Dict[str, Any]:
         """
         Envia mensagens para o LLM e retorna a resposta.
@@ -83,7 +84,14 @@ class LLMService:
         else:  # "premium"
             model = self.premium_model
 
-        result = await self._gemini_completion(messages, model, temperature, max_tokens, json_mode)
+        # Para tasks de geração longa (>= 8k tokens), desabilitar thinking por padrão
+        # — thinking consome tokens do mesmo orçamento de max_output_tokens e trunca o texto.
+        # Passa thinking_budget=0 explicitamente para desabilitar; -1 = decisão automática.
+        effective_thinking = thinking_budget
+        if effective_thinking == -1:
+            effective_thinking = 0 if max_tokens >= 8000 else -1
+
+        result = await self._gemini_completion(messages, model, temperature, max_tokens, json_mode, effective_thinking)
 
         # Registrar consumo (await direto pois roda sob asyncio.run no Celery)
         await self._registrar_consumo(
@@ -106,6 +114,7 @@ class LLMService:
         temperature: float,
         max_tokens: int,
         json_mode: bool,
+        thinking_budget: int = -1,
     ) -> Dict[str, Any]:
         """Chamada para a API do Google Gemini."""
         t0 = time.time()
@@ -120,15 +129,27 @@ class LLMService:
                     role = "user" if msg["role"] == "user" else "model"
                     gemini_messages.append({"role": role, "parts": [{"text": msg["content"]}]})
 
+            # thinking_budget=0 desabilita o raciocínio interno do Gemini 2.5.
+            # Essencial para tasks de geração longa: thinking consome tokens do mesmo
+            # orçamento de max_output_tokens e trunca a resposta antes de terminar.
+            # ThinkingConfig foi adicionado no google-genai >= 1.5 — fallback defensivo.
+            thinking_cfg = None
+            if thinking_budget >= 0:
+                try:
+                    thinking_cfg = genai_types.ThinkingConfig(thinking_budget=thinking_budget)
+                except AttributeError:
+                    logger.warning("[LLM] ThinkingConfig não disponível nesta versão do SDK — ignorado")
+
             config = genai_types.GenerateContentConfig(
                 system_instruction=system_instruction,
                 temperature=temperature,
                 max_output_tokens=max_tokens,
                 response_mime_type="application/json" if json_mode else None,
+                **({"thinking_config": thinking_cfg} if thinking_cfg is not None else {}),
             )
 
-            # Timeout de 180s — evita worker pendurado indefinidamente em calls lentos
-            timeout_s = 300 if max_tokens >= 3000 else 180
+            # Timeout escala com max_tokens — 24k tokens pode levar ~3 min no Flash
+            timeout_s = max(300, max_tokens // 60)
             response = await asyncio.wait_for(
                 self._genai_client.aio.models.generate_content(
                     model=model,
