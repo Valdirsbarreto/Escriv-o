@@ -442,14 +442,33 @@ async def _resolver_inquerito_por_mensagem(mensagem: str, db: AsyncSession) -> O
 async def _sync_inquerito_context(
     session_id: str, inquerito_id: str, db: AsyncSession, ctx: dict
 ) -> str:
+    from sqlalchemy import func as sa_func
+    from app.models.documento import Documento
+
     result = await db.execute(select(Inquerito).where(Inquerito.id == inquerito_id))
     ip = result.scalars().first()
     if not ip:
         return ""
+
+    # Conta documentos reais indexados — o campo ip.total_documentos pode estar desatualizado
+    # e se for 0, o system prompt diz "0 documentos indexados", confundindo o LLM
+    try:
+        cnt = await db.execute(
+            select(sa_func.count(Documento.id), sa_func.sum(Documento.total_paginas))
+            .where(Documento.inquerito_id == ip.id)
+            .where(Documento.status_processamento == "concluido")
+        )
+        total_docs, total_pgs = cnt.one()
+        total_docs = total_docs or 0
+        total_pgs = int(total_pgs or 0)
+    except Exception:
+        total_docs = ip.total_documentos or 0
+        total_pgs = ip.total_paginas or 0
+
     ctx["inquerito_id"] = str(ip.id)
     ctx["inquerito_numero"] = ip.numero
     ctx["estado_atual"] = ip.estado_atual or ""
-    ctx["total_documentos"] = ip.total_documentos or 0
-    ctx["total_paginas"] = ip.total_paginas or 0
+    ctx["total_documentos"] = total_docs
+    ctx["total_paginas"] = total_pgs
     await _save_ctx(session_id, ctx)
     return ip.numero
