@@ -148,7 +148,7 @@ def generate_summaries_task(self, inquerito_id: str, documento_id: str):
         raise self.retry(exc=e)
 
 
-@celery_app.task(bind=True, max_retries=2, default_retry_delay=60, time_limit=600, soft_time_limit=540)
+@celery_app.task(bind=True, max_retries=2, default_retry_delay=60, time_limit=900, soft_time_limit=820)
 def generate_analise_task(self, inquerito_id: str):
     """
     Gera (ou atualiza) a Síntese Investigativa do inquérito.
@@ -376,11 +376,11 @@ def generate_analise_task(self, inquerito_id: str):
                     messages=[{"role": "user", "content": prompt}],
                     tier="premium",
                     temperature=0.2,
-                    max_tokens=65536,   # teto máximo do Flash — modelo para sozinho ao concluir
-                    thinking_budget=-1, # mantém thinking AUTO — modelo precisa raciocinar para completar as 10 seções
+                    max_tokens=65536,       # teto máximo do Flash — modelo para sozinho ao concluir
+                    thinking_budget=16384,  # thinking BOUNDED (não desabilitado) — evita timeout por thinking ilimitado
                     agente="Sintese",
                 ),
-                timeout=540,
+                timeout=760,
             )
             sintese_texto = result_llm["content"].strip()
 

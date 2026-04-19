@@ -147,8 +147,9 @@ class LLMService:
                 **({"thinking_config": thinking_cfg} if thinking_cfg is not None else {}),
             )
 
-            # Timeout escala com max_tokens, mas limitado a 520s (abaixo do soft_time_limit das tasks)
-            timeout_s = min(520, max(300, max_tokens // 60))
+            # Timeout escala com max_tokens. Cap em 720s para tasks longas (síntese, relatório com thinking).
+            # O Celery soft_time_limit de cada task deve ser > este valor.
+            timeout_s = min(720, max(300, max_tokens // 60))
             response = await asyncio.wait_for(
                 self._genai_client.aio.models.generate_content(
                     model=model,
