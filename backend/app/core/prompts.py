@@ -1296,15 +1296,8 @@ Para datas aproximadas: "- **circa MM/AAAA**: evento"
 **Diligências prioritárias:** liste por urgência (URGENTE / RELEVANTE / COMPLEMENTAR), com fundamento nos fatos dos autos.
 **Alvos OSINT:** para cada suspeito/coautor identificado, indique o nível recomendado (P1 Localização / P2 Triagem / P3 Investigação / P4 Profundo) com justificativa baseada no papel e nos indícios.
 
----
-
-**⚠️ ATENÇÃO — ENCERRAMENTO OBRIGATÓRIO:** Ao concluir a seção 9, finalize o relatório com a linha exata abaixo (sem omitir):
-
-`---`
+A ÚLTIMA LINHA desta seção 9 deve ser obrigatoriamente:
 `✅ Relatório Inicial concluído. Todas as 9 seções foram elaboradas.`
-
-Se por qualquer motivo não for possível concluir alguma seção, substitua por:
-`⚠️ Relatório parcial — seções [X, Y] não puderam ser geradas por limite de contexto.`
 
 ---
 
