@@ -374,3 +374,67 @@ async def admin_reconciliar_pipeline():
             "Verifique os logs do worker para detalhes das tasks re-despachadas."
         ),
     }
+
+
+@router.post("/admin/{inquerito_id}/reextrair-pecas", tags=["Admin"])
+async def admin_reextrair_pecas(inquerito_id: uuid.UUID):
+    """
+    Re-dispara extrair_pecas_task para todos os documentos de um inquérito
+    que ainda não têm peças extraídas.
+
+    Útil quando a extração automática foi interrompida (deploy, crash do worker).
+    """
+    import re as _re
+    from sqlalchemy import create_engine, select as sa_select
+    from sqlalchemy.orm import Session
+    from app.core.config import settings as _s
+    from app.core.database import _encode_password_in_url
+    from app.models.documento import Documento
+    from app.models.peca_extraida import PecaExtraida
+    from app.workers.peca_extraction_task import extrair_pecas_task
+
+    raw_url = _s.DATABASE_URL
+    sync_url = _re.sub(r"^postgres(ql)?(\+asyncpg)?://", "postgresql://", raw_url)
+    engine = create_engine(_encode_password_in_url(sync_url), pool_size=1, max_overflow=0)
+
+    disparados = []
+    ja_tem = []
+    sem_texto = []
+
+    with Session(engine) as db:
+        docs = db.execute(
+            sa_select(Documento)
+            .where(Documento.inquerito_id == inquerito_id)
+            .where(Documento.status_processamento == "concluido")
+        ).scalars().all()
+
+        if not docs:
+            return {"ok": False, "mensagem": "Nenhum documento concluído para este inquérito."}
+
+        for doc in docs:
+            if not doc.texto_extraido or len(doc.texto_extraido.strip()) < 100:
+                sem_texto.append(str(doc.id))
+                continue
+
+            existing = db.execute(
+                sa_select(PecaExtraida)
+                .where(PecaExtraida.documento_id == doc.id)
+                .limit(1)
+            ).scalar_one_or_none()
+
+            if existing:
+                ja_tem.append(str(doc.id))
+                continue
+
+            extrair_pecas_task.delay(str(doc.id), str(inquerito_id))
+            disparados.append({"documento_id": str(doc.id), "nome": doc.nome_arquivo})
+
+    engine.dispose()
+    return {
+        "ok": True,
+        "inquerito_id": str(inquerito_id),
+        "disparados": len(disparados),
+        "ja_tinham_pecas": len(ja_tem),
+        "sem_texto": len(sem_texto),
+        "documentos_disparados": disparados,
+    }
