@@ -183,7 +183,7 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
                 logger.warning("[PEÇAS] GEMINI_API_KEY não configurada — extração cancelada")
                 return
 
-            model_name = settings.LLM_STANDARD_MODEL or "gemini-1.5-flash"
+            model_name = settings.LLM_STANDARD_MODEL
             response = httpx.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
                 params={"key": api_key},

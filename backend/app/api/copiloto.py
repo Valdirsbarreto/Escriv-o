@@ -267,7 +267,7 @@ async def enviar_mensagem_com_anexo(
             img_b64 = base64.b64encode(content).decode()
             mime = file.content_type or f"image/{ext}"
             resp = httpx.post(
-                "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+                f"https://generativelanguage.googleapis.com/v1beta/models/{_s.LLM_STANDARD_MODEL}:generateContent",
                 params={"key": _s.GEMINI_API_KEY},
                 json={
                     "contents": [{
