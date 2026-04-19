@@ -376,10 +376,10 @@ def generate_analise_task(self, inquerito_id: str):
                     messages=[{"role": "user", "content": prompt}],
                     tier="premium",
                     temperature=0.2,
-                    max_tokens=24000,  # 10 seções CoT verbose; 16k truncava na seção 10
+                    max_tokens=65536,  # teto máximo do Gemini Flash — modelo para sozinho ao concluir
                     agente="Sintese",
                 ),
-                timeout=540,  # 9 min — 24k tokens pode levar até 8 min no Gemini Flash
+                timeout=540,  # 9 min — tempo máximo antes do soft_time_limit da task
             )
             sintese_texto = result_llm["content"].strip()
 

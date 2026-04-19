@@ -148,8 +148,8 @@ class LLMService:
                 **({"thinking_config": thinking_cfg} if thinking_cfg is not None else {}),
             )
 
-            # Timeout escala com max_tokens — 24k tokens pode levar ~3 min no Flash
-            timeout_s = max(300, max_tokens // 60)
+            # Timeout escala com max_tokens, mas limitado a 520s (abaixo do soft_time_limit das tasks)
+            timeout_s = min(520, max(300, max_tokens // 60))
             response = await asyncio.wait_for(
                 self._genai_client.aio.models.generate_content(
                     model=model,
