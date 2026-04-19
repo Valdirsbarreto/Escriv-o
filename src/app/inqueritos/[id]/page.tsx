@@ -1752,68 +1752,6 @@ export default function InqueritoDetalhePage() {
             )}
           </div>
 
-          {/* Peças Individuais Extraídas */}
-          <div>
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-4">
-              <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
-                <FileText size={18} className="text-amber-400" /> Peças Individuais Extraídas
-              </h2>
-              <span className="text-sm text-zinc-500">{pecasExtraidas.length} peça(s)</span>
-            </div>
-            {pecasLoading ? (
-              <div className="flex items-center gap-2 text-zinc-500 py-6">
-                <Loader2 size={16} className="animate-spin" /> Carregando peças extraídas...
-              </div>
-            ) : pecasExtraidas.length === 0 ? (
-              <div className="py-10 text-center text-zinc-600 border border-zinc-800 border-dashed rounded-xl bg-zinc-900/40">
-                <FileText className="w-10 h-10 mx-auto mb-3 opacity-20" />
-                <p className="font-medium">Nenhuma peça extraída ainda.</p>
-                <p className="text-sm mt-1 text-zinc-700 max-w-sm mx-auto">
-                  As peças são extraídas automaticamente após a ingestão. Para documentos já importados, use o botão "Extrair peças" na aba Autos.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {pecasExtraidas.map((peca: any) => (
-                  <div key={peca.id} className="flex items-center justify-between border border-zinc-800 rounded-xl px-4 py-3 bg-zinc-900/40 hover:border-zinc-700 transition-colors">
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className="p-1.5 rounded border bg-zinc-950 text-amber-400 border-zinc-800 shrink-0">
-                        <FileText size={14} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-zinc-200 truncate">{peca.titulo}</p>
-                        <p className="text-xs text-zinc-500 mt-0.5">
-                          {peca.documento_nome && <span className="mr-2 opacity-60">{peca.documento_nome}</span>}
-                          {peca.pagina_inicial != null && (
-                            <span>fls. {peca.pagina_inicial}{peca.pagina_final && peca.pagina_final !== peca.pagina_inicial ? `–${peca.pagina_final}` : ""}</span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0 ml-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full border ${TIPO_PECA_COLOR[peca.tipo] || TIPO_PECA_COLOR["outro"]}`}>
-                        {TIPO_PECA_LABEL[peca.tipo] || peca.tipo}
-                      </span>
-                      <button
-                        onClick={() => handleAbrirPecaNoPDF(peca)}
-                        title="Abrir PDF original"
-                        className="flex items-center gap-1 text-xs text-zinc-400 hover:text-blue-400 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors"
-                      >
-                        <Eye size={11} /> PDF
-                      </button>
-                      <button
-                        onClick={() => handleAbrirPeca(peca)}
-                        title="Ver texto extraído"
-                        className="flex items-center gap-1 text-xs text-zinc-500 hover:text-amber-400 px-2 py-1 rounded border border-zinc-700 hover:border-amber-500/40 transition-colors"
-                      >
-                        <FileText size={11} /> Texto
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       )}
 
@@ -2163,6 +2101,71 @@ export default function InqueritoDetalhePage() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+          {/* Peças Individuais Extraídas */}
+          <div>
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-4">
+              <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
+                <FileText size={18} className="text-amber-400" /> Peças Individuais Extraídas
+              </h2>
+              <span className="text-sm text-zinc-500">{pecasExtraidas.length} peça(s)</span>
+            </div>
+            {pecasLoading ? (
+              <div className="flex items-center gap-2 text-zinc-500 py-6">
+                <Loader2 size={16} className="animate-spin" /> Carregando peças extraídas...
+              </div>
+            ) : pecasExtraidas.length === 0 ? (
+              <div className="py-10 text-center text-zinc-600 border border-zinc-800 border-dashed rounded-xl bg-zinc-900/40">
+                <FileText className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                <p className="font-medium">Nenhuma peça extraída ainda.</p>
+                <p className="text-sm mt-1 text-zinc-700 max-w-sm mx-auto">
+                  As peças são extraídas automaticamente após a ingestão. Para documentos já importados, use o botão "Catalogar peças" acima.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {pecasExtraidas.map((peca: any) => (
+                  <div key={peca.id} className="flex items-center justify-between border border-zinc-800 rounded-xl px-4 py-3 bg-zinc-900/40 hover:border-zinc-700 transition-colors">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="p-1.5 rounded border bg-zinc-950 text-amber-400 border-zinc-800 shrink-0">
+                        <FileText size={14} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-zinc-200 truncate">{peca.titulo}</p>
+                        <p className="text-xs text-zinc-500 mt-0.5">
+                          {peca.documento_nome && <span className="mr-2 opacity-60">{peca.documento_nome}</span>}
+                          {peca.pagina_inicial != null && (
+                            <span>fls. {peca.pagina_inicial}{peca.pagina_final && peca.pagina_final !== peca.pagina_inicial ? `–${peca.pagina_final}` : ""}</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${TIPO_PECA_COLOR[peca.tipo] || TIPO_PECA_COLOR["outro"]}`}>
+                        {TIPO_PECA_LABEL[peca.tipo] || peca.tipo}
+                      </span>
+                      <button
+                        onClick={() => handleAbrirPecaNoPDF(peca)}
+                        title="Abrir PDF original"
+                        className="flex items-center gap-1 text-xs text-zinc-400 hover:text-blue-400 px-2 py-1 rounded border border-zinc-700 hover:border-blue-500/40 transition-colors"
+                      >
+                        <Eye size={11} /> PDF
+                      </button>
+                      <button
+                        onClick={() => handleAbrirPeca(peca)}
+                        title="Ver texto extraído"
+                        className="flex items-center gap-1 text-xs text-zinc-500 hover:text-amber-400 px-2 py-1 rounded border border-zinc-700 hover:border-amber-500/40 transition-colors"
+                      >
+                        <FileText size={11} /> Texto
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
