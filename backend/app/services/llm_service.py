@@ -84,12 +84,11 @@ class LLMService:
         else:  # "premium"
             model = self.premium_model
 
-        # Para tasks de geração longa (>= 8k tokens), desabilitar thinking por padrão
-        # — thinking consome tokens do mesmo orçamento de max_output_tokens e trunca o texto.
-        # Passa thinking_budget=0 explicitamente para desabilitar; -1 = decisão automática.
+        # thinking_budget=-1 = auto (padrão Gemini). Só sobrescreve se explicitamente pedido.
+        # NÃO desabilitar thinking automaticamente: no gemini-2.5-flash estável, thinking tokens
+        # são contados separadamente de max_output_tokens. Desabilitar thinking prejudica qualidade
+        # e pode truncar respostas em tasks complexas (síntese, relatório inicial).
         effective_thinking = thinking_budget
-        if effective_thinking == -1:
-            effective_thinking = 0 if max_tokens >= 8000 else -1
 
         result = await self._gemini_completion(messages, model, temperature, max_tokens, json_mode, effective_thinking)
 

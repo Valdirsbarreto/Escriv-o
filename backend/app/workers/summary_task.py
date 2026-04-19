@@ -376,10 +376,11 @@ def generate_analise_task(self, inquerito_id: str):
                     messages=[{"role": "user", "content": prompt}],
                     tier="premium",
                     temperature=0.2,
-                    max_tokens=65536,  # teto máximo do Gemini Flash — modelo para sozinho ao concluir
+                    max_tokens=65536,   # teto máximo do Flash — modelo para sozinho ao concluir
+                    thinking_budget=-1, # mantém thinking AUTO — modelo precisa raciocinar para completar as 10 seções
                     agente="Sintese",
                 ),
-                timeout=540,  # 9 min — tempo máximo antes do soft_time_limit da task
+                timeout=540,
             )
             sintese_texto = result_llm["content"].strip()
 
