@@ -685,6 +685,9 @@ Quais medidas encontram respaldo fático e legal nos autos: busca e apreensão, 
 
 ### 10. PONTOS CRÍTICOS E ALERTAS
 Lacunas probatórias que podem comprometer o caso, riscos de prescrição (calcule se possível com base nas datas dos autos), inconsistências entre versões, fragilidades que a defesa explorará, alertas de urgência para o Comissário.
+
+---
+**Síntese completa.**
 """
 
 # ── Prompts dos Agentes Especializados (Sprint 6) ─────────────────────────────
