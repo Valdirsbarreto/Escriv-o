@@ -27,6 +27,7 @@ celery_app = Celery(
         "app.workers.relatorio_inicial_task",
         "app.workers.relatorio_complementar_task",
         "app.workers.billing_task",
+        "app.workers.reconcile_task",
     ],
 )
 
@@ -45,6 +46,7 @@ _TASK_LABELS = {
     "app.workers.ingestion.ingest_document": "📥 Ingestão de Documento",
     "app.workers.relatorio_complementar_task.gerar_relatorio_complementar_task": "📋 Relatório Complementar",
     "app.workers.orchestrator.orchestrate_new_inquerito": "🔀 Orquestrador Ingestão",
+    "app.workers.reconcile_task.reconcile_pipeline_task": "🔄 Reconciliação de Pipeline",
 }
 
 
@@ -123,6 +125,10 @@ celery_app.conf.update(
         "coletar-custos-externos-diario": {
             "task": "app.workers.billing_task.coletar_custos_externos_task",
             "schedule": crontab(hour=0, minute=30),  # 00:30 UTC diariamente
+        },
+        "reconciliar-pipeline": {
+            "task": "app.workers.reconcile_task.reconcile_pipeline_task",
+            "schedule": 60 * 15,  # a cada 15 minutos
         },
     },
 )

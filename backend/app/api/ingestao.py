@@ -345,3 +345,32 @@ async def admin_gerar_relatorio_inicial_lote(forcar: bool = False):
         "sem_documentos": len(sem_docs),
         "inquéritos_agendados": agendados,
     }
+
+
+# ── Admin: Reconciliação de Pipeline ─────────────────────────────────────────
+
+@router.post("/admin/pipeline/reconciliar", tags=["Admin"])
+async def admin_reconciliar_pipeline():
+    """
+    Dispara manualmente a reconciliação do pipeline de ingestão.
+
+    Detecta e re-despacha automaticamente as tasks interrompidas:
+      - Documentos sem peças extraídas
+      - Documentos sem resumos hierárquicos
+      - Inquéritos com todos os docs indexados mas sem Relatório Inicial
+      - Inquéritos com Relatório Inicial mas sem Síntese Investigativa
+      - Remove placeholders __PROCESSANDO__ travados (> 30 min)
+
+    Normalmente executado automaticamente a cada 15 min pelo Celery Beat.
+    Use este endpoint para forçar uma execução imediata após deploy ou restart.
+    """
+    from app.workers.reconcile_task import reconcile_pipeline_task
+    task = reconcile_pipeline_task.delay()
+    return {
+        "status": "agendado",
+        "task_id": task.id,
+        "mensagem": (
+            "Reconciliação de pipeline disparada. "
+            "Verifique os logs do worker para detalhes das tasks re-despachadas."
+        ),
+    }
