@@ -8,9 +8,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export function Sidebar() {
-  const { toggleCopiloto, sidebarCollapsed } = useAppStore();
+  const { toggleCopiloto, sidebarCollapsed, setSidebarCollapsed } = useAppStore();
   const pathname = usePathname();
   const router = useRouter();
+
+  const collapse = () => setSidebarCollapsed(true);
 
   const handleLogout = async () => {
     const supabase = createClient();
@@ -46,6 +48,7 @@ export function Sidebar() {
         <Link
           href="/ingestao"
           title="Importar Documento"
+          onClick={collapse}
           className={cn(
             "flex items-center gap-3 rounded-lg text-sm font-semibold transition-all",
             sidebarCollapsed ? "px-2 py-2.5 justify-center" : "px-3 py-2.5",
@@ -61,9 +64,9 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className={cn("flex-1 space-y-1 transition-all duration-300", sidebarCollapsed ? "px-2" : "px-4")}>
-        <NavItem href="/" icon={<FolderOpen size={18} />} label="Inquéritos" active={pathname === "/"} collapsed={sidebarCollapsed} />
-        <NavItem href="/intimacoes" icon={<CalendarDays size={18} />} label="Intimações" active={pathname === "/intimacoes"} collapsed={sidebarCollapsed} />
-        <NavItem href="/oitiva" icon={<Mic size={18} />} label="Modo Oitiva" active={pathname === "/oitiva"} collapsed={sidebarCollapsed} />
+        <NavItem href="/" icon={<FolderOpen size={18} />} label="Inquéritos" active={pathname === "/"} collapsed={sidebarCollapsed} onNavigate={collapse} />
+        <NavItem href="/intimacoes" icon={<CalendarDays size={18} />} label="Intimações" active={pathname === "/intimacoes"} collapsed={sidebarCollapsed} onNavigate={collapse} />
+        <NavItem href="/oitiva" icon={<Mic size={18} />} label="Modo Oitiva" active={pathname === "/oitiva"} collapsed={sidebarCollapsed} onNavigate={collapse} />
       </nav>
 
       {/* Footer */}
@@ -84,7 +87,7 @@ export function Sidebar() {
             <kbd className="text-xs uppercase bg-blue-950 px-1.5 py-0.5 rounded text-blue-300">Ctrl+Space</kbd>
           )}
         </button>
-        <NavItem href="/admin" icon={<ShieldAlert size={18} />} label="Administrativo" active={pathname === "/admin"} collapsed={sidebarCollapsed} />
+        <NavItem href="/admin" icon={<ShieldAlert size={18} />} label="Administrativo" active={pathname === "/admin"} collapsed={sidebarCollapsed} onNavigate={collapse} />
         <button
           onClick={handleLogout}
           title="Sair"
@@ -102,18 +105,20 @@ export function Sidebar() {
 }
 
 function NavItem({
-  href, icon, label, active = false, collapsed = false,
+  href, icon, label, active = false, collapsed = false, onNavigate,
 }: {
   href: string;
   icon: React.ReactNode;
   label: string;
   active?: boolean;
   collapsed?: boolean;
+  onNavigate?: () => void;
 }) {
   return (
     <Link
       href={href}
       title={label}
+      onClick={onNavigate}
       className={cn(
         "flex items-center gap-3 rounded-md text-sm font-medium transition-colors",
         collapsed ? "px-2 py-2 justify-center" : "px-3 py-2",
