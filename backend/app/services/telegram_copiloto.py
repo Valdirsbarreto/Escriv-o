@@ -907,6 +907,67 @@ class TelegramCopilotoService:
                     partes.append(f'  <a href="{it.google_event_url}">→ Google Agenda</a>')
             partes.append("")
 
+        # 3. Busca em chunks (apelidos, menções não cadastradas no índice de pessoas)
+        #    Só executa se não encontrou pelo nome/CPF no índice — evita resultados redundantes
+        if not encontrou and nome and not cpf:
+            try:
+                from sqlalchemy import func as _sa_func3, or_ as _or3
+                from app.models.chunk import Chunk as _Chunk
+                import unicodedata
+
+                def _strip(s: str) -> str:
+                    return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+
+                termos_chunks = [_strip(t.lower()) for t in nome.split() if len(t) >= 3][:3]
+                if termos_chunks:
+                    from sqlalchemy import and_ as _and3
+                    filtros = [_sa_func3.unaccent(_sa_func3.lower(_Chunk.texto)).ilike(f"%{t}%") for t in termos_chunks]
+                    combinar = _and3 if len(filtros) <= 2 else _or3
+                    rc = await db.execute(
+                        select(_Chunk.inquerito_id, _Chunk.texto)
+                        .where(combinar(*filtros))
+                        .limit(10)
+                    )
+                    rows_chunks = rc.all()
+
+                    if rows_chunks:
+                        # Agrupa por inquérito
+                        por_inq_chunk: dict = {}
+                        for row in rows_chunks:
+                            iid = str(row.inquerito_id)
+                            if iid not in por_inq_chunk:
+                                # Extrai trecho ao redor do termo
+                                txt = row.texto
+                                trecho = txt[:120]
+                                for t in termos_chunks:
+                                    idx = _strip(txt.lower()).find(t)
+                                    if idx >= 0:
+                                        ini = max(0, idx - 30)
+                                        fim = min(len(txt), idx + len(t) + 80)
+                                        trecho = txt[ini:fim].strip()
+                                        break
+                                por_inq_chunk[iid] = trecho
+
+                        # Enriquecer com número do IP
+                        ids_chunk = [uuid.UUID(i) for i in por_inq_chunk.keys()]
+                        res_inq_c = await db.execute(
+                            select(Inquerito).where(Inquerito.id.in_(ids_chunk))
+                        )
+                        inqs_chunk = {str(i.id): i for i in res_inq_c.scalars().all()}
+
+                        if por_inq_chunk:
+                            encontrou = True
+                            partes.append(f"📄 <b>Menções nos autos (apelido/alcunha):</b>")
+                            for iid, trecho in list(por_inq_chunk.items())[:4]:
+                                inq_c = inqs_chunk.get(iid)
+                                ip_label = f"IP <code>{_esc(inq_c.numero)}</code>" if inq_c else f"IP <code>{iid[:8]}…</code>"
+                                partes.append(f"• {ip_label}: <i>…{_esc(trecho[:150])}…</i>")
+                                if inq_c and inq_c.numero not in numeros_ip_encontrados:
+                                    numeros_ip_encontrados.append(inq_c.numero)
+                            partes.append("")
+            except Exception as _e:
+                logger.warning(f"[TG-COPILOTO] Busca chunk apelido falhou: {_e}")
+
         if not encontrou:
             alvo = nome or cpf
             tipo = "CPF <code>" + _esc(cpf) + "</code>" if cpf else f"<i>{_esc(nome)}</i>"
