@@ -1213,6 +1213,26 @@ Prove primeiro que o crime EXISTIU, depois identifique QUEM o praticou.
 
 ---
 
+## FILTRO DE RELEVÂNCIA INVESTIGATIVA (aplique a TODO o relatório)
+
+**IGNORE completamente** os seguintes eventos — são puramente procedimentais e não pertencem à análise criminal:
+- Requisições de prazo / prorrogações de prazo / despachos de prorrogação
+- Ofícios e respostas sobre vista dos autos (ex.: "Promotora requisita vista conjunta", "reitera requisição de vista")
+- Remessas ao MP, devoluções e reenvios por questões administrativas de atribuição
+- Conflitos negativos de atribuição entre promotores ou entre delegacias
+- Comunicações sobre andamento processual sem conteúdo de mérito investigativo
+- Despachos de transferência entre unidades, recebimento, protocolo e numeração de folhas
+
+**INCLUA apenas** eventos com valor investigativo direto:
+- Declarações, oitivas, interrogatórios (o que a pessoa disse)
+- Laudos e perícias (resultados concretos)
+- Quebras de sigilo e seus resultados
+- Apreensões de bens, documentos, dispositivos
+- Flagrantes, prisões, mandados cumpridos
+- Atos do crime: datas de execução da conduta criminosa e eventos causados pelo crime
+
+---
+
 ## RELATÓRIO INICIAL DE INVESTIGAÇÃO
 
 Redija cada seção com linguagem técnico-policial objetiva. Cite fontes. Seja analítico, não apenas descritivo.
@@ -1275,6 +1295,16 @@ Para datas aproximadas: "- **circa MM/AAAA**: evento"
 **Lacunas críticas:** o que falta provar para sustentar a autoria em juízo?
 **Diligências prioritárias:** liste por urgência (URGENTE / RELEVANTE / COMPLEMENTAR), com fundamento nos fatos dos autos.
 **Alvos OSINT:** para cada suspeito/coautor identificado, indique o nível recomendado (P1 Localização / P2 Triagem / P3 Investigação / P4 Profundo) com justificativa baseada no papel e nos indícios.
+
+---
+
+**⚠️ ATENÇÃO — ENCERRAMENTO OBRIGATÓRIO:** Ao concluir a seção 9, finalize o relatório com a linha exata abaixo (sem omitir):
+
+`---`
+`✅ Relatório Inicial concluído. Todas as 9 seções foram elaboradas.`
+
+Se por qualquer motivo não for possível concluir alguma seção, substitua por:
+`⚠️ Relatório parcial — seções [X, Y] não puderam ser geradas por limite de contexto.`
 
 ---
 
