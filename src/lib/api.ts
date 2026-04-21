@@ -212,7 +212,6 @@ export const deletarTodosAlertas = async () => {
   const response = await api.delete("/alertas");
   return response.data;
 };
-};
 
 export const osintGratuito = async (inqueritoId: string, pessoaId: string) => {
   const response = await api.get(
