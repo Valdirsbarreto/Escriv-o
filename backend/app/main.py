@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
     print("🔍 Escrivão AI — Sistema de Apoio à Análise de Inquéritos")
     print(f"   Ambiente: {settings.APP_ENV}")
     print(f"   Database: {settings.DATABASE_URL[:50]}...")
-    print(f"   Qdrant:   {settings.QDRANT_HOST}:{settings.QDRANT_PORT}")
+    print(f"   Vetores:  pgvector (PostgreSQL)")
     print(f"   Redis:    {settings.REDIS_URL}")
     print(f"   Storage:  {settings.S3_ENDPOINT_URL}")
     print(f"   Serper:   {'✓ configurado' if settings.SERPER_API_KEY else '✗ NAO configurado'}")

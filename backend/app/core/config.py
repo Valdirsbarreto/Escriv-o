@@ -28,12 +28,6 @@ class Settings(BaseSettings):
     # ── Redis (Docker) ─────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # ── Qdrant (Docker) ────────────────────────────────────
-    QDRANT_HOST: str = "localhost"
-    QDRANT_PORT: int = 6333
-    QDRANT_COLLECTION: str = "escrivao_chunks"
-    QDRANT_COLLECTION_CASOS: str = "casos_historicos"
-
     # ── MinIO / S3 (Docker) ────────────────────────────────
     S3_ENDPOINT_URL: str = "http://localhost:9000"
     S3_ACCESS_KEY: str = "escrivao"
