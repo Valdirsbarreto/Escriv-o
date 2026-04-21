@@ -423,6 +423,90 @@ async def disparar_coleta_billing():
     return {"status": "disparado", "task_id": str(task.id)}
 
 
+@router.get("/diagnostico-ingestao")
+async def diagnostico_ingestao(db: AsyncSession = Depends(get_db)):
+    """
+    Diagnóstico de ingestões duplicadas.
+    Retorna documentos com múltiplos downloads e documentos com chunks duplicados.
+    """
+    from app.models.log_ingestao import LogIngestao
+    from app.models.chunk import Chunk
+    from app.models.documento import Documento
+
+    # Downloads por documento (conta quantas vezes cada doc foi baixado com sucesso)
+    downloads = await db.execute(
+        select(
+            LogIngestao.documento_id,
+            func.count(LogIngestao.id).label("n_downloads"),
+            func.min(LogIngestao.created_at).label("primeiro"),
+            func.max(LogIngestao.created_at).label("ultimo"),
+        )
+        .where(LogIngestao.etapa == "download")
+        .where(LogIngestao.status == "concluido")
+        .group_by(LogIngestao.documento_id)
+        .order_by(func.count(LogIngestao.id).desc())
+        .limit(20)
+    )
+    rows_downloads = downloads.all()
+
+    # Chunks por documento — outliers indicam chunking duplicado
+    chunks_por_doc = await db.execute(
+        select(
+            Chunk.documento_id,
+            func.count(Chunk.id).label("n_chunks"),
+        )
+        .group_by(Chunk.documento_id)
+        .order_by(func.count(Chunk.id).desc())
+        .limit(20)
+    )
+    rows_chunks = chunks_por_doc.all()
+
+    # Buscar nomes dos documentos
+    import uuid as _uuid
+    doc_ids_uuid = list({r.documento_id for r in rows_downloads} |
+                        {r.documento_id for r in rows_chunks})
+    docs_res = await db.execute(
+        select(Documento.id, Documento.nome_arquivo, Documento.storage_path)
+        .where(Documento.id.in_(doc_ids_uuid))
+    )
+    doc_map = {str(r.id): r.nome_arquivo or r.storage_path for r in docs_res.all()}
+
+    downloads_list = [
+        {
+            "documento_id": str(r.documento_id),
+            "nome": doc_map.get(str(r.documento_id), "?"),
+            "n_downloads": r.n_downloads,
+            "primeiro": r.primeiro.isoformat() if r.primeiro else None,
+            "ultimo": r.ultimo.isoformat() if r.ultimo else None,
+        }
+        for r in rows_downloads
+    ]
+
+    chunks_list = [
+        {
+            "documento_id": str(r.documento_id),
+            "nome": doc_map.get(str(r.documento_id), "?"),
+            "n_chunks": r.n_chunks,
+        }
+        for r in rows_chunks
+    ]
+
+    # Resumo
+    docs_com_multiplos = [d for d in downloads_list if d["n_downloads"] > 1]
+    total_downloads_extras = sum(d["n_downloads"] - 1 for d in docs_com_multiplos)
+
+    return {
+        "resumo": {
+            "docs_com_download_unico": len([d for d in downloads_list if d["n_downloads"] == 1]),
+            "docs_com_multiplos_downloads": len(docs_com_multiplos),
+            "total_downloads_extras": total_downloads_extras,
+            "egress_extra_estimado": f"~{total_downloads_extras * 50} MB (estimativa 50 MB/doc)",
+        },
+        "downloads_por_doc": downloads_list,
+        "chunks_por_doc": chunks_list,
+    }
+
+
 @router.get("/projecao")
 async def projecao_mensal(db: AsyncSession = Depends(get_db)):
     """
