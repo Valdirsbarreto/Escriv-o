@@ -89,7 +89,7 @@ def _build_sync_engine():
     return create_engine(
         _encode_password_in_url(sync_url),
         pool_size=1,
-        max_overflow=1,
+        max_overflow=0,
         pool_pre_ping=True,
         pool_recycle=300,
     )
@@ -174,8 +174,8 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
             # Chama Gemini via httpx (padrão do projeto)
             import httpx
 
-            # Limitar input a 15k chars — reduz tempo de resposta e evita truncamento JSON
-            texto_limite = doc.texto_extraido[:15000]
+            # Limitar input a 10k chars — reduz pressão sobre maxOutputTokens e evita truncamento JSON
+            texto_limite = doc.texto_extraido[:10000]
             prompt = PROMPT_EXTRAIR_PECAS.replace("{texto}", texto_limite)
 
             api_key = settings.GEMINI_API_KEY
@@ -200,9 +200,14 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
             response.raise_for_status()
 
             raw = response.json()
+            candidate = raw.get("candidates", [{}])[0]
+            finish_reason = candidate.get("finishReason", "UNKNOWN")
+            if finish_reason not in ("STOP", "MAX_TOKENS"):
+                logger.warning(f"[PEÇAS] finishReason inesperado: {finish_reason} doc={documento_id}")
+            elif finish_reason == "MAX_TOKENS":
+                logger.warning(f"[PEÇAS] Resposta truncada por MAX_TOKENS doc={documento_id}")
             text_content = (
-                raw.get("candidates", [{}])[0]
-                .get("content", {})
+                candidate.get("content", {})
                 .get("parts", [{}])[0]
                 .get("text", "")
             )
