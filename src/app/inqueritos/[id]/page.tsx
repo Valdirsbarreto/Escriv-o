@@ -2552,7 +2552,7 @@ export default function InqueritoDetalhePage() {
                 </div>
               ) : docViewer.conteudo?.texto_extraido ? (
                 <div className="text-sm text-zinc-300 leading-relaxed font-sans selection:bg-blue-500/30">
-                  {docViewer.conteudo.texto_extraido.split(/(?:\r?\n\s*){2,}/).map((para: string, i: number) => (
+                  {docViewer.conteudo.texto_extraido.split("\n\n").filter(Boolean).map((para: string, i: number) => (
                     <p key={i} className="mb-4 text-justify">
                       {para.replace(/\r?\n/g, ' ')}
                     </p>
