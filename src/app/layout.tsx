@@ -4,6 +4,7 @@ import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sidebar } from "@/components/Sidebar";
 import { CopilotoDrawer } from "@/components/CopilotoDrawer";
+import { AlertasDrawer } from "@/components/AlertasDrawer";
 import { MobileNav } from "@/components/MobileNav";
 import { SWRegister } from "@/components/SWRegister";
 import { BiometricLock } from "@/components/BiometricLock";
@@ -53,6 +54,7 @@ export default function RootLayout({
               {children}
             </main>
             <CopilotoDrawer />
+            <AlertasDrawer />
           </div>
           {/* Nav inferior só no mobile */}
           <MobileNav />

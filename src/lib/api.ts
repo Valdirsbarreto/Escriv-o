@@ -183,6 +183,26 @@ export const getSupabaseUsage = async () => {
   return response.data;
 };
 
+export const getAlertasContagem = async (): Promise<{ nao_lidos: number }> => {
+  const response = await api.get("/alertas/contagem");
+  return response.data;
+};
+
+export const getAlertas = async () => {
+  const response = await api.get("/alertas");
+  return response.data;
+};
+
+export const marcarAlertaLido = async (id: string) => {
+  const response = await api.put(`/alertas/${id}/lido`);
+  return response.data;
+};
+
+export const marcarTodosAlertasLidos = async () => {
+  const response = await api.put("/alertas/marcar-todos-lidos");
+  return response.data;
+};
+
 export const osintGratuito = async (inqueritoId: string, pessoaId: string) => {
   const response = await api.get(
     `/agentes/osint/gratuito/${inqueritoId}/${pessoaId}`,

@@ -28,6 +28,8 @@ celery_app = Celery(
         "app.workers.relatorio_complementar_task",
         "app.workers.billing_task",
         "app.workers.reconcile_task",
+        "app.workers.vigilancia_task",
+        "app.workers.resumo_diario_task",
     ],
 )
 
@@ -35,18 +37,17 @@ celery_app = Celery(
 
 from celery.signals import task_failure, task_retry
 import logging
-import httpx
 
 _logger = logging.getLogger(__name__)
 
 # Nomes amigáveis para as tasks críticas
 _TASK_LABELS = {
-    "app.workers.relatorio_inicial_task.gerar_relatorio_inicial_task": "📄 Relatório Inicial",
-    "app.workers.summary_task.generate_analise_task": "📊 Síntese Investigativa",
-    "app.workers.ingestion.ingest_document": "📥 Ingestão de Documento",
-    "app.workers.relatorio_complementar_task.gerar_relatorio_complementar_task": "📋 Relatório Complementar",
-    "app.workers.orchestrator.orchestrate_new_inquerito": "🔀 Orquestrador Ingestão",
-    "app.workers.reconcile_task.reconcile_pipeline_task": "🔄 Reconciliação de Pipeline",
+    "app.workers.relatorio_inicial_task.gerar_relatorio_inicial_task": "Relatório Inicial",
+    "app.workers.summary_task.generate_analise_task": "Síntese Investigativa",
+    "app.workers.ingestion.ingest_document": "Ingestão de Documento",
+    "app.workers.relatorio_complementar_task.gerar_relatorio_complementar_task": "Relatório Complementar",
+    "app.workers.orchestrator.orchestrate_new_inquerito": "Orquestrador Ingestão",
+    "app.workers.reconcile_task.reconcile_pipeline_task": "Reconciliação de Pipeline",
 }
 
 
@@ -54,42 +55,22 @@ _TASK_LABELS = {
 def on_task_failure(sender=None, task_id=None, exception=None, args=None, kwargs=None, **kw):
     """
     Dispara quando uma task Celery falha definitivamente (sem mais retries).
-    Envia alerta Telegram para o Comissário saber que algo quebrou.
+    Usa alerta_service para mensagem humanizada + persistência no painel in-app + Telegram.
     """
     task_name = getattr(sender, "name", str(sender))
     label = _TASK_LABELS.get(task_name, task_name.split(".")[-1])
     erro_resumo = str(exception)[:300]
 
-    # Extrair inquerito_id dos args se disponível (primeiro arg costuma ser o UUID)
-    inq_info = ""
-    if args:
-        inq_info = f"\n🔑 ID: <code>{str(args[0])[:36]}</code>"
-
-    mensagem = (
-        f"🚨 <b>Task falhou — {label}</b>\n"
-        f"🪲 {erro_resumo}{inq_info}\n"
-        f"🆔 Task: <code>{task_id[:16] if task_id else '?'}</code>\n\n"
-        f"<i>Acesse os logs Railway para detalhes completos.</i>"
-    )
+    inq_info = str(args[0])[:36] if args else ""
 
     _logger.error(f"[HARNESS] Task falhou definitivamente: {task_name} — {erro_resumo}")
 
-    # Envio síncrono via httpx (signal é síncrono)
-    token = settings.TELEGRAM_BOT_TOKEN
-    user_ids_raw = settings.TELEGRAM_ALLOWED_USER_IDS or ""
-    if not token or not user_ids_raw:
-        return
-
-    user_ids = [uid.strip() for uid in user_ids_raw.split(",") if uid.strip().isdigit()]
     try:
-        with httpx.Client(timeout=8.0) as client:
-            for uid in user_ids:
-                client.post(
-                    f"https://api.telegram.org/bot{token}/sendMessage",
-                    json={"chat_id": uid, "text": mensagem, "parse_mode": "HTML"},
-                )
+        from app.services.alerta_service import enviar_alerta_sync, msg_task_failure
+        titulo, mensagem, mensagem_html = msg_task_failure(label, erro_resumo, task_id or "", inq_info)
+        enviar_alerta_sync("task_failure", "critico", titulo, mensagem, mensagem_html, identificador=task_id or "")
     except Exception as e:
-        _logger.warning(f"[HARNESS] Falha ao enviar alerta Telegram: {e}")
+        _logger.warning(f"[HARNESS] Falha ao enviar alerta task_failure: {e}")
 
 
 @task_retry.connect
@@ -129,6 +110,18 @@ celery_app.conf.update(
         "reconciliar-pipeline": {
             "task": "app.workers.reconcile_task.reconcile_pipeline_task",
             "schedule": 60 * 15,  # a cada 15 minutos
+        },
+        "beat-heartbeat-stamp": {
+            "task": "app.workers.vigilancia_task.beat_heartbeat_stamp_task",
+            "schedule": 60 * 5,  # a cada 5 minutos
+        },
+        "vigilancia-periodica": {
+            "task": "app.workers.vigilancia_task.vigilancia_periodica_task",
+            "schedule": 60 * 45,  # a cada 45 minutos
+        },
+        "resumo-diario-7h": {
+            "task": "app.workers.resumo_diario_task.resumo_diario_task",
+            "schedule": crontab(hour=10, minute=0),  # 10h UTC = 7h BRT
         },
     },
 )

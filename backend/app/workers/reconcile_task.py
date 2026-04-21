@@ -155,12 +155,22 @@ def reconcile_pipeline_task(self):
         ).scalars().all()
 
         for placeholder in placeholders_travados:
+            minutos_preso = int((agora - placeholder.updated_at).total_seconds() / 60)
             logger.warning(
                 f"[RECONCILE] Placeholder travado removido — inq={placeholder.inquerito_id} "
                 f"(preso desde {placeholder.updated_at.strftime('%H:%M')} UTC)"
             )
             db.delete(placeholder)
             stats["placeholders_removidos"] += 1
+            try:
+                from app.services.alerta_service import enviar_alerta_sync, msg_placeholder_travado
+                titulo, mensagem, mensagem_html = msg_placeholder_travado(str(placeholder.inquerito_id), minutos_preso)
+                enviar_alerta_sync(
+                    "docs_stuck_reconcile", "alerta", titulo, mensagem, mensagem_html,
+                    identificador=str(placeholder.inquerito_id)
+                )
+            except Exception as _ae:
+                logger.warning(f"[RECONCILE] Falha ao enviar alerta placeholder: {_ae}")
         db.commit()
 
         # ── 4. Inquéritos com todos os docs concluídos mas sem relatório inicial ──

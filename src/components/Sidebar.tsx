@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { FolderOpen, Bot, UploadCloud, CalendarDays, ShieldAlert, ChevronRight, LogOut, Mic } from "lucide-react";
+import { FolderOpen, Bot, UploadCloud, CalendarDays, ShieldAlert, ChevronRight, LogOut, Mic, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export function Sidebar() {
-  const { toggleCopiloto, sidebarCollapsed, setSidebarCollapsed } = useAppStore();
+  const { toggleCopiloto, sidebarCollapsed, setSidebarCollapsed, toggleAlertas, alertasNaoLidos } = useAppStore();
   const pathname = usePathname();
   const router = useRouter();
 
@@ -71,6 +71,24 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className={cn("border-t border-zinc-800 mt-auto space-y-2 transition-all duration-300", sidebarCollapsed ? "p-2" : "p-4")}>
+        <button
+          onClick={toggleAlertas}
+          title="Alertas do Sistema"
+          className={cn(
+            "w-full flex items-center gap-3 rounded-md font-medium text-sm transition-colors text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/50",
+            sidebarCollapsed ? "px-2 py-2 justify-center" : "px-3 py-2"
+          )}
+        >
+          <div className="relative shrink-0">
+            <Bell size={18} />
+            {alertasNaoLidos > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold leading-none">
+                {alertasNaoLidos > 9 ? "9+" : alertasNaoLidos}
+              </span>
+            )}
+          </div>
+          {!sidebarCollapsed && <span>Alertas</span>}
+        </button>
         <button
           onClick={toggleCopiloto}
           title="Copiloto"

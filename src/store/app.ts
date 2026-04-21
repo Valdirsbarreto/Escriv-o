@@ -36,6 +36,13 @@ interface AppState {
   // Comando do copiloto para abrir uma peça (ts garante unicidade do trigger)
   pecaParaAbrir: { pecaId: string; ts: number } | null;
   setPecaParaAbrir: (cmd: { pecaId: string; ts: number } | null) => void;
+
+  // Painel de alertas do sistema
+  isAlertasOpen: boolean;
+  setAlertasOpen: (open: boolean) => void;
+  toggleAlertas: () => void;
+  alertasNaoLidos: number;
+  setAlertasNaoLidos: (n: number) => void;
 }
 
 const PDF_VIEWER_INITIAL: PDFViewerState = { open: false, url: null, page: 1, titulo: '', docId: null };
@@ -63,4 +70,10 @@ export const useAppStore = create<AppState>((set) => ({
 
   pecaParaAbrir: null,
   setPecaParaAbrir: (cmd) => set({ pecaParaAbrir: cmd }),
+
+  isAlertasOpen: false,
+  setAlertasOpen: (open) => set({ isAlertasOpen: open }),
+  toggleAlertas: () => set((state) => ({ isAlertasOpen: !state.isAlertasOpen })),
+  alertasNaoLidos: 0,
+  setAlertasNaoLidos: (n) => set({ alertasNaoLidos: n }),
 }));
