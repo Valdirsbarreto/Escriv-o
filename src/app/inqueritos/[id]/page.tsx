@@ -2105,6 +2105,8 @@ export default function InqueritoDetalhePage() {
         </div>
       )}
 
+      {activeTab === "autos" && (
+        <div className="mt-8">
           {/* Peças Individuais Extraídas */}
           <div>
             <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-4">
@@ -2313,7 +2315,7 @@ export default function InqueritoDetalhePage() {
                     </div>
                     <div className="text-sm text-zinc-300 leading-relaxed selection:bg-blue-500/30">
                       {frag.texto ? (
-                        frag.texto.split(/(?:\r?\n\s*){2,}/).map((para: string, j: number) => (
+                        frag.texto.split("\n\n").filter(Boolean).map((para: string, j: number) => (
                           <p key={j} className="mb-3 text-justify">
                             {para.replace(/\r?\n/g, ' ')}
                           </p>
@@ -2472,7 +2474,7 @@ export default function InqueritoDetalhePage() {
                 </div>
               ) : pecaViewer.peca?.conteudo_texto ? (
                 <div className="text-sm text-zinc-300 leading-relaxed font-sans selection:bg-amber-500/20">
-                  {pecaViewer.peca.conteudo_texto.split(/(?:\r?\n\s*){2,}/).map((para: string, i: number) => (
+                  {pecaViewer.peca.conteudo_texto.split("\n\n").filter(Boolean).map((para: string, i: number) => (
                     <p key={i} className="mb-4 text-justify">
                       {para.replace(/\r?\n/g, ' ')}
                     </p>
