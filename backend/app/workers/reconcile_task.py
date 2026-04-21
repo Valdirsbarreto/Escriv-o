@@ -93,7 +93,7 @@ def reconcile_pipeline_task(self):
             .where(
                 and_(
                     Documento.status_processamento == "concluido",
-                    Documento.updated_at < limite_docs,
+                    Documento.created_at < limite_docs,
                     func.length(Documento.texto_extraido) > 100,
                     ~exists(
                         select(PecaExtraida.id).where(
@@ -119,7 +119,7 @@ def reconcile_pipeline_task(self):
             .where(
                 and_(
                     Documento.status_processamento == "concluido",
-                    Documento.updated_at < limite_docs,
+                    Documento.created_at < limite_docs,
                     ~exists(
                         select(ResumoCache.id).where(
                             and_(
@@ -185,7 +185,7 @@ def reconcile_pipeline_task(self):
                             and_(
                                 Documento.inquerito_id == Inquerito.id,
                                 Documento.status_processamento == "concluido",
-                                Documento.updated_at < limite_relatorio,
+                                Documento.created_at < limite_relatorio,
                             )
                         )
                     ),
