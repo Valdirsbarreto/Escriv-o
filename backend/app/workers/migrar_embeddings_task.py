@@ -72,8 +72,8 @@ def migrar_embeddings_task(self):
                 with engine.begin() as conn:
                     conn.execute(
                         text(
-                            "UPDATE chunks SET embedding = :vec::vector "
-                            "WHERE id = :id::uuid AND embedding IS NULL"
+                            "UPDATE chunks SET embedding = CAST(:vec AS vector) "
+                            "WHERE id = CAST(:id AS uuid) AND embedding IS NULL"
                         ),
                         params,
                     )

@@ -44,13 +44,13 @@ class PgvectorService:
         params: Dict[str, Any] = {"vec": vec, "limit": limit}
 
         if inquerito_id:
-            where.append("c.inquerito_id = :inq_id::uuid")
+            where.append("c.inquerito_id = CAST(:inq_id AS uuid)")
             params["inq_id"] = inquerito_id
         if tipo_documento:
             where.append("c.tipo_documento = :tipo_doc")
             params["tipo_doc"] = tipo_documento
         if score_threshold is not None:
-            where.append("1 - (c.embedding <=> :vec::vector) >= :threshold")
+            where.append("1 - (c.embedding <=> CAST(:vec AS vector)) >= :threshold")
             params["threshold"] = score_threshold
 
         sql = text(f"""
@@ -63,11 +63,11 @@ class PgvectorService:
                 c.tipo_documento,
                 d.tipo_peca,
                 c.texto,
-                1 - (c.embedding <=> :vec::vector) AS score
+                1 - (c.embedding <=> CAST(:vec AS vector)) AS score
             FROM chunks c
             LEFT JOIN documentos d ON d.id = c.documento_id
             WHERE {" AND ".join(where)}
-            ORDER BY c.embedding <=> :vec::vector
+            ORDER BY c.embedding <=> CAST(:vec AS vector)
             LIMIT :limit
         """)
 
@@ -97,7 +97,7 @@ class PgvectorService:
         result = await self.db.execute(
             text(
                 "SELECT COUNT(*) FROM chunks "
-                "WHERE inquerito_id = :id::uuid AND embedding IS NOT NULL"
+                "WHERE inquerito_id = CAST(:id AS uuid) AND embedding IS NOT NULL"
             ),
             {"id": inquerito_id},
         )
@@ -134,7 +134,7 @@ class PgvectorService:
                         tipo_documento    AS tipo_peca,
                         LEFT(texto, 500)  AS texto
                     FROM chunks
-                    WHERE documento_id = :doc_id::uuid
+                    WHERE documento_id = CAST(:doc_id AS uuid)
                     ORDER BY pagina_inicial
                     LIMIT :limit
                 """),

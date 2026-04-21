@@ -372,7 +372,7 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
                             for chunk, emb in zip(chunk_records, embeddings)
                         ]
                         db.execute(
-                            _text("UPDATE chunks SET embedding = :vec::vector WHERE id = :id::uuid"),
+                            _text("UPDATE chunks SET embedding = CAST(:vec AS vector) WHERE id = CAST(:id AS uuid)"),
                             params,
                         )
                         db.commit()
