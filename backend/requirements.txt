@@ -8,7 +8,6 @@ pydantic==2.10.*
 pydantic-settings==2.7.*
 python-multipart==0.0.*
 python-dotenv==1.0.*
-qdrant-client==1.13.*
 redis==5.2.*
 celery==5.4.*
 boto3==1.36.*
