@@ -33,10 +33,8 @@ def _executar_resumo():
     limite_2h = agora - timedelta(hours=2)
     limite_6h = agora - timedelta(hours=6)
 
-    raw_url = settings.DATABASE_URL
-    sync_url = re.sub(r"^postgres(ql)?(\+asyncpg)?://", "postgresql://", raw_url)
     engine = create_engine(
-        _encode_password_in_url(sync_url),
+        _encode_password_in_url(settings.DATABASE_URL_SYNC),
         pool_size=1, max_overflow=0, pool_pre_ping=True, pool_recycle=300
     )
     Session = sessionmaker(bind=engine)

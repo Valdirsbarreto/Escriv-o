@@ -81,13 +81,9 @@ TEXTO DO DOCUMENTO:
 
 
 def _build_sync_engine():
-    raw_url = settings.DATABASE_URL
-    if raw_url.startswith("postgresql://") or raw_url.startswith("postgres://"):
-        sync_url = re.sub(r"^postgres(ql)?://", "postgresql://", raw_url)
-    else:
-        sync_url = raw_url.replace("postgresql+asyncpg://", "postgresql://")
+    # DATABASE_URL_SYNC aponta para porta 6543 (pgbouncer transaction mode) em produção
     return create_engine(
-        _encode_password_in_url(sync_url),
+        _encode_password_in_url(settings.DATABASE_URL_SYNC),
         pool_size=1,
         max_overflow=0,
         pool_pre_ping=True,

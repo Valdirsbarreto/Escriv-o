@@ -147,6 +147,7 @@ else:
 # Se estivermos em produção e o DATABASE_URL_SYNC ainda for o default (localhost),
 # vamos derivá-lo automaticamente do DATABASE_URL principal, removendo o driver '+asyncpg'.
 if "localhost" not in settings.DATABASE_URL and "localhost" in settings.DATABASE_URL_SYNC:
-    # Transforma postgresql+asyncpg://... em postgresql://...
-    settings.DATABASE_URL_SYNC = settings.DATABASE_URL.replace("+asyncpg", "")
+    # Transforma postgresql+asyncpg://... em postgresql://... e usa porta 6543 (pgbouncer
+    # transaction mode) para evitar esgotar o limite de 15 conexões do session mode (porta 5432).
+    settings.DATABASE_URL_SYNC = settings.DATABASE_URL.replace("+asyncpg", "").replace(":5432/", ":6543/")
 

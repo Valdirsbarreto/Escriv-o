@@ -113,10 +113,8 @@ def _salvar_alerta_db_sync(
         from app.core.database import _encode_password_in_url
         from app.models.alerta_log import AlertaLog
 
-        raw_url = settings.DATABASE_URL
-        sync_url = _re.sub(r"^postgres(ql)?(\+asyncpg)?://", "postgresql://", raw_url)
         engine = create_engine(
-            _encode_password_in_url(sync_url),
+            _encode_password_in_url(settings.DATABASE_URL_SYNC),
             pool_size=1,
             max_overflow=0,
             pool_pre_ping=True,

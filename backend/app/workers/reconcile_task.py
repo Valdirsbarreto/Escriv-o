@@ -17,7 +17,6 @@ Invariantes de segurança:
 """
 
 import logging
-import re
 import uuid
 from datetime import datetime, timedelta
 
@@ -38,10 +37,9 @@ GRACE_SINTESE = timedelta(minutes=30)
 
 
 def _build_sync_engine():
-    raw_url = settings.DATABASE_URL
-    sync_url = re.sub(r"^postgres(ql)?(\+asyncpg)?://", "postgresql://", raw_url)
+    # DATABASE_URL_SYNC aponta para porta 6543 (pgbouncer transaction mode) em produção
     return create_engine(
-        _encode_password_in_url(sync_url),
+        _encode_password_in_url(settings.DATABASE_URL_SYNC),
         pool_size=1,
         max_overflow=0,
         pool_pre_ping=True,
