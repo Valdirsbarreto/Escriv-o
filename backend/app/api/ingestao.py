@@ -190,6 +190,14 @@ async def admin_pgvector_info(db: AsyncSession = Depends(get_db)):
     return await PgvectorService(db).get_collection_info()
 
 
+@router.post("/admin/migrar-embeddings", tags=["Admin"])
+async def admin_migrar_embeddings():
+    """Dispara migração de embeddings do Qdrant para pgvector (task Celery)."""
+    from app.workers.migrar_embeddings_task import migrar_embeddings_task
+    task = migrar_embeddings_task.delay()
+    return {"status": "disparado", "task_id": str(task.id)}
+
+
 @router.post("/admin/reindexa/{inquerito_id}", tags=["Admin"])
 async def admin_reindexa_inquerito(inquerito_id: uuid.UUID):
     """

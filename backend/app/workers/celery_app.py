@@ -30,6 +30,7 @@ celery_app = Celery(
         "app.workers.reconcile_task",
         "app.workers.vigilancia_task",
         "app.workers.resumo_diario_task",
+        "app.workers.migrar_embeddings_task",
     ],
 )
 
