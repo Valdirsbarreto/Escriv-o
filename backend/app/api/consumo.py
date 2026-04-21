@@ -351,39 +351,30 @@ async def osint_por_inquerito(db: AsyncSession = Depends(get_db)):
 async def supabase_usage(db: AsyncSession = Depends(get_db)):
     """
     Métricas de uso do Supabase:
-    - db_size: tamanho do banco via pg_database_size() (direto, confiável)
-    - storage_size + egress: via Supabase Management API (se disponível)
-    Limites do plano gratuito: DB 500 MB, Storage 1 GB, Egress 5 GB.
+    - db_size: pg_database_size() — direto, confiável
+    - storage_size: storage.objects — direto via SQL
+    - egress: não acessível programaticamente no free tier
+    Limites: DB 500 MB, Storage 1 GB, Egress 5 GB.
     """
-    import httpx
-
     # Tamanho do banco direto via SQL
     db_result = await db.execute(text("SELECT pg_database_size(current_database()) AS size_bytes"))
     db_size_bytes = int(db_result.scalar() or 0)
 
-    # Storage e egress via Management API
+    # Storage via SQL direto na tabela storage.objects (Supabase expõe esse schema)
     storage_bytes = 0
-    egress_bytes = 0
     storage_fonte = "indisponivel"
+    try:
+        storage_result = await db.execute(
+            text("SELECT COALESCE(SUM((metadata->>'size')::bigint), 0) FROM storage.objects")
+        )
+        storage_bytes = int(storage_result.scalar() or 0)
+        storage_fonte = "direto"
+    except Exception as e:
+        logger.info(f"[SUPABASE-USAGE] Não foi possível consultar storage.objects: {e}")
 
-    token = settings.SUPABASE_MANAGEMENT_TOKEN
-    supabase_url = settings.SUPABASE_URL or ""
-    ref = supabase_url.replace("https://", "").split(".")[0] if supabase_url else None
-
-    if token and ref and len(ref) >= 5:
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.get(
-                    f"https://api.supabase.com/v1/projects/{ref}/usage",
-                    headers={"Authorization": f"Bearer {token}"},
-                )
-            if resp.status_code == 200:
-                data = resp.json()
-                storage_bytes = int(data.get("storage_size_bytes") or 0)
-                egress_bytes  = int(data.get("egress_bytes") or 0)
-                storage_fonte = "management_api"
-        except Exception:
-            pass
+    # Egress não é acessível via SQL nem via Management API no free tier
+    egress_bytes = 0
+    egress_fonte = "indisponivel"
 
     def _pct(used: float, limit: float) -> float:
         return round(min(100.0, used / limit * 100), 1) if limit > 0 else 0.0
@@ -410,7 +401,7 @@ async def supabase_usage(db: AsyncSession = Depends(get_db)):
             "size_mb": egress_mb,
             "limit_mb": 5120,
             "pct": _pct(egress_mb, 5120),
-            "fonte": storage_fonte,
+            "fonte": egress_fonte,
         },
     }
 
