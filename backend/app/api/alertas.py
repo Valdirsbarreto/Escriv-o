@@ -8,7 +8,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -70,6 +70,14 @@ async def marcar_todos_lidos(db: AsyncSession = Depends(get_db)):
     await db.execute(
         update(AlertaLog).where(AlertaLog.lido == False).values(lido=True)
     )
+    await db.commit()
+    return {"ok": True}
+
+
+@router.delete("")
+async def deletar_todos_alertas(db: AsyncSession = Depends(get_db)):
+    """Remove permanentemente todos os alertas."""
+    await db.execute(delete(AlertaLog))
     await db.commit()
     return {"ok": True}
 

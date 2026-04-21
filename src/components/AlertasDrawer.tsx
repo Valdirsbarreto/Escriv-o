@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { X, CheckCheck, Copy, Check, AlertTriangle, Info, AlertCircle } from "lucide-react";
+import { X, CheckCheck, Copy, Check, AlertTriangle, Info, AlertCircle, Trash2 } from "lucide-react";
 import { useAppStore } from "@/store/app";
 import {
   Sheet,
@@ -10,7 +10,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { getAlertas, getAlertasContagem, marcarAlertaLido, marcarTodosAlertasLidos } from "@/lib/api";
+import { getAlertas, getAlertasContagem, marcarAlertaLido, marcarTodosAlertasLidos, deletarTodosAlertas } from "@/lib/api";
 
 interface Alerta {
   id: string;
@@ -156,6 +156,16 @@ export function AlertasDrawer() {
     }
   };
 
+  const handleLimparTodos = async () => {
+    try {
+      await deletarTodosAlertas();
+      setAlertas([]);
+      setAlertasNaoLidos(0);
+    } catch {
+      // silencioso
+    }
+  };
+
   return (
     <Sheet open={isAlertasOpen} onOpenChange={setAlertasOpen}>
       <SheetContent
@@ -169,15 +179,27 @@ export function AlertasDrawer() {
           </SheetTitle>
           <div className="flex items-center gap-2">
             {alertas.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleMarcarTodosLidos}
-                className="text-xs text-zinc-400 hover:text-zinc-200 gap-1.5 h-7 px-2"
-              >
-                <CheckCheck size={13} />
-                Marcar todos como lidos
-              </Button>
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleMarcarTodosLidos}
+                  className="text-xs text-zinc-400 hover:text-zinc-200 gap-1.5 h-7 px-2"
+                >
+                  <CheckCheck size={13} />
+                  Marcar lidos
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLimparTodos}
+                  className="text-xs text-red-400/70 hover:text-red-400 gap-1.5 h-7 px-2"
+                  title="Apagar todos os alertas permanentemente"
+                >
+                  <Trash2 size={13} />
+                  Limpar
+                </Button>
+              </>
             )}
             <button
               onClick={() => setAlertasOpen(false)}

@@ -423,6 +423,25 @@ async def disparar_coleta_billing():
     return {"status": "disparado", "task_id": str(task.id)}
 
 
+@router.get("/billing/status/{task_id}")
+async def billing_status(task_id: str):
+    """Retorna status de uma task de coleta de billing pelo task_id."""
+    from celery.result import AsyncResult
+    from app.workers.celery_app import celery_app
+
+    result = AsyncResult(task_id, app=celery_app)
+    status = result.status  # PENDING | STARTED | SUCCESS | FAILURE | RETRY
+
+    payload: dict = {"task_id": task_id, "status": status}
+
+    if status == "SUCCESS":
+        payload["result"] = result.result
+    elif status == "FAILURE":
+        payload["error"] = str(result.info)
+
+    return payload
+
+
 @router.get("/diagnostico-ingestao")
 async def diagnostico_ingestao(db: AsyncSession = Depends(get_db)):
     """

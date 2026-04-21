@@ -11,7 +11,7 @@ import {
 import {
   getConsumoSaldo, getConsumoRanking, getConsumoHistorico, getConsumoModelos,
   getConsumoExternos, salvarCustoExterno, getConsumoConfig, salvarConsumoConfig,
-  getConsumoOsintPorInquerito, getConsumoProjecao, coletarBillingAgora, getSupabaseUsage,
+  getConsumoOsintPorInquerito, getConsumoProjecao, coletarBillingAgora, getSupabaseUsage, getBillingStatus,
 } from "@/lib/api";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -259,14 +259,45 @@ export default function AdminPage() {
 
   const handleColetar = async () => {
     setColetando(true);
-    setColetaMsg(null);
+    setColetaMsg("Disparando coleta...");
     try {
       const res = await coletarBillingAgora();
-      setColetaMsg(`Coleta disparada (task ${res.task_id?.slice(0, 8)}…). Aguarde ~10s e atualize.`);
-      setTimeout(() => carregar(), 12000);
+      const taskId: string = res.task_id;
+      setColetaMsg(`⏳ Coletando Vercel · Railway · Supabase · Serper…`);
+
+      let tentativas = 0;
+      const poll = setInterval(async () => {
+        tentativas++;
+        try {
+          const s = await getBillingStatus(taskId);
+          if (s.status === "SUCCESS") {
+            clearInterval(poll);
+            setColetaMsg("✅ Coleta concluída! Atualizando dados...");
+            setColetando(false);
+            setTimeout(() => { carregar(); setColetaMsg(null); }, 1500);
+          } else if (s.status === "FAILURE") {
+            clearInterval(poll);
+            setColetaMsg(`❌ Falha na coleta: ${s.error ?? "erro desconhecido"}`);
+            setColetando(false);
+          } else if (tentativas >= 40) {
+            // 40 × 3s = 2 min máximo
+            clearInterval(poll);
+            setColetaMsg("⚠️ Coleta demorou mais que o esperado. Tente Atualizar manualmente.");
+            setColetando(false);
+          } else {
+            const statusLabel: Record<string, string> = {
+              PENDING: "aguardando worker…",
+              STARTED: "em andamento…",
+              RETRY:   "tentando novamente…",
+            };
+            setColetaMsg(`⏳ ${statusLabel[s.status] ?? s.status} (${tentativas * 3}s)`);
+          }
+        } catch {
+          // falha no poll — continua tentando
+        }
+      }, 3000);
     } catch {
-      setColetaMsg("Erro ao disparar coleta. Verifique o backend.");
-    } finally {
+      setColetaMsg("❌ Erro ao disparar coleta. Verifique o backend.");
       setColetando(false);
     }
   };
@@ -327,7 +358,13 @@ export default function AdminPage() {
       </div>
 
       {coletaMsg && (
-        <div className="text-xs text-emerald-400 bg-emerald-950/30 border border-emerald-800/40 rounded-lg px-4 py-2">
+        <div className={`text-xs rounded-lg px-4 py-2 ${
+          coletaMsg.startsWith("❌")
+            ? "text-red-400 bg-red-950/30 border border-red-800/40"
+            : coletaMsg.startsWith("⚠️")
+            ? "text-yellow-400 bg-yellow-950/30 border border-yellow-800/40"
+            : "text-emerald-400 bg-emerald-950/30 border border-emerald-800/40"
+        }`}>
           {coletaMsg}
         </div>
       )}

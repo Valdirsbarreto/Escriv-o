@@ -178,6 +178,11 @@ export const coletarBillingAgora = async () => {
   return response.data;
 };
 
+export const getBillingStatus = async (taskId: string) => {
+  const response = await api.get(`/consumo/billing/status/${taskId}`);
+  return response.data;
+};
+
 export const getSupabaseUsage = async () => {
   const response = await api.get("/consumo/supabase-usage");
   return response.data;
@@ -201,6 +206,12 @@ export const marcarAlertaLido = async (id: string) => {
 export const marcarTodosAlertasLidos = async () => {
   const response = await api.put("/alertas/marcar-todos-lidos");
   return response.data;
+};
+
+export const deletarTodosAlertas = async () => {
+  const response = await api.delete("/alertas");
+  return response.data;
+};
 };
 
 export const osintGratuito = async (inqueritoId: string, pessoaId: string) => {
