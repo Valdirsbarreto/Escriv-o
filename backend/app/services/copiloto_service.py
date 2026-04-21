@@ -11,7 +11,7 @@ import uuid
 from typing import List, Dict, Optional, Any
 
 from app.services.embedding_service import EmbeddingService
-from app.services.qdrant_service import QdrantService
+from app.services.pgvector_service import PgvectorService
 from app.services.llm_service import LLMService
 from app.core.prompts import (
     SYSTEM_PROMPT_COPILOTO,
@@ -38,7 +38,6 @@ class CopilotoService:
 
     def __init__(self):
         self.embedding_service = EmbeddingService()
-        self.qdrant_service = QdrantService()
         self.llm_service = LLMService()
 
     async def processar_mensagem(
@@ -90,29 +89,29 @@ class CopilotoService:
         query_vector = await self.embedding_service.agenerate(query)
 
         # Se o embedding falhou (retornou vetor nulo), pula busca RAG
-        qdrant_ok = any(v != 0.0 for v in query_vector[:10])
+        embedding_ok = any(v != 0.0 for v in query_vector[:10])
         resultados = []
-        if qdrant_ok:
+        if embedding_ok and db is not None:
             try:
-                resultados = self.qdrant_service.search(
+                resultados = await PgvectorService(db).search(
                     query_vector=query_vector,
                     limit=max_chunks,
                     inquerito_id=inquerito_id,
                 )
             except Exception as e:
-                logger.warning(f"[COPILOTO] Qdrant indisponível: {e} — respondendo sem RAG")
+                logger.warning(f"[COPILOTO] pgvector indisponível: {e} — respondendo sem RAG")
 
         # Busca textual complementar (detecta nomes/termos não surfaçados pelo vetor)
         if db is not None:
             try:
                 text_hits = await self._busca_hibrida_texto(db, query, inquerito_id, limit=10)
                 if text_hits:
-                    # Deduplica: remove chunks que já vieram do Qdrant (por qdrant_point_id)
-                    ids_qdrant = {
+                    # Deduplica: remove chunks já vindos do pgvector
+                    ids_pgvector = {
                         r.get("payload", {}).get("chunk_id", "")
                         for r in resultados
                     }
-                    novos = [h for h in text_hits if h["payload"].get("chunk_id", "") not in ids_qdrant]
+                    novos = [h for h in text_hits if h["payload"].get("chunk_id", "") not in ids_pgvector]
                     resultados = resultados + novos
                     logger.info(f"[COPILOTO] Busca híbrida: +{len(novos)} chunks de texto")
             except Exception as e:

@@ -22,7 +22,7 @@ from app.models.empresa import Empresa
 from app.models.inquerito import Inquerito
 from app.models.pessoa import Pessoa
 from app.services.embedding_service import EmbeddingService
-from app.services.qdrant_service import QdrantService
+from app.services.pgvector_service import PgvectorService
 
 logger = logging.getLogger(__name__)
 
@@ -251,7 +251,6 @@ class CopilotoOsintService:
 
     def __init__(self):
         self.embedding_service = EmbeddingService()
-        self.qdrant_service = QdrantService()
 
     # ── Ponto de entrada ────────────────────────────────────────────────────
 
@@ -312,7 +311,7 @@ class CopilotoOsintService:
     ) -> Dict[str, Any]:
         """Analisa uma pessoa individualmente, incluindo histórico entre inquéritos."""
         inquerito_uuid = uuid.UUID(inquerito_id)
-        chunks = self._buscar_chunks(pessoa, inquerito_id)
+        chunks = await self._buscar_chunks(db, pessoa, inquerito_id)
         doc_dates = await self._datas_documentos(db, chunks)
         dados = self._detectar_dados(pessoa, chunks, doc_dates)
 
@@ -343,25 +342,27 @@ class CopilotoOsintService:
             "chunks_encontrados": len(chunks),
         }
 
-    # ── Busca Qdrant ─────────────────────────────────────────────────────────
+    # ── Busca pgvector ───────────────────────────────────────────────────────
 
-    def _buscar_chunks(
+    async def _buscar_chunks(
         self,
+        db,
         pessoa: Pessoa,
         inquerito_id: str,
         max_chunks: int = 10,
     ) -> List[Dict[str, Any]]:
         """
-        Busca semântica no Qdrant pelo nome da pessoa.
+        Busca semântica via pgvector pelo nome da pessoa.
         Se CPF disponível, faz segunda busca e filtra por presença numérica do CPF no texto.
         Deduplica por chunk_id.
         """
+        svc = PgvectorService(db)
         chunks: List[Dict[str, Any]] = []
 
         # Busca por nome
         try:
             vetor = self.embedding_service.generate(pessoa.nome)
-            chunks += self.qdrant_service.search(
+            chunks += await svc.search(
                 query_vector=vetor,
                 limit=max_chunks,
                 inquerito_id=inquerito_id,
@@ -375,7 +376,7 @@ class CopilotoOsintService:
             cpf_digits = re.sub(r'\D', '', pessoa.cpf)
             try:
                 vetor_cpf = self.embedding_service.generate(f"CPF {pessoa.cpf}")
-                candidatos = self.qdrant_service.search(
+                candidatos = await svc.search(
                     query_vector=vetor_cpf,
                     limit=5,
                     inquerito_id=inquerito_id,

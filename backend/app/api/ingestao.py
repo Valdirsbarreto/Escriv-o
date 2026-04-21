@@ -6,9 +6,11 @@ Endpoints para início de fluxo de ingestão e orquestração.
 import uuid
 import logging
 from typing import List
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import get_db
 from app.services.storage import StorageService
 from app.workers.orchestrator import orchestrate_new_inquerito
 
@@ -181,35 +183,11 @@ async def iniciar_ingestao_por_url(body: dict):
 
 # ── Admin: Gerenciamento Qdrant ───────────────────────────────────────────────
 
-@router.post("/admin/qdrant/recreate", tags=["Admin"])
-async def admin_recreate_qdrant():
-    """
-    Apaga e recria a coleção Qdrant com as dimensões corretas (768-dim / text-embedding-004).
-    ATENÇÃO: apaga todos os vetores indexados — re-indexar documentos após executar.
-    """
-    from app.services.qdrant_service import QdrantService
-    svc = QdrantService()
-    result = svc.recreate_collection()
-    return result
-
-
-@router.get("/admin/qdrant/info", tags=["Admin"])
-async def admin_qdrant_info():
-    """Retorna informações da coleção Qdrant (dims, total de pontos, status)."""
-    from app.services.qdrant_service import QdrantService
-    svc = QdrantService()
-    try:
-        info = svc.client.get_collection(svc.collection_name)
-        config = info.config.params.vectors
-        dims = config.size if hasattr(config, "size") else "?"
-        return {
-            "collection": svc.collection_name,
-            "dims": dims,
-            "points_count": info.points_count,
-            "status": info.status.value,
-        }
-    except Exception as e:
-        return {"erro": str(e)}
+@router.get("/admin/pgvector/info", tags=["Admin"])
+async def admin_pgvector_info(db: AsyncSession = Depends(get_db)):
+    """Retorna informações do índice pgvector (total de embeddings, status)."""
+    from app.services.pgvector_service import PgvectorService
+    return await PgvectorService(db).get_collection_info()
 
 
 @router.post("/admin/reindexa/{inquerito_id}", tags=["Admin"])

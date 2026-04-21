@@ -516,12 +516,7 @@ async def excluir_documento(
         except Exception:
             pass
 
-    # Remover vetores do Qdrant
-    try:
-        from app.services.qdrant_service import QdrantService
-        QdrantService().delete_by_documento(did)
-    except Exception:
-        pass
+    # Embeddings ficam em chunks — deletados na linha abaixo junto com o documento
 
     # Deletar dados dependentes e o documento
     await db.execute(text("DELETE FROM pecas_extraidas WHERE documento_id = :id"), {"id": did})
@@ -556,13 +551,7 @@ async def excluir_inquerito(
         except Exception:
             pass
 
-    # Remover vetores do Qdrant
-    try:
-        from app.services.qdrant_service import QdrantService
-        qdrant = QdrantService()
-        qdrant.delete_by_inquerito(str(inquerito_id))
-    except Exception:
-        pass
+    # Embeddings ficam em chunks — deletados junto com os documentos abaixo
 
     # Deletar na ordem correta (respeitar FKs sem CASCADE no banco)
     iid = str(inquerito_id)
@@ -703,11 +692,10 @@ async def citacoes_documento(
         raise HTTPException(status_code=404, detail="Documento não encontrado")
 
     try:
-        from app.services.qdrant_service import QdrantService
-        qdrant = QdrantService()
-        chunks = qdrant.scroll_by_documento(str(documento_id))
+        from app.services.pgvector_service import PgvectorService
+        chunks = await PgvectorService(db).scroll_by_documento(str(documento_id))
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Qdrant indisponível: {e}")
+        raise HTTPException(status_code=503, detail=f"pgvector indisponível: {e}")
 
     return {
         "documento_id": str(documento_id),

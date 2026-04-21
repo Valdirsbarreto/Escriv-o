@@ -356,46 +356,34 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
                                duracao_ms=int((time.time() - t0) * 1000))
                     embeddings = None
 
-                # ── 6. Indexação no Qdrant ────────────────────────────────────
+                # ── 6. Indexação pgvector ─────────────────────────────────────
                 if embeddings:
                     t0 = time.time()
-                    logger.info("[INGESTÃO] Indexando no Qdrant")
+                    logger.info("[INGESTÃO] Indexando embeddings no PostgreSQL (pgvector)")
 
                     try:
-                        from app.services.qdrant_service import QdrantService
+                        from sqlalchemy import text as _text
 
-                        qdrant = QdrantService()
-                        qdrant.ensure_collection(vector_size=768)
-
-                        points = [
+                        params = [
                             {
+                                "vec": "[" + ",".join(str(v) for v in emb) + "]",
                                 "id": str(chunk.id),
-                                "vector": embedding,
-                                "payload": {
-                                    "inquerito_id": inquerito_id,
-                                    "documento_id": documento_id,
-                                    "chunk_id": str(chunk.id),
-                                    "pagina_inicial": chunk.pagina_inicial,
-                                    "pagina_final": chunk.pagina_final,
-                                    "tipo_documento": chunk.tipo_documento or "",
-                                    "texto_preview": chunk.texto[:500],
-                                },
                             }
-                            for chunk, embedding in zip(chunk_records, embeddings)
+                            for chunk, emb in zip(chunk_records, embeddings)
                         ]
-
-                        total_indexado = qdrant.upsert_chunks(points)
-
-                        for chunk in chunk_records:
-                            chunk.qdrant_point_id = str(chunk.id)
+                        db.execute(
+                            _text("UPDATE chunks SET embedding = :vec::vector WHERE id = :id::uuid"),
+                            params,
+                        )
                         db.commit()
 
+                        total_indexado = len(params)
                         _log_etapa(db, documento_id, inquerito_id, "indexacao", "concluido",
                                    duracao_ms=int((time.time() - t0) * 1000),
                                    dados_extras={"total_indexado": total_indexado})
 
                     except Exception as e:
-                        logger.warning(f"[INGESTÃO] Indexação Qdrant falhou: {e}")
+                        logger.warning(f"[INGESTÃO] Indexação pgvector falhou: {e}")
                         _log_etapa(db, documento_id, inquerito_id, "indexacao", "erro",
                                    detalhes=str(e),
                                    duracao_ms=int((time.time() - t0) * 1000))
@@ -429,12 +417,7 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
                 doc.tipo_peca = categoria
                 logger.info(f"[INGESTÃO] Documento classificado como: {categoria}")
 
-                # Enriquecer payload Qdrant com tipo_peca (para busca filtrada por tipo)
-                try:
-                    from app.services.qdrant_service import QdrantService as _QS
-                    _QS().set_payload_by_documento(documento_id, {"tipo_peca": categoria})
-                except Exception as _qe:
-                    logger.warning(f"[INGESTÃO] Falha ao atualizar tipo_peca no Qdrant: {_qe}")
+                # tipo_peca já atualizado em doc.tipo_peca acima — pgvector faz JOIN no search
                 
                 # Upsert de entidades (deduplicação por CPF > nome normalizado)
                 inquerito_uuid = uuid.UUID(inquerito_id)
@@ -619,12 +602,7 @@ def reclassificar_documento(self, documento_id: str, inquerito_id: str):
             db.commit()
             logger.info(f"[RECLASSIF] doc={documento_id} → {categoria}")
 
-            # Propagar para chunks Qdrant
-            try:
-                from app.services.qdrant_service import QdrantService
-                QdrantService().set_payload_by_documento(documento_id, {"tipo_peca": categoria})
-            except Exception as qe:
-                logger.warning(f"[RECLASSIF] Falha ao atualizar Qdrant: {qe}")
+            # tipo_peca em doc.tipo_peca — pgvector faz JOIN no search, nada mais a fazer
 
             return {"status": "ok", "documento_id": documento_id, "tipo_peca": categoria}
 

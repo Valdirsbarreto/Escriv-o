@@ -62,12 +62,11 @@ async def busca_semantica(
             detail="Serviço de embeddings indisponível. Verifique se sentence-transformers está instalado.",
         )
 
-    # Buscar no Qdrant
+    # Buscar no pgvector
     try:
-        from app.services.qdrant_service import QdrantService
-        qdrant = QdrantService()
+        from app.services.pgvector_service import PgvectorService
 
-        results = qdrant.search(
+        results = await PgvectorService(db).search(
             query_vector=query_vector,
             limit=dados.limit,
             inquerito_id=str(dados.inquerito_id),
@@ -75,10 +74,10 @@ async def busca_semantica(
             score_threshold=dados.score_minimo,
         )
     except Exception as e:
-        logger.error(f"[BUSCA] Erro ao buscar no Qdrant: {e}")
+        logger.error(f"[BUSCA] Erro ao buscar no pgvector: {e}")
         raise HTTPException(
             status_code=503,
-            detail="Serviço de busca vetorial indisponível. Verifique se o Qdrant está rodando.",
+            detail="Serviço de busca vetorial indisponível.",
         )
 
     # Formatar resultados
@@ -120,11 +119,10 @@ async def status_indexacao(
         raise HTTPException(status_code=404, detail="Inquérito não encontrado")
 
     try:
-        from app.services.qdrant_service import QdrantService
-        qdrant = QdrantService()
-
-        total_chunks = qdrant.count_by_inquerito(str(inquerito_id))
-        colecao_info = qdrant.get_collection_info()
+        from app.services.pgvector_service import PgvectorService
+        svc = PgvectorService(db)
+        total_chunks = await svc.count_by_inquerito(str(inquerito_id))
+        colecao_info = await svc.get_collection_info()
     except Exception:
         total_chunks = 0
         colecao_info = {"status": "indisponível"}
