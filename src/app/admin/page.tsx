@@ -11,7 +11,7 @@ import {
 import {
   getConsumoSaldo, getConsumoRanking, getConsumoHistorico, getConsumoModelos,
   getConsumoExternos, salvarCustoExterno, getConsumoConfig, salvarConsumoConfig,
-  getConsumoOsintPorInquerito, getConsumoProjecao, coletarBillingAgora,
+  getConsumoOsintPorInquerito, getConsumoProjecao, coletarBillingAgora, getSupabaseUsage,
 } from "@/lib/api";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -179,6 +179,7 @@ export default function AdminPage() {
   const [config, setConfig]     = useState<any>(null);
   const [osintInqueritos, setOsintInqueritos] = useState<any[]>([]);
   const [projecao, setProjecao] = useState<any>(null);
+  const [supabaseUsage, setSupabaseUsage] = useState<any>(null);
   const [loading, setLoading]   = useState(true);
   const [coletando, setColetando] = useState(false);
   const [coletaMsg, setColetaMsg] = useState<string | null>(null);
@@ -194,7 +195,7 @@ export default function AdminPage() {
     setLoading(true);
     const mesRef = mes || mesSelecionado;
     try {
-      const [s, r, h, m, e, c, o, p] = await Promise.all([
+      const [s, r, h, m, e, c, o, p, su] = await Promise.all([
         getConsumoSaldo(),
         getConsumoRanking(),
         getConsumoHistorico(30),
@@ -203,6 +204,7 @@ export default function AdminPage() {
         getConsumoConfig(),
         getConsumoOsintPorInquerito(),
         getConsumoProjecao(),
+        getSupabaseUsage().catch(() => null),
       ]);
       setSaldo(s);
       setRanking(r);
@@ -212,6 +214,7 @@ export default function AdminPage() {
       setConfig(c);
       setOsintInqueritos(o);
       setProjecao(p);
+      setSupabaseUsage(su);
       setCfgBudget(String(c.budget_brl));
       setCfgAlerta(String(c.budget_alert_brl));
       setCfgCotacao(String(c.cotacao_dolar));
@@ -431,6 +434,58 @@ export default function AdminPage() {
                     style={{ width: `${Math.min(100, projecao.percentual_projetado)}%` }}
                   />
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ── Supabase — Uso de Armazenamento ─────────────────────────── */}
+          {supabaseUsage && (
+            <Card className="bg-zinc-900 border-zinc-800">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div className="flex items-center gap-2">
+                  <Database size={14} className="text-emerald-400" />
+                  <CardTitle className="text-sm font-semibold">Supabase — Armazenamento</CardTitle>
+                </div>
+                <span className="text-xs text-zinc-500">plano gratuito</span>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {[
+                  { label: "Banco de dados (PostgreSQL)", key: "db",      color: "bg-emerald-500", icon: "🗄️" },
+                  { label: "Storage (PDFs / arquivos)",   key: "storage", color: "bg-sky-500",     icon: "📁" },
+                  { label: "Egress (transferência)",       key: "egress",  color: "bg-violet-500",  icon: "↗️" },
+                ].map(({ label, key, color, icon }) => {
+                  const m = supabaseUsage[key];
+                  if (!m) return null;
+                  const usedStr = m.size_mb >= 1024
+                    ? `${(m.size_mb / 1024).toFixed(2)} GB`
+                    : `${m.size_mb} MB`;
+                  const limStr = m.limit_mb >= 1024
+                    ? `${(m.limit_mb / 1024).toFixed(0)} GB`
+                    : `${m.limit_mb} MB`;
+                  const alert = m.pct >= 80;
+                  return (
+                    <div key={key} className="space-y-1.5">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-zinc-300 flex items-center gap-1.5">
+                          <span className="text-base">{icon}</span>
+                          {label}
+                          {m.fonte === "indisponivel" && (
+                            <span className="text-xs text-zinc-600 ml-1">(API indisponível)</span>
+                          )}
+                        </span>
+                        <span className={`font-semibold text-xs ${alert ? "text-yellow-400" : "text-zinc-300"}`}>
+                          {usedStr} / {limStr} ({m.pct}%)
+                        </span>
+                      </div>
+                      <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${alert ? "bg-yellow-400" : color}`}
+                          style={{ width: `${Math.max(1, m.pct)}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
           )}

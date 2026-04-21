@@ -347,6 +347,74 @@ async def osint_por_inquerito(db: AsyncSession = Depends(get_db)):
     ]
 
 
+@router.get("/supabase-usage")
+async def supabase_usage(db: AsyncSession = Depends(get_db)):
+    """
+    Métricas de uso do Supabase:
+    - db_size: tamanho do banco via pg_database_size() (direto, confiável)
+    - storage_size + egress: via Supabase Management API (se disponível)
+    Limites do plano gratuito: DB 500 MB, Storage 1 GB, Egress 5 GB.
+    """
+    import httpx
+
+    # Tamanho do banco direto via SQL
+    db_result = await db.execute(text("SELECT pg_database_size(current_database()) AS size_bytes"))
+    db_size_bytes = int(db_result.scalar() or 0)
+
+    # Storage e egress via Management API
+    storage_bytes = 0
+    egress_bytes = 0
+    storage_fonte = "indisponivel"
+
+    token = settings.SUPABASE_MANAGEMENT_TOKEN
+    supabase_url = settings.SUPABASE_URL or ""
+    ref = supabase_url.replace("https://", "").split(".")[0] if supabase_url else None
+
+    if token and ref and len(ref) >= 5:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.get(
+                    f"https://api.supabase.com/v1/projects/{ref}/usage",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+            if resp.status_code == 200:
+                data = resp.json()
+                storage_bytes = int(data.get("storage_size_bytes") or 0)
+                egress_bytes  = int(data.get("egress_bytes") or 0)
+                storage_fonte = "management_api"
+        except Exception:
+            pass
+
+    def _pct(used: float, limit: float) -> float:
+        return round(min(100.0, used / limit * 100), 1) if limit > 0 else 0.0
+
+    MB = 1024 ** 2
+    db_mb      = round(db_size_bytes / MB, 1)
+    storage_mb = round(storage_bytes / MB, 1)
+    egress_mb  = round(egress_bytes / MB, 1)
+
+    return {
+        "db": {
+            "size_mb": db_mb,
+            "limit_mb": 500,
+            "pct": _pct(db_mb, 500),
+            "fonte": "direto",
+        },
+        "storage": {
+            "size_mb": storage_mb,
+            "limit_mb": 1024,
+            "pct": _pct(storage_mb, 1024),
+            "fonte": storage_fonte,
+        },
+        "egress": {
+            "size_mb": egress_mb,
+            "limit_mb": 5120,
+            "pct": _pct(egress_mb, 5120),
+            "fonte": storage_fonte,
+        },
+    }
+
+
 @router.post("/billing/coletar-agora")
 async def disparar_coleta_billing():
     """Dispara manualmente a coleta de custos externos (teste/admin)."""

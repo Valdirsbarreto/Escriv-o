@@ -178,6 +178,11 @@ export const coletarBillingAgora = async () => {
   return response.data;
 };
 
+export const getSupabaseUsage = async () => {
+  const response = await api.get("/consumo/supabase-usage");
+  return response.data;
+};
+
 export const osintGratuito = async (inqueritoId: string, pessoaId: string) => {
   const response = await api.get(
     `/agentes/osint/gratuito/${inqueritoId}/${pessoaId}`,
