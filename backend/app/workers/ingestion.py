@@ -194,185 +194,211 @@ def ingest_document(self, documento_id: str, inquerito_id: str):
                 logger.error(f"Documento {documento_id} não encontrado")
                 return {"status": "erro", "mensagem": "Documento não encontrado"}
 
+            # ── Guard: reutilizar texto já extraído (economizar egress Supabase) ─
+            # Se texto_extraido já existe com conteúdo substancial E chunks estão
+            # salvos, pular download + extração + chunking + embeddings + Qdrant.
+            # Cobre os casos: rolling deploy matou a task após passo 4, retry, ou
+            # re-ingest manual de documento já processado.
+            _chunks_existentes = db.execute(
+                select(func.count(Chunk.id))
+                .where(Chunk.documento_id == uuid.UUID(documento_id))
+            ).scalar() or 0
+
+            _skip_extracao = (
+                bool(doc.texto_extraido) and len(doc.texto_extraido) > 500
+                and _chunks_existentes > 0
+            )
+
             doc.status_processamento = "processando"
             db.commit()
 
-            # ── 1. Download do arquivo ────────────────────────
-            t0 = time.time()
-            logger.info(f"[INGESTÃO] Baixando arquivo: {doc.storage_path}")
-            storage = StorageService()
-
-            try:
-                import asyncio
-                loop = asyncio.new_event_loop()
-                content = loop.run_until_complete(storage.download_file(doc.storage_path))
-                loop.close()
-            except Exception as e:
-                _log_etapa(db, documento_id, inquerito_id, "download", "erro",
-                           detalhes=str(e))
-                logger.error(f"Erro ao baixar arquivo: {e}")
-                doc.status_processamento = "erro"
-                db.commit()
-                raise self.retry(exc=e)
-
-            _log_etapa(db, documento_id, inquerito_id, "download", "concluido",
-                       duracao_ms=int((time.time() - t0) * 1000),
-                       dados_extras={"tamanho_bytes": len(content)})
-
-            # ── 2. Extração de texto + OCR seletivo (ou OCR de imagem) ───────────
-            t0 = time.time()
-            logger.info("[INGESTÃO] Extraindo texto do documento")
-            
-            content_type = "application/pdf"
-            ext = doc.storage_path.rsplit(".", 1)[-1].lower() if "." in doc.storage_path else "pdf"
-            if ext in ("tif", "tiff"):
-                content_type = "image/tiff"
-            elif ext in ("jpg", "jpeg"):
-                content_type = "image/jpeg"
-            elif ext == "png":
-                content_type = "image/png"
-
-            pdf_service = PDFExtractorService()
-            extraction = pdf_service.extract_any_file(content, content_type)
-
-            doc.total_paginas = extraction["total_paginas"]
-            doc.texto_extraido = extraction["texto_completo"][:100000]
-
-            paginas_ocr = [
-                p["numero"] for p in extraction["paginas"]
-                if p.get("origem") == "ocr"
-            ]
-            paginas_pendentes = [
-                p["numero"] for p in extraction["paginas"]
-                if p.get("precisa_ocr", False)
-            ]
-
-            if paginas_pendentes:
-                doc.status_ocr = "parcial"
-            elif paginas_ocr:
-                doc.status_ocr = "completo_com_ocr"
-            else:
-                doc.status_ocr = "completo"
-
-            db.commit()
-
-            _log_etapa(db, documento_id, inquerito_id, "extracao", "concluido",
-                       duracao_ms=int((time.time() - t0) * 1000),
-                       dados_extras={
-                           "total_paginas": extraction["total_paginas"],
-                           "paginas_ocr": len(paginas_ocr),
-                           "paginas_pendentes": len(paginas_pendentes),
-                       })
-
-            # ── 3. Chunking ──────────────────────────────────
-            t0 = time.time()
-            logger.info("[INGESTÃO] Dividindo em chunks")
-            chunks_data = pdf_service.chunk_text(
-                extraction["paginas"],
-                chunk_size=600,
-                overlap=100,
-            )
-
-            logger.info(f"[INGESTÃO] {len(chunks_data)} chunks gerados")
-
-            _log_etapa(db, documento_id, inquerito_id, "chunking", "concluido",
-                       duracao_ms=int((time.time() - t0) * 1000),
-                       dados_extras={"total_chunks": len(chunks_data)})
-
-            # ── 4. Salvar chunks no PostgreSQL ────────────────
-            chunk_records = []
-            for chunk_data in chunks_data:
-                chunk = Chunk(
-                    inquerito_id=uuid.UUID(inquerito_id),
-                    documento_id=uuid.UUID(documento_id),
-                    pagina_inicial=chunk_data["pagina_inicial"],
-                    pagina_final=chunk_data["pagina_final"],
-                    texto=chunk_data["texto"],
+            if _skip_extracao:
+                logger.info(
+                    f"[INGESTÃO] Reutilizando texto existente ({len(doc.texto_extraido)} chars, "
+                    f"{_chunks_existentes} chunks) — download ignorado"
                 )
-                db.add(chunk)
-                chunk_records.append(chunk)
-
-            db.commit()
-
-            # Refresh para obter IDs
-            for chunk in chunk_records:
-                db.refresh(chunk)
-
-            # ── 5. Embeddings ─────────────────────────────────
-            t0 = time.time()
-            logger.info(f"[INGESTÃO] Gerando embeddings para {len(chunk_records)} chunks")
-
-            try:
-                from app.services.embedding_service import EmbeddingService
-
-                embedding_service = EmbeddingService()
-                textos = [c.texto for c in chunk_records]
-                embeddings = embedding_service.generate_batch(textos, batch_size=64)
-
-                for chunk, embedding in zip(chunk_records, embeddings):
-                    chunk.embedding_model = "text-embedding-004"
-
-                db.commit()
-
-                _log_etapa(db, documento_id, inquerito_id, "embedding", "concluido",
-                           duracao_ms=int((time.time() - t0) * 1000),
-                           dados_extras={
-                               "total_embeddings": len(embeddings),
-                               "modelo": "text-embedding-004",
-                               "dimensoes": 768,
-                           })
-
-            except Exception as e:
-                logger.warning(f"[INGESTÃO] Embeddings falharam: {e}")
-                _log_etapa(db, documento_id, inquerito_id, "embedding", "erro",
-                           detalhes=str(e),
-                           duracao_ms=int((time.time() - t0) * 1000))
-                embeddings = None
-
-            # ── 6. Indexação no Qdrant ────────────────────────
-            if embeddings:
+                _log_etapa(db, documento_id, inquerito_id, "download", "skipped",
+                           dados_extras={"motivo": "texto_extraido reutilizado", "chunks": _chunks_existentes})
+                extraction = {
+                    "texto_completo": doc.texto_extraido,
+                    "total_paginas": 0,  # 0 para não duplicar inquerito.total_paginas
+                    "paginas": [],
+                }
+            else:
+                # ── 1. Download do arquivo ────────────────────────────────────
                 t0 = time.time()
-                logger.info("[INGESTÃO] Indexando no Qdrant")
+                logger.info(f"[INGESTÃO] Baixando arquivo: {doc.storage_path}")
+                storage = StorageService()
 
                 try:
-                    from app.services.qdrant_service import QdrantService
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    content = loop.run_until_complete(storage.download_file(doc.storage_path))
+                    loop.close()
+                except Exception as e:
+                    _log_etapa(db, documento_id, inquerito_id, "download", "erro",
+                               detalhes=str(e))
+                    logger.error(f"Erro ao baixar arquivo: {e}")
+                    doc.status_processamento = "erro"
+                    db.commit()
+                    raise self.retry(exc=e)
 
-                    qdrant = QdrantService()
-                    qdrant.ensure_collection(vector_size=768)
+                _log_etapa(db, documento_id, inquerito_id, "download", "concluido",
+                           duracao_ms=int((time.time() - t0) * 1000),
+                           dados_extras={"tamanho_bytes": len(content)})
 
-                    points = [
-                        {
-                            "id": str(chunk.id),
-                            "vector": embedding,
-                            "payload": {
-                                "inquerito_id": inquerito_id,
-                                "documento_id": documento_id,
-                                "chunk_id": str(chunk.id),
-                                "pagina_inicial": chunk.pagina_inicial,
-                                "pagina_final": chunk.pagina_final,
-                                "tipo_documento": chunk.tipo_documento or "",
-                                "texto_preview": chunk.texto[:500],
-                            },
-                        }
-                        for chunk, embedding in zip(chunk_records, embeddings)
-                    ]
+                # ── 2. Extração de texto + OCR seletivo ──────────────────────
+                t0 = time.time()
+                logger.info("[INGESTÃO] Extraindo texto do documento")
 
-                    total_indexado = qdrant.upsert_chunks(points)
+                content_type = "application/pdf"
+                ext = doc.storage_path.rsplit(".", 1)[-1].lower() if "." in doc.storage_path else "pdf"
+                if ext in ("tif", "tiff"):
+                    content_type = "image/tiff"
+                elif ext in ("jpg", "jpeg"):
+                    content_type = "image/jpeg"
+                elif ext == "png":
+                    content_type = "image/png"
 
-                    # Atualizar qdrant_point_id nos chunks
-                    for chunk in chunk_records:
-                        chunk.qdrant_point_id = str(chunk.id)
+                pdf_service = PDFExtractorService()
+                extraction = pdf_service.extract_any_file(content, content_type)
+
+                doc.total_paginas = extraction["total_paginas"]
+                doc.texto_extraido = extraction["texto_completo"][:100000]
+
+                paginas_ocr = [
+                    p["numero"] for p in extraction["paginas"]
+                    if p.get("origem") == "ocr"
+                ]
+                paginas_pendentes = [
+                    p["numero"] for p in extraction["paginas"]
+                    if p.get("precisa_ocr", False)
+                ]
+
+                if paginas_pendentes:
+                    doc.status_ocr = "parcial"
+                elif paginas_ocr:
+                    doc.status_ocr = "completo_com_ocr"
+                else:
+                    doc.status_ocr = "completo"
+
+                db.commit()
+
+                _log_etapa(db, documento_id, inquerito_id, "extracao", "concluido",
+                           duracao_ms=int((time.time() - t0) * 1000),
+                           dados_extras={
+                               "total_paginas": extraction["total_paginas"],
+                               "paginas_ocr": len(paginas_ocr),
+                               "paginas_pendentes": len(paginas_pendentes),
+                           })
+
+                # ── 3. Chunking ───────────────────────────────────────────────
+                t0 = time.time()
+                logger.info("[INGESTÃO] Dividindo em chunks")
+                chunks_data = pdf_service.chunk_text(
+                    extraction["paginas"],
+                    chunk_size=600,
+                    overlap=100,
+                )
+
+                logger.info(f"[INGESTÃO] {len(chunks_data)} chunks gerados")
+
+                _log_etapa(db, documento_id, inquerito_id, "chunking", "concluido",
+                           duracao_ms=int((time.time() - t0) * 1000),
+                           dados_extras={"total_chunks": len(chunks_data)})
+
+                # ── 4. Salvar chunks no PostgreSQL ────────────────────────────
+                chunk_records = []
+                for chunk_data in chunks_data:
+                    chunk = Chunk(
+                        inquerito_id=uuid.UUID(inquerito_id),
+                        documento_id=uuid.UUID(documento_id),
+                        pagina_inicial=chunk_data["pagina_inicial"],
+                        pagina_final=chunk_data["pagina_final"],
+                        texto=chunk_data["texto"],
+                    )
+                    db.add(chunk)
+                    chunk_records.append(chunk)
+
+                db.commit()
+
+                for chunk in chunk_records:
+                    db.refresh(chunk)
+
+                # ── 5. Embeddings ─────────────────────────────────────────────
+                t0 = time.time()
+                logger.info(f"[INGESTÃO] Gerando embeddings para {len(chunk_records)} chunks")
+
+                try:
+                    from app.services.embedding_service import EmbeddingService
+
+                    embedding_service = EmbeddingService()
+                    textos = [c.texto for c in chunk_records]
+                    embeddings = embedding_service.generate_batch(textos, batch_size=64)
+
+                    for chunk, embedding in zip(chunk_records, embeddings):
+                        chunk.embedding_model = "text-embedding-004"
+
                     db.commit()
 
-                    _log_etapa(db, documento_id, inquerito_id, "indexacao", "concluido",
+                    _log_etapa(db, documento_id, inquerito_id, "embedding", "concluido",
                                duracao_ms=int((time.time() - t0) * 1000),
-                               dados_extras={"total_indexado": total_indexado})
+                               dados_extras={
+                                   "total_embeddings": len(embeddings),
+                                   "modelo": "text-embedding-004",
+                                   "dimensoes": 768,
+                               })
 
                 except Exception as e:
-                    logger.warning(f"[INGESTÃO] Indexação Qdrant falhou: {e}")
-                    _log_etapa(db, documento_id, inquerito_id, "indexacao", "erro",
+                    logger.warning(f"[INGESTÃO] Embeddings falharam: {e}")
+                    _log_etapa(db, documento_id, inquerito_id, "embedding", "erro",
                                detalhes=str(e),
                                duracao_ms=int((time.time() - t0) * 1000))
+                    embeddings = None
+
+                # ── 6. Indexação no Qdrant ────────────────────────────────────
+                if embeddings:
+                    t0 = time.time()
+                    logger.info("[INGESTÃO] Indexando no Qdrant")
+
+                    try:
+                        from app.services.qdrant_service import QdrantService
+
+                        qdrant = QdrantService()
+                        qdrant.ensure_collection(vector_size=768)
+
+                        points = [
+                            {
+                                "id": str(chunk.id),
+                                "vector": embedding,
+                                "payload": {
+                                    "inquerito_id": inquerito_id,
+                                    "documento_id": documento_id,
+                                    "chunk_id": str(chunk.id),
+                                    "pagina_inicial": chunk.pagina_inicial,
+                                    "pagina_final": chunk.pagina_final,
+                                    "tipo_documento": chunk.tipo_documento or "",
+                                    "texto_preview": chunk.texto[:500],
+                                },
+                            }
+                            for chunk, embedding in zip(chunk_records, embeddings)
+                        ]
+
+                        total_indexado = qdrant.upsert_chunks(points)
+
+                        for chunk in chunk_records:
+                            chunk.qdrant_point_id = str(chunk.id)
+                        db.commit()
+
+                        _log_etapa(db, documento_id, inquerito_id, "indexacao", "concluido",
+                                   duracao_ms=int((time.time() - t0) * 1000),
+                                   dados_extras={"total_indexado": total_indexado})
+
+                    except Exception as e:
+                        logger.warning(f"[INGESTÃO] Indexação Qdrant falhou: {e}")
+                        _log_etapa(db, documento_id, inquerito_id, "indexacao", "erro",
+                                   detalhes=str(e),
+                                   duracao_ms=int((time.time() - t0) * 1000))
 
             # ── 7. Classificação e 8. Extração de Identidades (NER) ────────────
             t0 = time.time()
