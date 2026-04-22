@@ -43,7 +43,7 @@ function formatarDuracao(s: number) {
   return `${m}:${sec}`;
 }
 
-const SEGMENT_MS = 5 * 60 * 1000; // 5 minutos por segmento
+const SEGMENT_MS = 3 * 60 * 1000; // 3 minutos por segmento
 
 export default function OitivaPage() {
   const { inqueritoAtivoId } = useAppStore();
