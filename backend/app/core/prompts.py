@@ -1751,12 +1751,20 @@ Converta a transcrição abaixo em declarações no formato "Que," conforme o pa
 10. Se não houver conteúdo substantivo, retorne: [SEM_CONTEUDO]
 11. Retorne APENAS as cláusulas "Que,". Sem "Inquerido disse:", sem cabeçalho, sem assinatura."""
 
-PROMPT_EXTRAIR_QUALIFICACAO = """Extraia os dados de qualificação do declarante presentes nesta transcrição de oitiva policial.
+PROMPT_EXTRAIR_QUALIFICACAO = """Você está analisando a ABERTURA de uma oitiva policial.
+Sua única tarefa é extrair os dados pessoais de identificação da PESSOA QUE ESTÁ SENDO OUVIDA (o declarante/depoente).
 
-Transcrição:
+REGRAS CRÍTICAS:
+- Extraia SOMENTE dados da PESSOA QUE RESPONDE às perguntas do escrivão/delegado.
+- IGNORE completamente nomes, profissões ou dados de terceiros mencionados na conversa (suspeitos, vítimas, testemunhas citadas, investigados).
+- O declarante se identifica logo no início, quando perguntado pelo escrivão/delegado.
+- Se o campo não for mencionado explicitamente para o declarante, deixe como string vazia "".
+- Profissão: só preencha se o próprio declarante informar sua profissão ao se qualificar. NÃO inferir.
+
+Transcrição do início da oitiva:
 {transcricao}
 
-Retorne APENAS o JSON abaixo com os campos encontrados. Campos não mencionados devem ser string vazia "".
+Retorne APENAS o JSON abaixo. Campos não encontrados = string vazia "".
 
 {{
   "nome": "",
