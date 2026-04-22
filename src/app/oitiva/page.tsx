@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Mic, MicOff, FileText, Download, RotateCcw, CheckCircle,
   Clock, Loader2, Save, List, Plus, Zap, AlertTriangle,
-  HelpCircle, ChevronDown, ChevronUp, Copy
+  HelpCircle, ChevronDown, ChevronUp, Copy, Upload
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -112,6 +112,8 @@ export default function OitivaPage() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const documentoRef = useRef("");
   const transcricaoRef = useRef("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [processandoArquivo, setProcessandoArquivo] = useState(false);
   const sessionRef = useRef<{
     papel: string; pessoaId: string | null; inqueritoId: string | null;
     duracao: number; audioUrl: string | null;
@@ -428,6 +430,60 @@ export default function OitivaPage() {
     setStatusMsg("");
   };
 
+  // ── Processar arquivo de áudio direto (modo teste) ────────────────────────
+  const processarArquivoAudio = async (file: File) => {
+    if (!inqueritoId) { setErro("Selecione um inquérito antes de importar o arquivo."); return; }
+    setProcessandoArquivo(true);
+    setErro("");
+    documentoRef.current = "";
+    transcricaoRef.current = "";
+    setDocumentoTexto("");
+    setQualificacao(null);
+    setSherlockResult(null);
+    setOitivaId(null);
+
+    try {
+      // 1. Transcrever arquivo direto (sem microfone)
+      setStatusMsg("Transcrevendo arquivo...");
+      const { transcricao, audio_url } = await transcreverOitiva(file, file.name);
+      transcricaoRef.current = transcricao;
+
+      // 2. Lavrar como segmento único
+      setStatusMsg("Lavrando declarações...");
+      const { texto, qualificacao: qual } = await lavrarSegmento({
+        transcricao,
+        papel,
+        segmento_idx: 0,
+      });
+
+      if (qual && Object.values(qual).some(v => v)) setQualificacao(qual);
+      if (texto.trim()) {
+        documentoRef.current = texto;
+        setDocumentoTexto(texto);
+      }
+
+      // 3. Persistir no banco
+      setStatusMsg("Salvando rascunho...");
+      const r = await lavrarTermo({
+        transcricao,
+        papel,
+        inquerito_id: inqueritoId,
+        pessoa_id: pessoaId,
+        audio_url: audio_url || null,
+        duracao_segundos: null,
+        documento: texto || null,
+      });
+      setOitivaId(r.oitiva_id);
+      setStatusOitiva("rascunho");
+    } catch (e: any) {
+      setErro("Erro ao processar arquivo: " + (e?.response?.data?.detail || e.message));
+    }
+
+    setStatusMsg("");
+    setProcessandoArquivo(false);
+    setFase("pronto");
+  };
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const corSherlock = sherlockResult
@@ -616,6 +672,25 @@ export default function OitivaPage() {
               <Mic size={36} className="text-white" />
             </button>
             <p className="text-sm text-zinc-500">Clique para iniciar a gravação</p>
+
+            {/* Importar arquivo (modo teste) */}
+            <div className="flex flex-col items-center gap-1 pt-2 border-t border-zinc-800 w-full">
+              <input ref={fileInputRef} type="file" accept="audio/*,.mp3,.wav,.ogg,.webm,.m4a"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) processarArquivoAudio(f); e.target.value = ""; }}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={processandoArquivo || !inqueritoId}
+                className="flex items-center gap-2 text-xs text-zinc-500 hover:text-zinc-300 disabled:opacity-40 transition-colors py-1"
+              >
+                {processandoArquivo
+                  ? <><Loader2 size={12} className="animate-spin" /> {statusMsg || "Processando..."}</>
+                  : <><Upload size={12} /> Importar arquivo de áudio (teste)</>
+                }
+              </button>
+              {!inqueritoId && <p className="text-[10px] text-zinc-600">Selecione um IP para habilitar</p>}
+            </div>
           </div>
         </div>
       )}
