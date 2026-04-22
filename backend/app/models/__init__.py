@@ -26,6 +26,7 @@ from app.models.consumo_api import ConsumoApi
 from app.models.documento_gerado import DocumentoGerado
 from app.models.peca_extraida import PecaExtraida
 from app.models.alerta_log import AlertaLog
+from app.models.oitiva import OitivaGravada
 
 __all__ = [
     "Inquerito",
@@ -51,4 +52,5 @@ __all__ = [
     "DocumentoGerado",
     "PecaExtraida",
     "AlertaLog",
+    "OitivaGravada",
 ]

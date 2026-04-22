@@ -977,3 +977,29 @@ async def progresso_pipeline(
         "processos_bg": processos_bg,
         "docs": docs_info,
     }
+
+
+@router.post("/{inquerito_id}/pessoas", status_code=201)
+async def criar_pessoa(
+    inquerito_id: uuid.UUID,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Cria uma pessoa avulsa vinculada ao inquérito (uso no Modo Oitiva)."""
+    from app.models.pessoa import Pessoa
+
+    nome = (body.get("nome") or "").strip()
+    if not nome:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail="Nome obrigatório.")
+
+    pessoa = Pessoa(
+        id=uuid.uuid4(),
+        inquerito_id=inquerito_id,
+        nome=nome,
+        tipo_pessoa=body.get("tipo_pessoa") or "testemunha",
+    )
+    db.add(pessoa)
+    await db.commit()
+    await db.refresh(pessoa)
+    return {"id": str(pessoa.id), "nome": pessoa.nome, "tipo_pessoa": pessoa.tipo_pessoa}

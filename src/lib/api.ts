@@ -72,6 +72,11 @@ export const getPessoas = async (inqueritoId: string) => {
   return response.data;
 };
 
+export const criarPessoa = async (inqueritoId: string, body: { nome: string; tipo_pessoa?: string }) => {
+  const response = await api.post(`/inqueritos/${inqueritoId}/pessoas`, body);
+  return response.data;
+};
+
 export const getEmpresas = async (inqueritoId: string) => {
   const response = await api.get(`/inqueritos/${inqueritoId}/indices/empresas`);
   return response.data;
@@ -426,19 +431,53 @@ export const transcreverOitiva = async (audioBlob: Blob, filename = "oitiva.webm
   const form = new FormData();
   form.append("audio", audioBlob, filename);
   const response = await apiMultipart.post("/oitiva/transcrever", form, { timeout: 300000 });
-  return response.data as { transcricao: string; tamanho_bytes: number };
+  return response.data as { transcricao: string; tamanho_bytes: number; audio_url: string | null };
 };
 
 export const lavrarTermo = async (body: {
   transcricao: string;
-  data_hora?: string;
-  local?: string;
-  comissario?: string;
-  qualificacao?: string;
   papel?: string;
+  inquerito_id: string;
+  pessoa_id?: string | null;
+  audio_url?: string | null;
+  duracao_segundos?: number | null;
 }) => {
   const response = await api.post("/oitiva/lavrar", body, { timeout: 120000 });
-  return response.data as { termo: string; modelo: string; chars: number };
+  return response.data as { oitiva_id: string; termo_com_timestamps: string; termo_limpo: string; modelo: string };
+};
+
+export const relavrarBloco = async (body: { trecho: string; papel?: string }) => {
+  const response = await api.post("/oitiva/re-lavrar-bloco", body, { timeout: 60000 });
+  return response.data as { bloco_com_timestamps: string; bloco_limpo: string };
+};
+
+export const salvarOitiva = async (oitivaId: string, body: {
+  termo_com_timestamps: string;
+  termo_limpo: string;
+  status: string;
+  pessoa_id?: string | null;
+}) => {
+  const response = await api.put(`/oitiva/${oitivaId}`, { oitiva_id: oitivaId, ...body });
+  return response.data;
+};
+
+export const listarOitivas = async (inqueritoId: string) => {
+  const response = await api.get(`/oitiva/inquerito/${inqueritoId}`);
+  return response.data as Array<{
+    id: string; pessoa_id: string | null; nome_pessoa: string | null;
+    audio_url: string | null; duracao_segundos: number | null;
+    status: string; created_at: string; preview: string;
+  }>;
+};
+
+export const obterOitiva = async (oitivaId: string) => {
+  const response = await api.get(`/oitiva/${oitivaId}`);
+  return response.data;
+};
+
+export const deletarOitiva = async (oitivaId: string) => {
+  const response = await api.delete(`/oitiva/${oitivaId}`);
+  return response.data;
 };
 
 export const transcreverAudio = async (audioBlob: Blob, filename = "audio.webm") => {
