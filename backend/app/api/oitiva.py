@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api/v1/oitiva", tags=["Modo Oitiva"])
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class LavrarRequest(BaseModel):
-    transcricao: str
+    transcricao: Optional[str] = None
     papel: str = "testemunha"
     inquerito_id: str
     pessoa_id: Optional[str] = None
@@ -277,7 +277,7 @@ async def lavrar_termo(body: LavrarRequest, db: AsyncSession = Depends(get_db)):
     from app.services.llm_service import LLMService
     from app.models.oitiva import OitivaGravada
 
-    if not body.documento and len(body.transcricao) < 30:
+    if not body.documento and (not body.transcricao or len(body.transcricao) < 30):
         raise HTTPException(status_code=422, detail="Transcrição muito curta.")
 
     llm = LLMService()
@@ -308,7 +308,7 @@ async def lavrar_termo(body: LavrarRequest, db: AsyncSession = Depends(get_db)):
             inquerito_id=uuid.UUID(body.inquerito_id),
             pessoa_id=uuid.UUID(body.pessoa_id) if body.pessoa_id else None,
             audio_url=body.audio_url,
-            transcricao_bruta=body.transcricao,
+            transcricao_bruta=body.transcricao or "",
             termo_com_timestamps=termo_com_ts,
             termo_limpo=termo_limpo,
             duracao_segundos=body.duracao_segundos,

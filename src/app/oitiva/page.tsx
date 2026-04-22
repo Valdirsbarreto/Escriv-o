@@ -189,8 +189,7 @@ export default function OitivaPage() {
 
       // Acumular documento
       if (texto.trim()) {
-        const isFirst = !documentoRef.current;
-        documentoRef.current += (isFirst ? "Inquerido disse: " : "\n\n") + texto;
+        documentoRef.current += (documentoRef.current ? "\n\n" : "") + texto;
         setDocumentoTexto(documentoRef.current);
       }
     } catch (e: any) {
@@ -218,7 +217,7 @@ export default function OitivaPage() {
         pessoa_id: session.pessoaId,
         audio_url: session.audioUrl,
         duracao_segundos: session.duracao,
-        documento: documentoRef.current,
+        documento: documentoRef.current || null,
       });
       setOitivaId(r.oitiva_id);
       setStatusOitiva("rascunho");
