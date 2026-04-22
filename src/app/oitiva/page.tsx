@@ -431,6 +431,23 @@ export default function OitivaPage() {
   };
 
   // ── Processar arquivo de áudio direto (modo teste) ────────────────────────
+  // Divide transcrição longa em blocos por marcadores de tempo [MM:SS]
+  const chunkTranscricao = (texto: string, maxChars = 3000): string[] => {
+    const linhas = texto.split("\n").filter(l => l.trim());
+    const blocos: string[] = [];
+    let atual = "";
+    for (const linha of linhas) {
+      if (atual.length + linha.length > maxChars && atual) {
+        blocos.push(atual.trim());
+        atual = linha + "\n";
+      } else {
+        atual += linha + "\n";
+      }
+    }
+    if (atual.trim()) blocos.push(atual.trim());
+    return blocos.length ? blocos : [texto];
+  };
+
   const processarArquivoAudio = async (file: File) => {
     if (!inqueritoId) { setErro("Selecione um inquérito antes de importar o arquivo."); return; }
     setProcessandoArquivo(true);
@@ -448,18 +465,20 @@ export default function OitivaPage() {
       const { transcricao, audio_url } = await transcreverOitiva(file, file.name);
       transcricaoRef.current = transcricao;
 
-      // 2. Lavrar como segmento único
-      setStatusMsg("Lavrando declarações...");
-      const { texto, qualificacao: qual } = await lavrarSegmento({
-        transcricao,
-        papel,
-        segmento_idx: 0,
-      });
-
-      if (qual && Object.values(qual).some(v => v)) setQualificacao(qual);
-      if (texto.trim()) {
-        documentoRef.current = texto;
-        setDocumentoTexto(texto);
+      // 2. Fatiar transcrição e lavrar cada bloco sequencialmente
+      const blocos = chunkTranscricao(transcricao, 3000);
+      for (let i = 0; i < blocos.length; i++) {
+        setStatusMsg(`Lavrando bloco ${i + 1}/${blocos.length}...`);
+        const { texto, qualificacao: qual } = await lavrarSegmento({
+          transcricao: blocos[i],
+          papel,
+          segmento_idx: i,
+        });
+        if (i === 0 && qual && Object.values(qual).some(v => v)) setQualificacao(qual);
+        if (texto.trim()) {
+          documentoRef.current += (documentoRef.current ? "\n\n" : "") + texto;
+          setDocumentoTexto(documentoRef.current);
+        }
       }
 
       // 3. Persistir no banco
@@ -471,7 +490,7 @@ export default function OitivaPage() {
         pessoa_id: pessoaId,
         audio_url: audio_url || null,
         duracao_segundos: null,
-        documento: texto || null,
+        documento: documentoRef.current || null,
       });
       setOitivaId(r.oitiva_id);
       setStatusOitiva("rascunho");
