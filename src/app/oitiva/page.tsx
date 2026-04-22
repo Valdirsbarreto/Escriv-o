@@ -431,8 +431,8 @@ export default function OitivaPage() {
   };
 
   // ── Processar arquivo de áudio direto (modo teste) ────────────────────────
-  // Divide transcrição longa em blocos por marcadores de tempo [MM:SS]
-  const chunkTranscricao = (texto: string, maxChars = 3000): string[] => {
+  // Divide transcrição em blocos respeitando quebras de linha
+  const chunkTranscricao = (texto: string, maxChars = 4500): string[] => {
     const linhas = texto.split("\n").filter(l => l.trim());
     const blocos: string[] = [];
     let atual = "";
@@ -459,16 +459,20 @@ export default function OitivaPage() {
     setSherlockResult(null);
     setOitivaId(null);
 
+    // Entra em "pronto" imediatamente para exibir o texto crescendo
+    setFase("pronto");
+    setStatusOitiva("rascunho");
+
     try {
       // 1. Transcrever arquivo direto (sem microfone)
       setStatusMsg("Transcrevendo arquivo...");
       const { transcricao, audio_url } = await transcreverOitiva(file, file.name);
       transcricaoRef.current = transcricao;
 
-      // 2. Fatiar transcrição e lavrar cada bloco sequencialmente
-      const blocos = chunkTranscricao(transcricao, 3000);
+      // 2. Fatiar e lavrar bloco a bloco — texto aparece na tela progressivamente
+      const blocos = chunkTranscricao(transcricao);
       for (let i = 0; i < blocos.length; i++) {
-        setStatusMsg(`Lavrando bloco ${i + 1}/${blocos.length}...`);
+        setStatusMsg(`Lavrando bloco ${i + 1} de ${blocos.length}...`);
         const { texto, qualificacao: qual } = await lavrarSegmento({
           transcricao: blocos[i],
           papel,
@@ -482,7 +486,7 @@ export default function OitivaPage() {
       }
 
       // 3. Persistir no banco
-      setStatusMsg("Salvando rascunho...");
+      setStatusMsg("Salvando...");
       const r = await lavrarTermo({
         transcricao,
         papel,
@@ -493,14 +497,12 @@ export default function OitivaPage() {
         documento: documentoRef.current || null,
       });
       setOitivaId(r.oitiva_id);
-      setStatusOitiva("rascunho");
     } catch (e: any) {
       setErro("Erro ao processar arquivo: " + (e?.response?.data?.detail || e.message));
     }
 
     setStatusMsg("");
     setProcessandoArquivo(false);
-    setFase("pronto");
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -825,8 +827,17 @@ export default function OitivaPage() {
           {/* Barra de ações */}
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-2 mr-auto">
-              <CheckCircle size={15} className={statusOitiva === "finalizado" ? "text-green-400" : "text-amber-400"} />
-              <span className="text-sm font-semibold text-zinc-300">{statusOitiva === "finalizado" ? "Finalizado" : "Rascunho"}</span>
+              {processandoArquivo && statusMsg ? (
+                <span className="text-xs text-zinc-400 flex items-center gap-1.5">
+                  <Loader2 size={13} className="animate-spin text-blue-400" />
+                  {statusMsg}
+                </span>
+              ) : (
+                <>
+                  <CheckCircle size={15} className={statusOitiva === "finalizado" ? "text-green-400" : "text-amber-400"} />
+                  <span className="text-sm font-semibold text-zinc-300">{statusOitiva === "finalizado" ? "Finalizado" : "Rascunho"}</span>
+                </>
+              )}
             </div>
             <button onClick={copiar}
               className={`text-xs px-3 py-1.5 rounded-md border transition-colors flex items-center gap-1 ${copiado ? "bg-green-700 border-green-600 text-white" : "border-zinc-700 text-zinc-400 hover:text-zinc-200"}`}>
