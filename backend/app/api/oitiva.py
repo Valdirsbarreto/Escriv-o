@@ -30,6 +30,18 @@ class LavrarRequest(BaseModel):
     pessoa_id: Optional[str] = None
     audio_url: Optional[str] = None
     duracao_segundos: Optional[int] = None
+    documento: Optional[str] = None  # documento pré-construído (pula LLM)
+
+
+class LavrarSegmentoRequest(BaseModel):
+    transcricao: str
+    papel: str = "testemunha"
+    segmento_idx: int = 0
+
+
+class SherlockOitivaRequest(BaseModel):
+    inquerito_id: str
+    documento_atual: str
 
 
 class SalvarRequest(BaseModel):
@@ -118,6 +130,142 @@ async def transcrever_oitiva(audio: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Erro na transcrição: {str(e)[:300]}")
 
 
+@router.post("/lavrar-segmento")
+async def lavrar_segmento(body: LavrarSegmentoRequest):
+    """
+    Converte um segmento de transcrição em cláusulas "Que,".
+    Não persiste no banco — só processa o texto.
+    No primeiro segmento (idx==0) também extrai dados de qualificação em paralelo.
+    """
+    import asyncio
+    import json as _json
+    from app.core.prompts import PROMPT_OITIVA_SEGMENTO, PROMPT_EXTRAIR_QUALIFICACAO
+    from app.services.llm_service import LLMService
+
+    if len(body.transcricao.strip()) < 20:
+        return {"texto": "", "qualificacao": None}
+
+    llm = LLMService()
+
+    prompt_texto = PROMPT_OITIVA_SEGMENTO.format(
+        transcricao=body.transcricao,
+        papel=body.papel,
+        eh_primeiro_segmento="SIM" if body.segmento_idx == 0 else "NÃO",
+    )
+
+    coros = [
+        llm.chat_completion(
+            messages=[{"role": "user", "content": prompt_texto}],
+            tier="premium",
+            temperature=0.05,
+            max_tokens=4000,
+            agente="OitivaSegmento",
+        )
+    ]
+    if body.segmento_idx == 0:
+        coros.append(
+            llm.chat_completion(
+                messages=[{"role": "user", "content": PROMPT_EXTRAIR_QUALIFICACAO.format(
+                    transcricao=body.transcricao[:3000],
+                )}],
+                tier="economico",
+                temperature=0.0,
+                max_tokens=500,
+                agente="OitivaQualificacao",
+            )
+        )
+
+    results = await asyncio.gather(*coros, return_exceptions=True)
+
+    texto = ""
+    if not isinstance(results[0], Exception):
+        raw = results[0]["content"].strip()
+        if raw != "[SEM_CONTEUDO]":
+            texto = raw
+    else:
+        logger.warning(f"[OITIVA] Segmento {body.segmento_idx} lavrar falhou: {results[0]}")
+
+    qualificacao = None
+    if body.segmento_idx == 0 and len(results) > 1 and not isinstance(results[1], Exception):
+        try:
+            raw_q = results[1]["content"].strip()
+            if "```" in raw_q:
+                raw_q = raw_q.split("```")[1].lstrip("json").strip()
+            qualificacao = _json.loads(raw_q)
+        except Exception:
+            pass
+
+    return {"texto": texto, "qualificacao": qualificacao}
+
+
+@router.post("/sherlock")
+async def sherlock_oitiva(body: SherlockOitivaRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Analisa a declaração em andamento versus o contexto do inquérito.
+    Retorna consistência, inconsistências e perguntas sugeridas para o comissário.
+    """
+    import json as _json
+    import uuid as _uuid
+    from app.core.prompts import PROMPT_OITIVA_SHERLOCK
+    from app.services.llm_service import LLMService
+    from app.services.summary_service import SummaryService
+    from app.models.documento_gerado import DocumentoGerado
+
+    if len(body.documento_atual.strip()) < 30:
+        raise HTTPException(status_code=422, detail="Declaração muito curta para análise.")
+
+    # Monta contexto do inquérito (relatório inicial + resumo)
+    contexto_parts = []
+    try:
+        inq_id = _uuid.UUID(body.inquerito_id)
+        # Relatório inicial
+        result = await db.execute(
+            select(DocumentoGerado)
+            .where(
+                DocumentoGerado.inquerito_id == inq_id,
+                DocumentoGerado.tipo == "relatorio_inicial",
+                DocumentoGerado.conteudo != "__PROCESSANDO__",
+            )
+            .order_by(DocumentoGerado.created_at.desc())
+            .limit(1)
+        )
+        rel = result.scalar_one_or_none()
+        if rel and rel.conteudo:
+            contexto_parts.append("=== RELATÓRIO INICIAL ===\n" + rel.conteudo[:8000])
+
+        # Resumo do caso
+        summary_svc = SummaryService(db)
+        resumo = await summary_svc.obter_resumo_caso(inq_id)
+        if resumo:
+            contexto_parts.append("=== RESUMO EXECUTIVO ===\n" + resumo[:3000])
+    except Exception as e:
+        logger.warning(f"[OITIVA-SHERLOCK] Contexto parcial: {e}")
+
+    contexto = "\n\n".join(contexto_parts) if contexto_parts else "Contexto do inquérito não disponível."
+
+    prompt = PROMPT_OITIVA_SHERLOCK.format(
+        contexto_inquerito=contexto,
+        documento_atual=body.documento_atual[:6000],
+    )
+
+    llm = LLMService()
+    try:
+        result = await llm.chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            tier="premium",
+            temperature=0.1,
+            max_tokens=2000,
+            agente="SherlockOitiva",
+        )
+        raw = result["content"].strip()
+        if "```" in raw:
+            raw = raw.split("```")[1].lstrip("json").strip()
+        return _json.loads(raw)
+    except Exception as e:
+        logger.error(f"[OITIVA-SHERLOCK] Erro: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Erro na análise: {str(e)[:200]}")
+
+
 @router.post("/lavrar")
 async def lavrar_termo(body: LavrarRequest, db: AsyncSession = Depends(get_db)):
     """
@@ -129,25 +277,30 @@ async def lavrar_termo(body: LavrarRequest, db: AsyncSession = Depends(get_db)):
     from app.services.llm_service import LLMService
     from app.models.oitiva import OitivaGravada
 
-    if len(body.transcricao) < 30:
+    if not body.documento and len(body.transcricao) < 30:
         raise HTTPException(status_code=422, detail="Transcrição muito curta.")
-
-    prompt = PROMPT_OITIVA.format(
-        transcricao=body.transcricao,
-        papel=body.papel,
-    )
 
     llm = LLMService()
     try:
-        result = await llm.chat_completion(
-            messages=[{"role": "user", "content": prompt}],
-            tier="premium",
-            temperature=0.05,
-            max_tokens=8000,
-            agente="Oitiva",
-        )
-        termo_com_ts = result["content"].strip()
-        termo_limpo = _strip_timestamps(termo_com_ts)
+        if body.documento:
+            # Documento pré-construído via segmentos progressivos — usar diretamente
+            termo_com_ts = body.documento
+            termo_limpo = body.documento
+        else:
+            # Caminho legado: gera via LLM a partir da transcrição bruta
+            prompt = PROMPT_OITIVA.format(
+                transcricao=body.transcricao,
+                papel=body.papel,
+            )
+            result = await llm.chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                tier="premium",
+                temperature=0.05,
+                max_tokens=8000,
+                agente="Oitiva",
+            )
+            termo_com_ts = result["content"].strip()
+            termo_limpo = _strip_timestamps(termo_com_ts)
 
         # Persiste como rascunho
         oitiva = OitivaGravada(
@@ -169,7 +322,6 @@ async def lavrar_termo(body: LavrarRequest, db: AsyncSession = Depends(get_db)):
             "oitiva_id": str(oitiva.id),
             "termo_com_timestamps": termo_com_ts,
             "termo_limpo": termo_limpo,
-            "modelo": result.get("model"),
         }
     except Exception as e:
         logger.error(f"[OITIVA] Erro ao lavrar termo: {e}", exc_info=True)

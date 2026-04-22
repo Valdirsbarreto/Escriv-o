@@ -1722,3 +1722,83 @@ Preserve o timestamp [MM:SS] se presente. Retorne apenas o(s) item(ns) relavrado
 === PAPEL DO DECLARANTE ===
 {papel}
 """
+
+# ── Modo Oitiva — Formato "Que," (Segmentos Progressivos) ─────────────────────
+
+PROMPT_OITIVA_SEGMENTO = """Você é um escrivão policial da PCERJ especializado na lavratura de termos de declarações.
+
+Converta a transcrição abaixo em declarações no formato "Que," conforme o padrão da Polícia Civil do Rio de Janeiro.
+
+=== TRANSCRIÇÃO ===
+{transcricao}
+
+=== PAPEL DO DECLARANTE ===
+{papel}
+
+=== PRIMEIRO SEGMENTO (contém qualificação) ===
+{eh_primeiro_segmento}
+
+=== INSTRUÇÕES ===
+1. Escreva APENAS as declarações do declarante, em terceira pessoa, SEM as perguntas do comissário.
+2. Cada ponto começa com "Que," seguido do conteúdo declarado.
+3. Pontos do mesmo tema: separe com "; ". Mudança de tema: inicie parágrafo novo com "Que,".
+4. Linguagem técnico-policial formal. Transforme coloquial em formal.
+5. Preserve EXATAMENTE: datas, horas, nomes completos, endereços, valores, números de documentos.
+6. Omita: hesitações, "né", "assim", vícios de linguagem, repetições idênticas.
+7. Confirmação simples do declarante ("sim", "exatamente", "isso") → omita.
+8. Negativa relevante → "Que, não soube informar..." ou "Que, desconhecia...".
+9. Se PRIMEIRO SEGMENTO for "SIM": IGNORE a qualificação (nome, filiação, nascimento, endereço, profissão, documentos). Comece SOMENTE nas perguntas sobre os FATOS. Se só houver qualificação, retorne: [SEM_CONTEUDO]
+10. Se não houver conteúdo substantivo, retorne: [SEM_CONTEUDO]
+11. Retorne APENAS as cláusulas "Que,". Sem "Inquerido disse:", sem cabeçalho, sem assinatura."""
+
+PROMPT_EXTRAIR_QUALIFICACAO = """Extraia os dados de qualificação do declarante presentes nesta transcrição de oitiva policial.
+
+Transcrição:
+{transcricao}
+
+Retorne APENAS o JSON abaixo com os campos encontrados. Campos não mencionados devem ser string vazia "".
+
+{{
+  "nome": "",
+  "nascimento": "",
+  "filiacao_materna": "",
+  "filiacao_paterna": "",
+  "endereco": "",
+  "profissao": "",
+  "estado_civil": "",
+  "cpf": "",
+  "rg": ""
+}}
+
+Retorne APENAS o JSON, sem explicações."""
+
+# ── Modo Oitiva — Sherlock durante depoimento ─────────────────────────────────
+
+PROMPT_OITIVA_SHERLOCK = """Você é o Agente Sherlock auxiliando um comissário da PCERJ durante uma oitiva em andamento.
+
+=== CONTEXTO DO INQUÉRITO ===
+{contexto_inquerito}
+
+=== DECLARAÇÃO REGISTRADA ATÉ AGORA (formato "Que,") ===
+{documento_atual}
+
+=== SUA TAREFA ===
+Analise a declaração em relação ao que já se sabe do inquérito e responda em JSON com a estrutura abaixo.
+
+{{
+  "consistencia": "consistente | inconsistente | parcialmente_consistente",
+  "observacoes": [
+    "ponto relevante 1",
+    "ponto relevante 2"
+  ],
+  "inconsistencias": [
+    "descrição da contradição ou lacuna (se houver)"
+  ],
+  "perguntas_sugeridas": [
+    "Pergunta direta e objetiva que o comissário deveria fazer agora",
+    "Outra pergunta relevante"
+  ]
+}}
+
+Seja direto e objetivo. Máximo 3 inconsistências e 5 perguntas sugeridas.
+Retorne APENAS o JSON."""

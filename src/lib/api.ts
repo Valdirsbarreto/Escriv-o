@@ -446,9 +446,39 @@ export const lavrarTermo = async (body: {
   pessoa_id?: string | null;
   audio_url?: string | null;
   duracao_segundos?: number | null;
+  documento?: string | null;
 }) => {
   const response = await api.post("/oitiva/lavrar", body, { timeout: 120000 });
-  return response.data as { oitiva_id: string; termo_com_timestamps: string; termo_limpo: string; modelo: string };
+  return response.data as { oitiva_id: string; termo_com_timestamps: string; termo_limpo: string };
+};
+
+export const lavrarSegmento = async (body: {
+  transcricao: string;
+  papel: string;
+  segmento_idx: number;
+}) => {
+  const response = await api.post("/oitiva/lavrar-segmento", body, { timeout: 120000 });
+  return response.data as {
+    texto: string;
+    qualificacao: {
+      nome?: string; nascimento?: string; filiacao_materna?: string;
+      filiacao_paterna?: string; endereco?: string; profissao?: string;
+      estado_civil?: string; cpf?: string; rg?: string;
+    } | null;
+  };
+};
+
+export const sherlockOitiva = async (body: {
+  inquerito_id: string;
+  documento_atual: string;
+}) => {
+  const response = await api.post("/oitiva/sherlock", body, { timeout: 120000 });
+  return response.data as {
+    consistencia: "consistente" | "inconsistente" | "parcialmente_consistente";
+    observacoes: string[];
+    inconsistencias: string[];
+    perguntas_sugeridas: string[];
+  };
 };
 
 export const relavrarBloco = async (body: { trecho: string; papel?: string }) => {
