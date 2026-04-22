@@ -24,7 +24,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check, CalendarPlus, Clock, MapPin, ExternalLink, BookOpen, Quote, ChevronDown, ChevronRight, Bot, Eye, UserSearch, Network, Search, Microscope, ShieldAlert, ListChecks, Scale, Swords, Copy, ClipboardCheck } from "lucide-react";
+import { FolderOpen, ArrowLeft, Upload, FileText, CheckCircle2, FileType2, Trash2, RefreshCw, Sparkles, Loader2, AlertCircle, Pencil, X, Check, CalendarPlus, Clock, MapPin, ExternalLink, BookOpen, Quote, ChevronDown, ChevronRight, Bot, Eye, UserSearch, Network, Search, Microscope, ShieldAlert, ListChecks, Scale, Swords, Copy, ClipboardCheck, Mic } from "lucide-react";
 import { IntimacaoUploadModal } from "@/components/IntimacaoUploadModal";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -1152,6 +1152,10 @@ export default function InqueritoDetalhePage() {
             </DialogContent>
           </Dialog>
 
+          <Button onClick={() => router.push("/oitiva")} variant="outline" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800">
+            <Mic size={16} className="mr-2 text-red-400" />
+            Nova Oitiva
+          </Button>
           <Button onClick={() => setShowIntimacaoModal(true)} variant="outline" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800">
             <CalendarPlus size={16} className="mr-2 text-blue-400" />
             Lançar Intimação

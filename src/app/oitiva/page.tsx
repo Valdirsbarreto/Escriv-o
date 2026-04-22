@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import {
   transcreverOitiva, lavrarTermo, relavrarBloco, salvarOitiva,
   listarOitivas, obterOitiva, deletarOitiva, getPessoas,
-  criarPessoa,
+  criarPessoa, getInqueritos, criarInqueritoRapido, buscarPessoasGlobal,
 } from "@/lib/api";
 import { useAppStore } from "@/store/app";
 
@@ -84,6 +84,20 @@ export default function OitivaPage() {
   const [novoNome, setNovoNome] = useState("");
   const [criandoPessoa, setCriandoPessoa] = useState(false);
 
+  // Seletor de IP local (usado quando não há inquéritoAtivoId)
+  const [ipLocal, setIpLocal] = useState<{ id: string; numero: string } | null>(null);
+  const [buscaIP, setBuscaIP] = useState("");
+  const [listaIPs, setListaIPs] = useState<{ id: string; numero: string }[]>([]);
+  const [todosIPs, setTodosIPs] = useState<{ id: string; numero: string }[]>([]);
+  const [carregandoIPs, setCarregandoIPs] = useState(false);
+  const [confirmandoCriarIP, setConfirmandoCriarIP] = useState(false);
+  const [criandoIP, setCriandoIP] = useState(false);
+
+  // Cross-IP busca pessoa
+  const [pessoasEncontradas, setPessoasEncontradas] = useState<
+    { id: string; nome: string; tipo_pessoa: string; inquerito_numero: string }[]
+  >([]);
+
   const [oitivas, setOitivas] = useState<OitivaItem[]>([]);
   const [carregandoLista, setCarregandoLista] = useState(false);
 
@@ -96,13 +110,49 @@ export default function OitivaPage() {
 
   const { inqueritoAtivoId } = useAppStore();
 
-  // Carrega pessoas ao montar (se houver inquérito ativo)
+  // ID efetivo: preferência para seleção local na página, fallback para store global
+  const inqueritoId = ipLocal?.id ?? inqueritoAtivoId;
+
+  // Carrega todos os IPs uma vez (para o seletor de busca)
   useEffect(() => {
-    if (!inqueritoAtivoId) return;
-    getPessoas(inqueritoAtivoId)
+    if (inqueritoAtivoId) return; // já tem IP ativo, não precisa do seletor
+    setCarregandoIPs(true);
+    getInqueritos()
+      .then((data: any) => {
+        const items = (data.items || data) as any[];
+        setTodosIPs(items.map((i: any) => ({ id: i.id, numero: i.numero })));
+      })
+      .catch(() => {})
+      .finally(() => setCarregandoIPs(false));
+  }, [inqueritoAtivoId]);
+
+  // Filtra IPs conforme digitação
+  useEffect(() => {
+    if (!buscaIP.trim()) { setListaIPs([]); return; }
+    const q = buscaIP.trim().toLowerCase();
+    setListaIPs(todosIPs.filter(ip => ip.numero.toLowerCase().includes(q)).slice(0, 8));
+  }, [buscaIP, todosIPs]);
+
+  // Carrega pessoas ao montar ou ao selecionar IP
+  useEffect(() => {
+    if (!inqueritoId) return;
+    getPessoas(inqueritoId)
       .then((data: any[]) => setPessoas(data.map(p => ({ id: p.id, nome: p.nome, tipo_pessoa: p.tipo_pessoa }))))
       .catch(() => {});
-  }, [inqueritoAtivoId]);
+  }, [inqueritoId]);
+
+  // Cross-IP busca de pessoa (debounced 500ms)
+  useEffect(() => {
+    if (novoNome.trim().length < 3) { setPessoasEncontradas([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const r = await buscarPessoasGlobal(novoNome.trim());
+        // Só mostrar se for em IPs diferentes do ativo
+        setPessoasEncontradas((r as any[]).filter(p => p.inquerito_id !== inqueritoId));
+      } catch {}
+    }, 500);
+    return () => clearTimeout(t);
+  }, [novoNome, inqueritoId]);
 
   const iniciarGravacao = useCallback(async () => {
     setErro("");
@@ -153,8 +203,8 @@ export default function OitivaPage() {
   }, []);
 
   const lavrar = useCallback(async () => {
-    if (!inqueritoAtivoId) {
-      setErro("Selecione um inquérito ativo antes de lavrar.");
+    if (!inqueritoId) {
+      setErro("Selecione um inquérito antes de lavrar.");
       return;
     }
     setFase("lavrando");
@@ -163,7 +213,7 @@ export default function OitivaPage() {
       const r = await lavrarTermo({
         transcricao,
         papel,
-        inquerito_id: inqueritoAtivoId,
+        inquerito_id: inqueritoId,
         pessoa_id: pessoaId,
         audio_url: audioUrl,
         duracao_segundos: duracao || null,
@@ -176,7 +226,7 @@ export default function OitivaPage() {
       setErro("Erro ao lavrar termo: " + (e?.response?.data?.detail || e.message));
       setFase("transcricao");
     }
-  }, [transcricao, papel, inqueritoAtivoId, pessoaId, audioUrl, duracao]);
+  }, [transcricao, papel, inqueritoId, pessoaId, audioUrl, duracao]);
 
   const handleRelavrarBloco = useCallback(async (idx: number) => {
     const bloco = blocos[idx];
@@ -249,14 +299,14 @@ export default function OitivaPage() {
   };
 
   const carregarLista = useCallback(async () => {
-    if (!inqueritoAtivoId) return;
+    if (!inqueritoId) return;
     setCarregandoLista(true);
     try {
-      const data = await listarOitivas(inqueritoAtivoId);
+      const data = await listarOitivas(inqueritoId);
       setOitivas(data);
     } catch {}
     setCarregandoLista(false);
-  }, [inqueritoAtivoId]);
+  }, [inqueritoId]);
 
   const abrirLista = () => { setFase("lista"); carregarLista(); };
 
@@ -284,13 +334,14 @@ export default function OitivaPage() {
   };
 
   const criarNovaPessoa = async () => {
-    if (!novoNome.trim() || !inqueritoAtivoId) return;
+    if (!novoNome.trim() || !inqueritoId) return;
     setCriandoPessoa(true);
     try {
-      const nova = await criarPessoa(inqueritoAtivoId, { nome: novoNome.trim(), tipo_pessoa: papel === "investigado" ? "investigado" : papel === "vítima" ? "vitima" : "testemunha" });
+      const nova = await criarPessoa(inqueritoId, { nome: novoNome.trim(), tipo_pessoa: papel === "investigado" ? "investigado" : papel === "vítima" ? "vitima" : "testemunha" });
       setPessoas(prev => [...prev, { id: nova.id, nome: nova.nome, tipo_pessoa: nova.tipo_pessoa }]);
       setPessoaId(nova.id);
       setNovoNome("");
+      setPessoasEncontradas([]);
     } catch {}
     setCriandoPessoa(false);
   };
@@ -372,55 +423,157 @@ export default function OitivaPage() {
       {(fase === "idle" || fase === "gravando") && (
         <div className="space-y-4">
           {fase === "idle" && (
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 space-y-3">
-              <p className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Dados do declarante</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-zinc-400 mb-1 block">Papel nos autos</label>
-                  <select
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    value={papel}
-                    onChange={e => setPapel(e.target.value)}
-                  >
-                    <option value="testemunha">Testemunha</option>
-                    <option value="vítima">Vítima</option>
-                    <option value="investigado">Investigado</option>
-                    <option value="informante">Informante</option>
-                  </select>
+            <>
+              {/* Seletor de Inquérito */}
+              <div className="rounded-lg border border-zinc-700 bg-zinc-900/70 p-4 space-y-2">
+                <p className="text-xs text-zinc-500 uppercase tracking-wider font-semibold flex items-center gap-2">
+                  <FileText size={12} /> Inquérito policial
+                </p>
+                {inqueritoId ? (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-zinc-200 font-mono">
+                      {ipLocal?.numero ?? "(IP ativo do workspace)"}
+                    </span>
+                    {ipLocal && (
+                      <button
+                        onClick={() => { setIpLocal(null); setBuscaIP(""); setPessoas([]); setPessoaId(null); }}
+                        className="text-xs text-zinc-500 hover:text-zinc-300"
+                      >
+                        trocar
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <input
+                        className="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                        placeholder={carregandoIPs ? "Carregando IPs..." : "Digite o nº do IP (ex: 911-00001/2024)"}
+                        value={buscaIP}
+                        disabled={carregandoIPs}
+                        onChange={e => { setBuscaIP(e.target.value); setConfirmandoCriarIP(false); }}
+                      />
+                      {carregandoIPs && (
+                        <Loader2 size={12} className="absolute right-3 top-2.5 animate-spin text-zinc-500" />
+                      )}
+                    </div>
+                    {listaIPs.length > 0 && (
+                      <div className="border border-zinc-700 rounded-md overflow-hidden">
+                        {listaIPs.map(ip => (
+                          <button
+                            key={ip.id}
+                            onClick={() => { setIpLocal(ip); setBuscaIP(""); setListaIPs([]); setConfirmandoCriarIP(false); }}
+                            className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 font-mono border-b border-zinc-800 last:border-0"
+                          >
+                            {ip.numero}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {buscaIP.length >= 5 && listaIPs.length === 0 && !carregandoIPs && (
+                      confirmandoCriarIP ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-amber-400 flex-1">
+                            Cadastrar IP <span className="font-mono font-semibold">{buscaIP}</span>?
+                          </span>
+                          <button
+                            onClick={async () => {
+                              setCriandoIP(true);
+                              setErro("");
+                              try {
+                                const novo = await criarInqueritoRapido(buscaIP.trim());
+                                setIpLocal({ id: novo.id, numero: novo.numero });
+                                setBuscaIP(""); setConfirmandoCriarIP(false);
+                              } catch (e: any) {
+                                setErro(e?.response?.data?.detail || "Formato inválido. Use: NNN-NNNNN/AAAA");
+                              }
+                              setCriandoIP(false);
+                            }}
+                            disabled={criandoIP}
+                            className="text-xs bg-amber-700 hover:bg-amber-600 text-white rounded px-3 py-1 disabled:opacity-50 flex items-center gap-1"
+                          >
+                            {criandoIP ? <Loader2 size={12} className="animate-spin" /> : "Confirmar"}
+                          </button>
+                          <button onClick={() => setConfirmandoCriarIP(false)} className="text-xs text-zinc-500 hover:text-zinc-300">
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmandoCriarIP(true)}
+                          className="text-xs text-zinc-500 hover:text-zinc-300 underline"
+                        >
+                          Não encontrado — cadastrar como novo IP?
+                        </button>
+                      )
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Dados do declarante */}
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 space-y-3">
+                <p className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Dados do declarante</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-zinc-400 mb-1 block">Papel nos autos</label>
+                    <select
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      value={papel}
+                      onChange={e => setPapel(e.target.value)}
+                    >
+                      <option value="testemunha">Testemunha</option>
+                      <option value="vítima">Vítima</option>
+                      <option value="investigado">Investigado</option>
+                      <option value="informante">Informante</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-zinc-400 mb-1 block">Pessoa nos autos</label>
+                    <select
+                      className="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      value={pessoaId || ""}
+                      onChange={e => setPessoaId(e.target.value || null)}
+                    >
+                      <option value="">— não vincular —</option>
+                      {pessoas.map(p => (
+                        <option key={p.id} value={p.id}>{p.nome}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-xs text-zinc-400 mb-1 block">Pessoa nos autos</label>
-                  <select
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    value={pessoaId || ""}
-                    onChange={e => setPessoaId(e.target.value || null)}
+                {/* Cadastro rápido de pessoa */}
+                <div className="flex gap-2 items-center">
+                  <input
+                    className="flex-1 bg-zinc-800 border border-zinc-700 rounded-md px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    placeholder="Ou cadastre nova pessoa..."
+                    value={novoNome}
+                    onChange={e => setNovoNome(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && criarNovaPessoa()}
+                  />
+                  <button
+                    onClick={criarNovaPessoa}
+                    disabled={!novoNome.trim() || criandoPessoa || !inqueritoId}
+                    className="flex items-center gap-1 text-xs bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 text-zinc-200 rounded-md px-3 py-1.5"
                   >
-                    <option value="">— não vincular —</option>
-                    {pessoas.map(p => (
-                      <option key={p.id} value={p.id}>{p.nome}</option>
+                    {criandoPessoa ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
+                    Criar
+                  </button>
+                </div>
+                {/* Banner cross-IP */}
+                {pessoasEncontradas.length > 0 && (
+                  <div className="rounded-md bg-amber-900/20 border border-amber-700/40 p-2 text-xs text-amber-300 space-y-1">
+                    <p className="font-semibold">Pessoa encontrada em outro(s) IP(s):</p>
+                    {pessoasEncontradas.map(p => (
+                      <div key={p.id}>
+                        <span className="font-mono">{p.inquerito_numero}</span>
+                        {" — "}{p.nome} <span className="text-amber-500">({p.tipo_pessoa || "sem tipo"})</span>
+                      </div>
                     ))}
-                  </select>
-                </div>
+                  </div>
+                )}
               </div>
-              {/* Cadastro rápido de pessoa */}
-              <div className="flex gap-2 items-center">
-                <input
-                  className="flex-1 bg-zinc-800 border border-zinc-700 rounded-md px-3 py-1.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  placeholder="Ou cadastre nova pessoa..."
-                  value={novoNome}
-                  onChange={e => setNovoNome(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && criarNovaPessoa()}
-                />
-                <button
-                  onClick={criarNovaPessoa}
-                  disabled={!novoNome.trim() || criandoPessoa}
-                  className="flex items-center gap-1 text-xs bg-zinc-700 hover:bg-zinc-600 disabled:opacity-40 text-zinc-200 rounded-md px-3 py-1.5"
-                >
-                  {criandoPessoa ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-                  Criar
-                </button>
-              </div>
-            </div>
+            </>
           )}
 
           <div className="flex flex-col items-center gap-4 py-6">

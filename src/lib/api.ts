@@ -77,6 +77,11 @@ export const criarPessoa = async (inqueritoId: string, body: { nome: string; tip
   return response.data;
 };
 
+export const buscarPessoasGlobal = async (nome: string) => {
+  const response = await api.get("/pessoas/buscar", { params: { nome } });
+  return response.data;
+};
+
 export const getEmpresas = async (inqueritoId: string) => {
   const response = await api.get(`/inqueritos/${inqueritoId}/indices/empresas`);
   return response.data;
