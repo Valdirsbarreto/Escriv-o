@@ -127,7 +127,7 @@ def _extrair_conteudo_por_ancora(texto_doc: str, pecas_data: list) -> list:
     return resultados
 
 
-@celery_app.task(bind=True, max_retries=2, default_retry_delay=60)
+@celery_app.task(bind=True, max_retries=3, default_retry_delay=120)
 def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
     """
     Task Celery que extrai peças individuais de um documento PDF já ingerido.
@@ -179,7 +179,8 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
                 logger.warning("[PEÇAS] GEMINI_API_KEY não configurada — extração cancelada")
                 return
 
-            model_name = settings.LLM_STANDARD_MODEL
+            import random
+            model_name = settings.LLM_ECONOMICO_MODEL  # flash-lite — extração simples não precisa de flash
             response = httpx.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
                 params={"key": api_key},
@@ -193,6 +194,11 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
                 },
                 timeout=60.0,
             )
+            if response.status_code == 429:
+                # Backoff com jitter para evitar thundering herd quando várias tasks retentar juntas
+                delay = 120 + random.randint(0, 120)
+                logger.warning(f"[PEÇAS] 429 rate limit — retry em {delay}s doc={documento_id}")
+                raise self.retry(exc=RuntimeError("Gemini 429 rate limit"), countdown=delay)
             response.raise_for_status()
 
             raw = response.json()
@@ -252,7 +258,7 @@ def extrair_pecas_task(self, documento_id: str, inquerito_id: str):
 
         except json.JSONDecodeError as e:
             logger.error(f"[PEÇAS] Falha ao parsear JSON da IA: {e}")
-            raise self.retry(exc=RuntimeError(f"JSON inválido da IA: {e}"))
+            raise self.retry(exc=RuntimeError(f"JSON inválido da IA: {e}"), countdown=60)
         except Exception as e:
             logger.error(f"[PEÇAS] Erro na extração de peças: {e}", exc_info=True)
-            raise self.retry(exc=e)
+            raise self.retry(exc=e, countdown=60)
