@@ -166,8 +166,10 @@ class LLMService:
             usage = getattr(response, "usage_metadata", None)
             tokens_prompt   = getattr(usage, "prompt_token_count", 0) or 0
             tokens_resposta = getattr(usage, "candidates_token_count", 0) or 0
+            # thinking tokens são cobrados a $3.50/1M (gemini-2.5-flash) — muito mais caros que output
+            tokens_thinking = getattr(usage, "thoughts_token_count", 0) or 0
 
-            custo = self._estimar_custo(model, tokens_prompt, tokens_resposta)
+            custo = self._estimar_custo(model, tokens_prompt, tokens_resposta, tokens_thinking)
 
             result = {
                 "content": content,
@@ -179,8 +181,8 @@ class LLMService:
             }
 
             logger.info(
-                f"[LLM-Gemini] {model} — {tokens_prompt}+{tokens_resposta} tokens, "
-                f"{tempo_ms}ms, ~${custo:.4f}"
+                f"[LLM-Gemini] {model} — {tokens_prompt}+{tokens_resposta} tokens "
+                f"(thinking={tokens_thinking}), {tempo_ms}ms, ~${custo:.4f}"
             )
 
             return result
@@ -211,11 +213,20 @@ class LLMService:
         tempo_ms: int = None,
         status: str = "ok",
     ) -> None:
-        """Persiste o consumo no banco e dispara alerta Telegram se necessário."""
+        """Persiste o consumo no banco e dispara alerta Telegram se necessário.
+
+        Usa NullPool para funcionar tanto em workers Celery (new_event_loop) quanto
+        em handlers FastAPI (event loop do servidor). O async_session do módulo
+        core/database usa pool persistente que falha em event loops diferentes.
+        """
         try:
-            from app.core.database import async_session
-            from app.models.consumo_api import ConsumoApi
+            import ssl
+            from datetime import datetime
             from sqlalchemy import func, select
+            from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+            from sqlalchemy.pool import NullPool
+            from app.core.database import _encode_password_in_url
+            from app.models.consumo_api import ConsumoApi
 
             cotacao = Decimal(str(settings.COTACAO_DOLAR))
             custo_brl = Decimal(str(custo_usd)) * cotacao
@@ -234,20 +245,35 @@ class LLMService:
                 status=status,
             )
 
-            async with async_session() as db:
-                db.add(registro)
-                await db.flush()
+            async_url = _encode_password_in_url(settings.DATABASE_URL)
+            async_url = async_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            async_url = async_url.replace("postgres://", "postgresql+asyncpg://", 1)
 
-                # Checar se cruzou o threshold de alerta (mês corrente)
-                from datetime import datetime
-                inicio_mes = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-                total_result = await db.execute(
-                    select(func.sum(ConsumoApi.custo_brl)).where(
-                        ConsumoApi.timestamp >= inicio_mes
+            connect_args: dict = {"statement_cache_size": 0}
+            if "supabase" in async_url or "localhost" not in async_url:
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                connect_args["ssl"] = ctx
+
+            engine = create_async_engine(async_url, connect_args=connect_args, poolclass=NullPool)
+            Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+            try:
+                async with Session() as db:
+                    db.add(registro)
+                    await db.flush()
+
+                    inicio_mes = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                    total_result = await db.execute(
+                        select(func.sum(ConsumoApi.custo_brl)).where(
+                            ConsumoApi.timestamp >= inicio_mes
+                        )
                     )
-                )
-                total_mes = float(total_result.scalar() or 0)
-                await db.commit()
+                    total_mes = float(total_result.scalar() or 0)
+                    await db.commit()
+            finally:
+                await engine.dispose()
 
             # Alerta Telegram se ultrapassou o limite (só dispara na primeira vez que cruza)
             threshold = settings.BUDGET_ALERT_BRL
@@ -285,47 +311,53 @@ class LLMService:
         except Exception as e:
             logger.warning(f"[LLM-Alerta] Falha ao enviar alerta Telegram: {e}")
 
-    def _estimar_custo(self, model: str, tokens_in: int, tokens_out: int) -> float:
+    def _estimar_custo(self, model: str, tokens_in: int, tokens_out: int, tokens_thinking: int = 0) -> float:
         """Estimativa de custo (USD) baseada em preços por 1M tokens.
 
         ATENÇÃO: as chaves mais específicas devem vir ANTES das menos específicas
         (ex: gemini-2.5-flash-lite antes de gemini-2.5-flash) para evitar
         que o substring match capture o modelo errado.
+
+        tokens_thinking: cobrados separadamente a preço muito mais alto (~$3.50/1M).
+        Disponível em usage_metadata.thoughts_token_count (Gemini 2.5 com thinking ativado).
         """
         # Ordenado do mais específico para o menos específico dentro de cada família
         precos = [
-            # Família 2.5 (atual)
-            ("gemini-2.5-flash-lite",  {"in": 0.10,   "out": 0.40}),
-            ("gemini-2.5-flash",       {"in": 0.15,   "out": 0.60}),
-            ("gemini-2.5-pro",         {"in": 1.25,   "out": 10.00}),
-            # Família 2.0 (legado)
-            ("gemini-2.0-flash-lite",  {"in": 0.075,  "out": 0.30}),
-            ("gemini-2.0-flash",       {"in": 0.10,   "out": 0.40}),
-            # Família 1.5 (legado)
-            ("gemini-1.5-flash-8b",    {"in": 0.0375, "out": 0.15}),
-            ("gemini-1.5-flash",       {"in": 0.075,  "out": 0.30}),
-            ("gemini-1.5-pro",         {"in": 1.25,   "out": 5.00}),
+            # Família 2.5 (atual) — "thinking" = preço por token de pensamento interno
+            ("gemini-2.5-flash-lite",  {"in": 0.10,   "out": 0.40,  "thinking": 3.50}),
+            ("gemini-2.5-flash",       {"in": 0.15,   "out": 0.60,  "thinking": 3.50}),
+            ("gemini-2.5-pro",         {"in": 1.25,   "out": 10.00, "thinking": 3.50}),
+            # Família 2.0 (legado — sem thinking)
+            ("gemini-2.0-flash-lite",  {"in": 0.075,  "out": 0.30,  "thinking": 0.00}),
+            ("gemini-2.0-flash",       {"in": 0.10,   "out": 0.40,  "thinking": 0.00}),
+            # Família 1.5 (legado — sem thinking)
+            ("gemini-1.5-flash-8b",    {"in": 0.0375, "out": 0.15,  "thinking": 0.00}),
+            ("gemini-1.5-flash",       {"in": 0.075,  "out": 0.30,  "thinking": 0.00}),
+            ("gemini-1.5-pro",         {"in": 1.25,   "out": 5.00,  "thinking": 0.00}),
             # Aliases antigos do SDK (sem versão explícita)
-            ("gemini-pro-latest",      {"in": 0.50,   "out": 1.50}),  # era gemini-1.0-pro
-            ("gemini-flash-latest",    {"in": 0.075,  "out": 0.30}),  # era gemini-1.5-flash
-            ("gemini-pro",             {"in": 0.50,   "out": 1.50}),  # gemini-1.0-pro
-            # Groq (Llama) — preços reais Groq por 1M tokens em USD
-            ("llama-3.3-70b",          {"in": 0.59,   "out": 0.79}),
-            ("llama-3.1-70b",          {"in": 0.59,   "out": 0.79}),
-            ("llama-3.1-8b",           {"in": 0.05,   "out": 0.08}),
-            ("llama",                  {"in": 0.20,   "out": 0.30}),  # fallback llama genérico
+            ("gemini-pro-latest",      {"in": 0.50,   "out": 1.50,  "thinking": 0.00}),
+            ("gemini-flash-latest",    {"in": 0.075,  "out": 0.30,  "thinking": 0.00}),
+            ("gemini-pro",             {"in": 0.50,   "out": 1.50,  "thinking": 0.00}),
+            # Groq (Llama) — sem thinking
+            ("llama-3.3-70b",          {"in": 0.59,   "out": 0.79,  "thinking": 0.00}),
+            ("llama-3.1-70b",          {"in": 0.59,   "out": 0.79,  "thinking": 0.00}),
+            ("llama-3.1-8b",           {"in": 0.05,   "out": 0.08,  "thinking": 0.00}),
+            ("llama",                  {"in": 0.20,   "out": 0.30,  "thinking": 0.00}),
             # Embeddings (gratuitos)
-            ("text-embedding-004",     {"in": 0.00,   "out": 0.00}),
-            ("gemini-embedding",       {"in": 0.00,   "out": 0.00}),
+            ("text-embedding-004",     {"in": 0.00,   "out": 0.00,  "thinking": 0.00}),
+            ("gemini-embedding",       {"in": 0.00,   "out": 0.00,  "thinking": 0.00}),
         ]
 
         model_lower = model.lower()
-        selected_price = {"in": 0.15, "out": 0.60}  # fallback = gemini-2.5-flash (razoável)
+        selected_price = {"in": 0.15, "out": 0.60, "thinking": 3.50}  # fallback = gemini-2.5-flash
 
         for key, prices in precos:
             if key in model_lower:
                 selected_price = prices
                 break
 
-        return (tokens_in  * selected_price["in"]  / 1_000_000) + \
-               (tokens_out * selected_price["out"] / 1_000_000)
+        return (
+            (tokens_in       * selected_price["in"]      / 1_000_000) +
+            (tokens_out      * selected_price["out"]     / 1_000_000) +
+            (tokens_thinking * selected_price["thinking"] / 1_000_000)
+        )

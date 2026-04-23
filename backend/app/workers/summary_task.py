@@ -196,6 +196,18 @@ def generate_analise_task(self, inquerito_id: str):
                 await engine.dispose()
                 return {"status": "inquerito_nao_encontrado"}
 
+            # ── 0. Guarda de idempotência — pula se síntese recente já existe ──
+            sintese_existente = await db.execute(
+                select(Documento)
+                .where(Documento.inquerito_id == inq_uuid)
+                .where(Documento.tipo_peca == "sintese_investigativa")
+                .limit(1)
+            )
+            if sintese_existente.scalar_one_or_none():
+                logger.info(f"[SINTESE-TASK] Síntese já existe — pulando: {inquerito_id}")
+                await engine.dispose()
+                return {"status": "ja_existe"}
+
             # ── 1. Resumos dos documentos reais ────────────────────────────────
             docs_result = await db.execute(
                 select(Documento)
