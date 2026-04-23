@@ -47,7 +47,7 @@ Disparado quando **todos** os documentos do inquérito estão com `status=conclu
 
 - **Agente RelatorioInicial** (`tier=premium` → `gemini-2.5-flash`):
   - Contexto: até **2.800.000 chars** (~700k tokens) de `texto_extraido` direto, ordenados por prioridade pericial
-  - max_tokens: 8.000 | temperature: 0.1
+  - max_tokens: 65.536 | temperature: 0.1
   - PASSO 0: identifica fase processual (Instauração / Instrução / Indiciamento / Relatamento)
   - Gera **9 seções** com metodologia 5W criminal (v3)
   - **Seção 1 preenche `Inquerito.descricao`** — único lugar onde o campo "Fato" é preenchido
@@ -67,7 +67,7 @@ Disparado manualmente quando o MP devolveu o inquérito para diligências comple
   - Carrega `relatorio_inicial` DocumentoGerado como base (até 60.000 chars)
   - Carrega todos os docs indexados — prioriza `oficio_recebido` (Cota Ministerial do MP)
   - Gera **5 seções:** Referência e Objeto | Diligências Realizadas | Resultado | Individualização de Conduta | Conclusão
-  - max_tokens: 8.000 | temperature: 0.1
+  - max_tokens: 65.536 | temperature: 0.1
 - **Agente AuditorComplementar** (`tier=standard`): auditoria anti-alucinação
 - Salva como `DocumentoGerado(tipo="relatorio_complementar")`
 - Endpoint: `POST /inqueritos/{id}/gerar-relatorio-complementar?forcar=false`
@@ -172,7 +172,7 @@ O Copiloto conversa naturalmente, sem diretrizes rígidas numeradas. Raciocina e
 
 **ATENÇÃO — `{}` no prompt:** qualquer literal `{}` em `SYSTEM_PROMPT_COPILOTO` deve ser `{{}}` — o serviço faz `.format(**kwargs)` e quebra com placeholders posicionais vazios.
 
-- `max_tokens = 8000`
+- `max_tokens = 65536`
 
 ---
 
@@ -255,6 +255,7 @@ O Copiloto conversa naturalmente, sem diretrizes rígidas numeradas. Raciocina e
 - **Git:** sempre `git push` após `git commit`. Nunca deixar commits locais.
 - **SERPER_API_KEY:** hardcoded como default em `config.py` — não remover.
 - **LLM JSON output:** sempre `max_tokens` ≥ 2500 para JSON com múltiplos campos.
+- **LLM geradores de documentos:** sempre `max_tokens=65536` (teto do Flash) — sem limite artificial menor. O modelo para sozinho quando termina. Limites baixos apenas para chamadas estruturais curtas (JSON, timestamps, classificações).
 - **Alembic:** no Railway, usar `python -m alembic upgrade head` (não `alembic` direto).
 - **Inquérito é impessoal:** servidores policiais não são objeto de análise — nunca incluir como suspeitos ou alvos OSINT.
 - **Campo "Fato":** preenchido SOMENTE pela Seção 1 do Relatório Inicial. Não setar em outros lugares.
