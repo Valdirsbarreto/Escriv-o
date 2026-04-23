@@ -449,6 +449,13 @@ async def osint_deep_status(
     if not doc:
         return {"status": "idle", "doc_id": None}
     if doc.conteudo == "__PROCESSANDO__":
+        # Se preso há mais de 25 min (task hard timeout = 22 min), marca como erro
+        from datetime import datetime, timezone
+        idade = (datetime.now(timezone.utc) - doc.created_at.replace(tzinfo=timezone.utc)).total_seconds()
+        if idade > 1500:  # 25 minutos
+            doc.conteudo = "# ERRO\n\nA pesquisa excedeu o tempo máximo (22 min) e foi encerrada pelo servidor. Tente novamente."
+            await db.commit()
+            return {"status": "erro", "doc_id": str(doc.id), "erro": "Timeout — pesquisa excedeu 22 minutos."}
         return {"status": "processando", "doc_id": str(doc.id)}
     if doc.conteudo.startswith("# ERRO"):
         return {"status": "erro", "doc_id": str(doc.id), "erro": doc.conteudo[:300]}
