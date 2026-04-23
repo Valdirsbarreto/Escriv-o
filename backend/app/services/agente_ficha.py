@@ -108,11 +108,14 @@ Eventos/Cronologia:
             except Exception as e:
                 logger.warning(f"[AGENTE-FICHA] Histórico cruzado falhou: {e}")
 
+        def _esc(s: str) -> str:
+            return s.replace("{", "{{").replace("}", "}}")
+
         prompt = PROMPT_FICHA_PESSOA.format(
-            nome=pessoa.nome,
-            dados_consolidados=dados,
-            historico_inqueritos=historico_str,
-            dados_externos=dados_externos_str,
+            nome=_esc(pessoa.nome),
+            dados_consolidados=_esc(dados),
+            historico_inqueritos=_esc(historico_str),
+            dados_externos=_esc(dados_externos_str),
         )
 
         try:
@@ -268,10 +271,13 @@ Eventos/Cronologia:
             except Exception as e:
                 logger.warning(f"[AGENTE-FICHA] Histórico cruzado falhou: {e}")
 
+        def _esc(s: str) -> str:
+            return s.replace("{", "{{").replace("}", "}}")
+
         prompt = PROMPT_ANALISE_PRELIMINAR.format(
-            nome=pessoa.nome,
-            dados_consolidados=dados,
-            historico_inqueritos=historico_str,
+            nome=_esc(pessoa.nome),
+            dados_consolidados=_esc(dados),
+            historico_inqueritos=_esc(historico_str),
         )
 
         tier = "standard" if aprimorar else "resumo"
@@ -279,7 +285,7 @@ Eventos/Cronologia:
             messages=[{"role": "user", "content": prompt}],
             tier=tier,
             temperature=0.2,
-            max_tokens=1200,
+            max_tokens=2500,
             json_mode=True,
             agente="AnalisePreliminar",
         )
@@ -655,11 +661,14 @@ Endereços:
             except Exception as e:
                 logger.warning(f"[AGENTE-FICHA] Histórico cruzado empresa falhou: {e}")
 
+        def _esc(s: str) -> str:
+            return s.replace("{", "{{").replace("}", "}}")
+
         prompt = PROMPT_FICHA_EMPRESA.format(
-            nome=empresa.nome,
-            dados_consolidados=dados,
-            historico_inqueritos=historico_str,
-            dados_externos=dados_externos_str,
+            nome=_esc(empresa.nome),
+            dados_consolidados=_esc(dados),
+            historico_inqueritos=_esc(historico_str),
+            dados_externos=_esc(dados_externos_str),
         )
 
         try:
