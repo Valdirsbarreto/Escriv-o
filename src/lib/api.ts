@@ -416,6 +416,20 @@ export const osintDeepStatus = async (inqueritoId: string, pessoaId: string) => 
   return response.data as { status: "idle" | "processando" | "concluido" | "erro"; doc_id: string | null; erro?: string };
 };
 
+export const osintDeepPlanejar = async (inqueritoId: string, pessoaId: string) => {
+  const response = await api.post(`/agentes/osint/deep/${inqueritoId}/${pessoaId}/planejar`, null, { timeout: 30000 });
+  return response.data as { briefing: string; pessoa_nome: string; papel: string };
+};
+
+export const osintDeepExecutar = async (inqueritoId: string, pessoaId: string, briefing: string) => {
+  const response = await api.post(
+    `/agentes/osint/deep/${inqueritoId}/${pessoaId}/executar`,
+    { briefing },
+    { timeout: 15000 },
+  );
+  return response.data as { status: string; doc_id: string; mensagem: string };
+};
+
 // ── Agente Sherlock ────────────────────────────────────────────────────────────
 
 export const ingestaoIniciarUrl = async (url: string, nome_arquivo: string) => {

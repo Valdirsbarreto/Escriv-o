@@ -9,7 +9,7 @@ import {
   AlertTriangle, CheckCircle, XCircle, MinusCircle,
   ExternalLink, Play, UserSearch, Globe, Scale, Newspaper, FileText,
 } from "lucide-react";
-import { osintSugestao, osintLote, osintAnalisePreliminar, osintBuscaWeb, osintGerarRelatorioWeb, osintGratuito, osintDeepResearch, osintDeepStatus } from "@/lib/api";
+import { osintSugestao, osintLote, osintAnalisePreliminar, osintBuscaWeb, osintGerarRelatorioWeb, osintGratuito, osintDeepResearch, osintDeepStatus, osintDeepPlanejar, osintDeepExecutar } from "@/lib/api";
 import { Sparkles, Zap, Microscope } from "lucide-react";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -664,11 +664,13 @@ function OsintDeepPanel({ inqueritoId, pessoaId, nomePessoa }: {
   pessoaId: string;
   nomePessoa: string;
 }) {
-  const [etapa, setEtapa] = useState<"carregando" | "idle" | "confirmando" | "iniciado" | "concluido" | "erro">("carregando");
+  type Etapa = "carregando" | "idle" | "planejando" | "revisando" | "iniciado" | "concluido" | "erro";
+  const [etapa, setEtapa] = useState<Etapa>("carregando");
   const [erroMsg, setErroMsg] = useState<string | null>(null);
   const [docId, setDocId] = useState<string | null>(null);
+  const [briefing, setBriefing] = useState("");
 
-  // Verificar status ao montar — restaura estado após navegação
+  // Restaura estado após navegação
   useEffect(() => {
     osintDeepStatus(inqueritoId, pessoaId)
       .then(r => {
@@ -681,21 +683,29 @@ function OsintDeepPanel({ inqueritoId, pessoaId, nomePessoa }: {
       .catch(() => setEtapa("idle"));
   }, [inqueritoId, pessoaId]);
 
-  const handleIniciar = async () => {
+  const handlePlanejar = async () => {
+    setEtapa("planejando");
+    setErroMsg(null);
+    try {
+      const r = await osintDeepPlanejar(inqueritoId, pessoaId);
+      setBriefing(r.briefing);
+      setEtapa("revisando");
+    } catch (e: any) {
+      setErroMsg(e?.response?.data?.detail || e?.message || "Erro ao gerar plano.");
+      setEtapa("erro");
+    }
+  };
+
+  const handleExecutar = async () => {
     setEtapa("iniciado");
     setErroMsg(null);
     try {
-      const r = await osintDeepResearch(inqueritoId, pessoaId);
+      const r = await osintDeepExecutar(inqueritoId, pessoaId, briefing);
       setDocId(r.doc_id);
     } catch (e: any) {
-      const detail = e?.response?.data?.detail || e?.message || "Erro desconhecido";
-      // 409 = já em andamento (navegação e clique duplo)
-      if (e?.response?.status === 409) {
-        setEtapa("iniciado");
-      } else {
-        setErroMsg(String(detail));
-        setEtapa("erro");
-      }
+      if (e?.response?.status === 409) { setEtapa("iniciado"); return; }
+      setErroMsg(e?.response?.data?.detail || e?.message || "Erro ao iniciar pesquisa.");
+      setEtapa("erro");
     }
   };
 
@@ -707,76 +717,111 @@ function OsintDeepPanel({ inqueritoId, pessoaId, nomePessoa }: {
         <span className="text-xs text-zinc-600">Gemini · 5–15 min · ~US$ 1–3</span>
       </div>
       <div className="px-3 pb-3 border-t border-zinc-800/60 pt-2 space-y-2">
-        {etapa !== "concluido" && (
-          <p className="text-xs text-zinc-500 leading-relaxed">
-            Pesquisa autônoma em fontes abertas: processos judiciais, empresas, patrimônio, mídia, registros oficiais.
-            O relatório é salvo em <span className="text-zinc-300">Documentos IA</span>.
-          </p>
-        )}
 
         {erroMsg && (
           <p className="text-xs text-red-400 leading-relaxed">{erroMsg}</p>
         )}
 
-        {etapa === "carregando" ? (
+        {etapa === "carregando" && (
           <div className="flex items-center gap-1.5 text-xs text-zinc-600">
             <Loader2 size={10} className="animate-spin" /> verificando…
           </div>
-        ) : etapa === "iniciado" ? (
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2 text-xs text-violet-400">
-              <Loader2 size={11} className="animate-spin" />
-              Pesquisa em andamento… (5–15 min)
-            </div>
-            <p className="text-xs text-zinc-600">O documento aparecerá em <span className="text-zinc-400">Documentos IA</span> com borda âmbar ao concluir.</p>
+        )}
+
+        {etapa === "idle" && (
+          <>
+            <p className="text-xs text-zinc-500 leading-relaxed">
+              Pesquisa autônoma em fontes abertas: processos, patrimônio, empresas, mídia, sanções.
+              O relatório é salvo em <span className="text-zinc-300">Documentos IA</span>.
+            </p>
+            <button
+              onClick={handlePlanejar}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-violet-700/50 text-violet-400 bg-violet-500/5 hover:bg-violet-500/10 transition-colors"
+            >
+              <Microscope size={10} />
+              Planejar pesquisa
+            </button>
+          </>
+        )}
+
+        {etapa === "planejando" && (
+          <div className="flex items-center gap-2 text-xs text-violet-400">
+            <Loader2 size={11} className="animate-spin" />
+            Analisando os autos e gerando plano investigativo… (~5s)
           </div>
-        ) : etapa === "concluido" ? (
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-violet-400 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
-              Relatório disponível
-            </span>
-            {docId && (
-              <a
-                href="#documentos-ia"
-                className="text-xs text-violet-400 underline hover:text-violet-300"
-                onClick={() => {
-                  const el = document.getElementById("documentos-ia");
-                  if (el) el.scrollIntoView({ behavior: "smooth" });
-                }}
-              >
-                Ver relatório ↓
-              </a>
-            )}
-          </div>
-        ) : etapa === "confirmando" ? (
+        )}
+
+        {etapa === "revisando" && (
           <div className="space-y-2">
-            <p className="text-xs text-amber-300">
-              Confirmar pesquisa Deep Research para <span className="font-semibold">{nomePessoa}</span>?
-              {" "}Custo estimado: US$ 1–3.
+            <p className="text-xs text-zinc-400 font-semibold">
+              Plano investigativo para <span className="text-violet-300">{nomePessoa}</span>
+              <span className="text-zinc-600 font-normal"> — revise e edite antes de executar:</span>
+            </p>
+            <textarea
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-xs text-zinc-200 font-mono leading-relaxed focus:outline-none focus:ring-1 focus:ring-violet-500 resize-y"
+              rows={10}
+              value={briefing}
+              onChange={e => setBriefing(e.target.value)}
+            />
+            <p className="text-xs text-zinc-600">
+              Custo estimado: <span className="text-amber-400">US$ 1–3</span>. O relatório pode levar 5–15 min.
             </p>
             <div className="flex gap-2">
               <button
-                onClick={handleIniciar}
-                className="text-xs px-3 py-1 rounded bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors"
+                onClick={handleExecutar}
+                disabled={!briefing.trim()}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors disabled:opacity-50"
               >
-                Confirmar
+                <Microscope size={10} />
+                Executar pesquisa
               </button>
               <button
                 onClick={() => setEtapa("idle")}
-                className="text-xs px-3 py-1 rounded border border-zinc-700 text-zinc-400 hover:border-zinc-600 transition-colors"
+                className="text-xs px-3 py-1.5 rounded border border-zinc-700 text-zinc-400 hover:border-zinc-600 transition-colors"
               >
                 Cancelar
               </button>
             </div>
           </div>
-        ) : (
+        )}
+
+        {etapa === "iniciado" && (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs text-violet-400">
+              <Loader2 size={11} className="animate-spin" />
+              Pesquisa em andamento… (5–15 min)
+            </div>
+            <p className="text-xs text-zinc-600">
+              O documento aparecerá em <span className="text-zinc-400">Documentos IA</span> com borda âmbar ao concluir.
+            </p>
+          </div>
+        )}
+
+        {etapa === "concluido" && (
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-violet-400 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
+              Relatório disponível
+            </span>
+            <a
+              href="#documentos-ia"
+              className="text-xs text-violet-400 underline hover:text-violet-300 cursor-pointer"
+              onClick={e => {
+                e.preventDefault();
+                document.getElementById("documentos-ia")?.scrollIntoView({ behavior: "smooth" });
+              }}
+            >
+              Ver relatório ↓
+            </a>
+          </div>
+        )}
+
+        {etapa === "erro" && (
           <button
-            onClick={() => setEtapa("confirmando")}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-violet-700/50 text-violet-400 bg-violet-500/5 hover:bg-violet-500/10 transition-colors"
+            onClick={() => { setEtapa("idle"); setErroMsg(null); }}
+            className="text-xs text-zinc-500 hover:text-zinc-300 underline"
           >
-            <Microscope size={10} />
-            Iniciar Deep Research
+            Tentar novamente
           </button>
         )}
       </div>

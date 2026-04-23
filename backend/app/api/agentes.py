@@ -18,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.models.consulta_externa import ConsultaExterna
 from app.models.pessoa import Pessoa
+from app.models.contato import Contato
+from app.models.endereco import Endereco
 from app.services.agente_ficha import AgenteFicha
 from app.services.agente_cautelar import AgenteCautelar
 from app.services.agente_extrato import AgenteExtrato
@@ -212,28 +214,47 @@ async def osint_web_relatorio(
 DEEP_RESEARCH_AGENT_MODEL = "deep-research-preview-04-2026"
 
 
+class OsintDeepExecutarRequest(BaseModel):
+    briefing: str = ""
+
+
+async def _guard_deep_em_andamento(inquerito_id: uuid.UUID, db: AsyncSession):
+    """Retorna o doc placeholder se já existe pesquisa em andamento, ou None."""
+    from app.models.documento_gerado import DocumentoGerado
+    from sqlalchemy import and_
+    result = await db.execute(
+        select(DocumentoGerado).where(
+            and_(
+                DocumentoGerado.inquerito_id == inquerito_id,
+                DocumentoGerado.tipo == "osint_deep",
+                DocumentoGerado.conteudo == "__PROCESSANDO__",
+            )
+        ).limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 @router.post(
-    "/osint/deep/{inquerito_id}/{pessoa_id}",
-    summary="OSINT Aprofundado — Gemini Deep Research Agent (5–15 min, background)",
+    "/osint/deep/{inquerito_id}/{pessoa_id}/planejar",
+    summary="OSINT Deep Research — gera plano investigativo para revisão (~5–10s)",
 )
-async def osint_deep_research(
+async def osint_deep_planejar(
     inquerito_id: uuid.UUID,
     pessoa_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Inicia pesquisa aprofundada em fontes abertas usando o Gemini Deep Research Agent.
-
-    - Cria DocumentoGerado(tipo='osint_deep') placeholder imediatamente
-    - Dispara Celery task em background (5–15 min)
-    - Retorna {status, doc_id, mensagem}
-    - Frontend faz polling automático (a cada 8s) até em_processamento=False
-
-    Custo estimado: US$ 1–3 por pesquisa (debitado via Gemini API).
+    Fase 1 do Deep Research colaborativo.
+    Gera um briefing investigativo via gemini-flash com base nos autos e no papel da pessoa.
+    O Comissário revisa, edita se necessário, e aprova antes de disparar o Deep Research.
+    Custo: praticamente zero (flash-lite, ~2k tokens).
     """
     from app.core.config import settings
-    from app.models.documento_gerado import DocumentoGerado
-    from sqlalchemy import and_
+    from app.models.contato import Contato
+    from app.models.endereco import Endereco
+    from app.models.documento_gerado import DocumentoGerado as DocGerado
+    from app.services.summary_service import SummaryService
+    from app.workers.osint_deep_task import _gerar_briefing
 
     if not getattr(settings, "GEMINI_API_KEY", None):
         raise HTTPException(status_code=503, detail="GEMINI_API_KEY não configurado.")
@@ -242,23 +263,133 @@ async def osint_deep_research(
     if not pessoa:
         raise HTTPException(status_code=404, detail="Pessoa não encontrada.")
 
-    # Guard: evitar duplo disparo
-    em_andamento = (await db.execute(
-        select(DocumentoGerado).where(
-            and_(
-                DocumentoGerado.inquerito_id == inquerito_id,
-                DocumentoGerado.tipo == "osint_deep",
-                DocumentoGerado.conteudo == "__PROCESSANDO__",
-            )
-        ).limit(1)
-    )).scalar_one_or_none()
+    # Contatos e endereços
+    contatos_res = await db.execute(
+        select(Contato)
+        .where(Contato.inquerito_id == inquerito_id, Contato.pessoa_id == pessoa_id)
+        .limit(10)
+    )
+    contatos = contatos_res.scalars().all()
 
-    if em_andamento:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Já existe uma pesquisa Deep Research em andamento para {pessoa.nome}. "
-                   "Aguarde a conclusão antes de iniciar outra.",
+    enderecos_res = await db.execute(
+        select(Endereco)
+        .where(Endereco.inquerito_id == inquerito_id, Endereco.pessoa_id == pessoa_id)
+        .limit(5)
+    )
+    enderecos = enderecos_res.scalars().all()
+
+    # Contexto do inquérito
+    contexto_parts = []
+    try:
+        rel_res = await db.execute(
+            select(DocGerado)
+            .where(
+                DocGerado.inquerito_id == inquerito_id,
+                DocGerado.tipo == "relatorio_inicial",
+                DocGerado.conteudo != "__PROCESSANDO__",
+            )
+            .order_by(DocGerado.created_at.desc())
+            .limit(1)
         )
+        rel = rel_res.scalar_one_or_none()
+        if rel and rel.conteudo:
+            contexto_parts.append("=== RELATÓRIO INICIAL ===\n" + rel.conteudo[:8000])
+
+        resumo = await SummaryService(db).obter_resumo_caso(inquerito_id)
+        if resumo:
+            contexto_parts.append("=== RESUMO EXECUTIVO ===\n" + resumo[:3000])
+    except Exception as e:
+        logger.warning(f"[OSINT-DEEP-PLAN] Contexto parcial: {e}")
+
+    contexto_inquerito = "\n\n".join(contexto_parts) or "Contexto do inquérito não disponível."
+
+    briefing = await _gerar_briefing(pessoa, contatos, enderecos, contexto_inquerito)
+    if not briefing:
+        raise HTTPException(status_code=500, detail="Falha ao gerar plano investigativo. Tente novamente.")
+
+    return {
+        "briefing": briefing,
+        "pessoa_nome": pessoa.nome,
+        "papel": getattr(pessoa, "papel", None) or getattr(pessoa, "tipo_pessoa", "não identificado"),
+    }
+
+
+@router.post(
+    "/osint/deep/{inquerito_id}/{pessoa_id}/executar",
+    summary="OSINT Deep Research — executa com briefing aprovado pelo Comissário",
+)
+async def osint_deep_executar(
+    inquerito_id: uuid.UUID,
+    pessoa_id: uuid.UUID,
+    body: OsintDeepExecutarRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Fase 2 do Deep Research colaborativo.
+    Recebe o briefing (possivelmente editado pelo Comissário) e dispara a pesquisa Deep Research.
+    """
+    from app.core.config import settings
+    from app.models.documento_gerado import DocumentoGerado
+
+    if not getattr(settings, "GEMINI_API_KEY", None):
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY não configurado.")
+
+    pessoa = await db.get(Pessoa, pessoa_id)
+    if not pessoa:
+        raise HTTPException(status_code=404, detail="Pessoa não encontrada.")
+
+    em_andamento = await _guard_deep_em_andamento(inquerito_id, db)
+    if em_andamento:
+        raise HTTPException(status_code=409, detail=f"Pesquisa já em andamento para {pessoa.nome}.")
+
+    doc = DocumentoGerado(
+        inquerito_id=inquerito_id,
+        titulo=f"OSINT Aprofundado — {pessoa.nome}",
+        tipo="osint_deep",
+        conteudo="__PROCESSANDO__",
+        modelo_llm=DEEP_RESEARCH_AGENT_MODEL,
+    )
+    db.add(doc)
+    await db.commit()
+    await db.refresh(doc)
+
+    from app.workers.osint_deep_task import osint_deep_research_task
+    osint_deep_research_task.delay(
+        str(inquerito_id), str(pessoa_id), str(doc.id),
+        briefing_override=body.briefing.strip() or None,
+    )
+
+    logger.info(f"[OSINT-DEEP] Executar com briefing aprovado — doc={doc.id} pessoa={pessoa.nome}")
+    return {
+        "status": "iniciado",
+        "doc_id": str(doc.id),
+        "mensagem": f"Pesquisa Deep Research iniciada para {pessoa.nome}. O relatório aparecerá em Documentos IA em 5–15 minutos.",
+    }
+
+
+@router.post(
+    "/osint/deep/{inquerito_id}/{pessoa_id}",
+    summary="OSINT Aprofundado — disparo direto sem planejamento (legado)",
+)
+async def osint_deep_research(
+    inquerito_id: uuid.UUID,
+    pessoa_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Disparo direto sem fase de planejamento. Mantido para compatibilidade."""
+    from app.core.config import settings
+    from app.models.documento_gerado import DocumentoGerado
+
+    if not getattr(settings, "GEMINI_API_KEY", None):
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY não configurado.")
+
+    pessoa = await db.get(Pessoa, pessoa_id)
+    if not pessoa:
+        raise HTTPException(status_code=404, detail="Pessoa não encontrada.")
+
+    em_andamento = await _guard_deep_em_andamento(inquerito_id, db)
+    if em_andamento:
+        raise HTTPException(status_code=409, detail=f"Já existe uma pesquisa Deep Research em andamento para {pessoa.nome}.")
 
     doc = DocumentoGerado(
         inquerito_id=inquerito_id,
@@ -278,10 +409,7 @@ async def osint_deep_research(
     return {
         "status": "iniciado",
         "doc_id": str(doc.id),
-        "mensagem": (
-            f"Pesquisa Deep Research iniciada para {pessoa.nome}. "
-            "O relatório aparecerá em Documentos IA em 5–15 minutos."
-        ),
+        "mensagem": f"Pesquisa Deep Research iniciada para {pessoa.nome}. O relatório aparecerá em Documentos IA em 5–15 minutos.",
     }
 
 

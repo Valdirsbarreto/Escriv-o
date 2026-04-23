@@ -39,15 +39,16 @@ CUSTO_ESTIMADO_USD = 2.00  # estimativa conservadora por pesquisa
     time_limit=1320,
     soft_time_limit=1260,
 )
-def osint_deep_research_task(self, inquerito_id: str, pessoa_id: str, doc_id: str):
+def osint_deep_research_task(self, inquerito_id: str, pessoa_id: str, doc_id: str, briefing_override: str | None = None):
     """
     Executa pesquisa aprofundada via Gemini Deep Research Agent.
     Parâmetros:
         inquerito_id: UUID do inquérito
         pessoa_id: UUID da pessoa alvo
         doc_id: UUID do DocumentoGerado placeholder já criado (conteudo="__PROCESSANDO__")
+        briefing_override: briefing aprovado/editado pelo Comissário (pula _gerar_briefing se fornecido)
     """
-    logger.info(f"[OSINT-DEEP] Iniciando — inquerito={inquerito_id} pessoa={pessoa_id} doc={doc_id}")
+    logger.info(f"[OSINT-DEEP] Iniciando — inquerito={inquerito_id} pessoa={pessoa_id} doc={doc_id} briefing_override={'sim' if briefing_override else 'não'}")
 
     async def _run():
         from app.core.config import settings
@@ -130,9 +131,13 @@ def osint_deep_research_task(self, inquerito_id: str, pessoa_id: str, doc_id: st
 
             contexto_inquerito = "\n\n".join(contexto_parts) or "Contexto do inquérito não disponível."
 
-            # ── 2b. Gerar briefing investigativo via LLM ─────────────────────
-            briefing = await _gerar_briefing(pessoa, contatos, enderecos, contexto_inquerito)
-            logger.info(f"[OSINT-DEEP] Briefing gerado ({len(briefing)} chars) para {pessoa.nome}")
+            # ── 2b. Briefing — usa override aprovado pelo Comissário ou gera novo ──
+            if briefing_override:
+                briefing = briefing_override
+                logger.info(f"[OSINT-DEEP] Usando briefing aprovado pelo Comissário ({len(briefing)} chars) para {pessoa.nome}")
+            else:
+                briefing = await _gerar_briefing(pessoa, contatos, enderecos, contexto_inquerito)
+                logger.info(f"[OSINT-DEEP] Briefing gerado automaticamente ({len(briefing)} chars) para {pessoa.nome}")
 
             # ── 3. Montar prompt final e iniciar Deep Research ────────────────
             prompt = _montar_prompt_com_briefing(pessoa, contatos, enderecos, briefing)
