@@ -6,7 +6,7 @@ import { BiometricSetup } from "@/components/BiometricSetup";
 import { Badge } from "@/components/ui/badge";
 import {
   DollarSign, Zap, BarChart2, RefreshCw, AlertTriangle, CheckCircle,
-  Pencil, Check, X, Settings, Globe, Database, Server, Search, Bot, TrendingUp,
+  Pencil, Check, X, Settings, Globe, Database, Server, Search, Bot, TrendingUp, Microscope,
 } from "lucide-react";
 import {
   getConsumoSaldo, getConsumoRanking, getConsumoHistorico, getConsumoModelos,
@@ -31,9 +31,11 @@ const SERVICOS_CONFIG: Record<string, { label: string; icon: React.ReactNode; co
   vercel:        { label: "Vercel",         icon: <Globe size={14} />,    cor: "text-white" },
   railway:       { label: "Railway",        icon: <Server size={14} />,   cor: "text-purple-400" },
   supabase:      { label: "Supabase",       icon: <Database size={14} />, cor: "text-emerald-400" },
-  serper:        { label: "Serper.dev",     icon: <Search size={14} />,   cor: "text-sky-400" },
-  gemini_studio: { label: "Gemini Studio",  icon: <Bot size={14} />,      cor: "text-amber-400" },
-  outro:         { label: "Outro",          icon: <DollarSign size={14}/>, cor: "text-zinc-400" },
+  serper:        { label: "Serper.dev",       icon: <Search size={14} />,     cor: "text-sky-400" },
+  gemini_studio: { label: "Gemini Studio",    icon: <Bot size={14} />,        cor: "text-amber-400" },
+  deep_research: { label: "Deep Research",    icon: <Microscope size={14} />, cor: "text-violet-400" },
+  direct_data:   { label: "direct.data",      icon: <Database size={14} />,   cor: "text-blue-400" },
+  outro:         { label: "Outro",            icon: <DollarSign size={14} />, cor: "text-zinc-400" },
 };
 
 function pct(value: number, total: number) {

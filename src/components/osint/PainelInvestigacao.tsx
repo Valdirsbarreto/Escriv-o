@@ -9,8 +9,8 @@ import {
   AlertTriangle, CheckCircle, XCircle, MinusCircle,
   ExternalLink, Play, UserSearch, Globe, Scale, Newspaper, FileText,
 } from "lucide-react";
-import { osintSugestao, osintLote, osintAnalisePreliminar, osintBuscaWeb, osintGerarRelatorioWeb, osintGratuito } from "@/lib/api";
-import { Sparkles, Zap } from "lucide-react";
+import { osintSugestao, osintLote, osintAnalisePreliminar, osintBuscaWeb, osintGerarRelatorioWeb, osintGratuito, osintDeepResearch } from "@/lib/api";
+import { Sparkles, Zap, Microscope } from "lucide-react";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -657,6 +657,85 @@ function AnalisePreliminarPanel({
   );
 }
 
+// ── OSINT Deep Research Panel ─────────────────────────────────────────────────
+
+function OsintDeepPanel({ inqueritoId, pessoaId, nomePessoa }: {
+  inqueritoId: string;
+  pessoaId: string;
+  nomePessoa: string;
+}) {
+  const [etapa, setEtapa] = useState<"idle" | "confirmando" | "iniciado" | "erro">("idle");
+  const [erroMsg, setErroMsg] = useState<string | null>(null);
+
+  const handleIniciar = async () => {
+    setEtapa("iniciado");
+    setErroMsg(null);
+    try {
+      await osintDeepResearch(inqueritoId, pessoaId);
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || e?.message || "Erro desconhecido";
+      setErroMsg(String(detail));
+      setEtapa("erro");
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-violet-800/40 bg-zinc-900/60 overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2">
+        <Microscope size={11} className="text-violet-400 shrink-0" />
+        <span className="text-xs font-bold text-violet-400 uppercase tracking-wider">Deep Research</span>
+        <span className="text-xs text-zinc-600">Gemini · 5–15 min · ~US$ 1–3</span>
+      </div>
+      <div className="px-3 pb-3 border-t border-zinc-800/60 pt-2 space-y-2">
+        <p className="text-xs text-zinc-500 leading-relaxed">
+          Pesquisa autônoma em fontes abertas: processos judiciais, empresas, patrimônio, mídia, registros oficiais.
+          O relatório é salvo automaticamente em <span className="text-zinc-300">Documentos IA</span>.
+        </p>
+
+        {erroMsg && (
+          <p className="text-xs text-red-400 leading-relaxed">{erroMsg}</p>
+        )}
+
+        {etapa === "iniciado" ? (
+          <div className="flex items-center gap-2 text-xs text-violet-400">
+            <Loader2 size={11} className="animate-spin" />
+            Pesquisa em andamento… acompanhe em Documentos IA
+          </div>
+        ) : etapa === "confirmando" ? (
+          <div className="space-y-2">
+            <p className="text-xs text-amber-300">
+              Confirmar pesquisa Deep Research para <span className="font-semibold">{nomePessoa}</span>?
+              {" "}Custo estimado: US$ 1–3.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={handleIniciar}
+                className="text-xs px-3 py-1 rounded bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors"
+              >
+                Confirmar
+              </button>
+              <button
+                onClick={() => setEtapa("idle")}
+                className="text-xs px-3 py-1 rounded border border-zinc-700 text-zinc-400 hover:border-zinc-600 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setEtapa("confirmando")}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-violet-700/50 text-violet-400 bg-violet-500/5 hover:bg-violet-500/10 transition-colors"
+          >
+            <Microscope size={10} />
+            Iniciar Deep Research
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Card de Personagem ────────────────────────────────────────────────────────
 
 function CardPersonagem({
@@ -766,6 +845,9 @@ function CardPersonagem({
 
           {/* OSINT fontes abertas (Serper.dev — sob demanda) */}
           <OsintWebPanel inqueritoId={inqueritoId} pessoaId={p.pessoa_id} />
+
+          {/* OSINT Aprofundado (Gemini Deep Research — sob demanda com confirmação) */}
+          <OsintDeepPanel inqueritoId={inqueritoId} pessoaId={p.pessoa_id} nomePessoa={p.nome} />
 
           {/* Cross-inquérito com links + tooltip de síntese */}
           {temCross && (

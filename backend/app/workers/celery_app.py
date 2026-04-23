@@ -30,6 +30,7 @@ celery_app = Celery(
         "app.workers.reconcile_task",
         "app.workers.vigilancia_task",
         "app.workers.resumo_diario_task",
+        "app.workers.osint_deep_task",
     ],
 )
 
@@ -48,6 +49,7 @@ _TASK_LABELS = {
     "app.workers.relatorio_complementar_task.gerar_relatorio_complementar_task": "Relatório Complementar",
     "app.workers.orchestrator.orchestrate_new_inquerito": "Orquestrador Ingestão",
     "app.workers.reconcile_task.reconcile_pipeline_task": "Reconciliação de Pipeline",
+    "app.workers.osint_deep_task.osint_deep_research_task": "OSINT Deep Research",
 }
 
 

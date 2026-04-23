@@ -1042,6 +1042,8 @@ export default function InqueritoDetalhePage() {
   const TIPO_GERADO_LABEL: Record<string, string> = {
     relatorio_inicial: "Síntese Inicial",
     relatorio_osint_web: "Relatório OSINT Web",
+    osint_deep: "OSINT Deep Research",
+    termo_oitiva: "Termo de Declarações",
     roteiro_oitiva: "Roteiro de Oitiva",
     oficio: "Ofício",
     minuta_cautelar: "Minuta Cautelar",
@@ -1052,6 +1054,8 @@ export default function InqueritoDetalhePage() {
   const TIPO_GERADO_COLOR: Record<string, string> = {
     relatorio_inicial: "bg-amber-500/10 text-amber-400 border-amber-500/20",
     relatorio_osint_web: "bg-sky-500/10 text-sky-400 border-sky-500/20",
+    osint_deep: "bg-violet-500/10 text-violet-400 border-violet-500/20",
+    termo_oitiva: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
     roteiro_oitiva: "bg-blue-500/10 text-blue-400 border-blue-500/20",
     oficio: "bg-purple-500/10 text-purple-400 border-purple-500/20",
     minuta_cautelar: "bg-orange-500/10 text-orange-400 border-orange-500/20",

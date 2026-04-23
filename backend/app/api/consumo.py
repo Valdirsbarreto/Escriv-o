@@ -22,7 +22,7 @@ from app.models.inquerito import Inquerito
 
 router = APIRouter(prefix="/consumo", tags=["Orçamento"])
 
-SERVICOS_VALIDOS = {"vercel", "supabase", "railway", "serper", "gemini_studio", "outro"}
+SERVICOS_VALIDOS = {"vercel", "supabase", "railway", "serper", "gemini_studio", "deep_research", "direct_data", "outro"}
 
 
 def _inicio_mes_atual() -> datetime:

@@ -207,6 +207,84 @@ async def osint_web_relatorio(
         raise HTTPException(status_code=500, detail=f"Erro ao gerar relatório OSINT web: {str(e)[:200]}")
 
 
+# ── OSINT — Deep Research (Gemini Agent, background 5–15 min) ────────────────
+
+DEEP_RESEARCH_AGENT_MODEL = "deep-research-preview-04-2026"
+
+
+@router.post(
+    "/osint/deep/{inquerito_id}/{pessoa_id}",
+    summary="OSINT Aprofundado — Gemini Deep Research Agent (5–15 min, background)",
+)
+async def osint_deep_research(
+    inquerito_id: uuid.UUID,
+    pessoa_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Inicia pesquisa aprofundada em fontes abertas usando o Gemini Deep Research Agent.
+
+    - Cria DocumentoGerado(tipo='osint_deep') placeholder imediatamente
+    - Dispara Celery task em background (5–15 min)
+    - Retorna {status, doc_id, mensagem}
+    - Frontend faz polling automático (a cada 8s) até em_processamento=False
+
+    Custo estimado: US$ 1–3 por pesquisa (debitado via Gemini API).
+    """
+    from app.core.config import settings
+    from app.models.documento_gerado import DocumentoGerado
+    from sqlalchemy import and_
+
+    if not getattr(settings, "GEMINI_API_KEY", None):
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY não configurado.")
+
+    pessoa = await db.get(Pessoa, pessoa_id)
+    if not pessoa:
+        raise HTTPException(status_code=404, detail="Pessoa não encontrada.")
+
+    # Guard: evitar duplo disparo
+    em_andamento = (await db.execute(
+        select(DocumentoGerado).where(
+            and_(
+                DocumentoGerado.inquerito_id == inquerito_id,
+                DocumentoGerado.tipo == "osint_deep",
+                DocumentoGerado.conteudo == "__PROCESSANDO__",
+            )
+        ).limit(1)
+    )).scalar_one_or_none()
+
+    if em_andamento:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Já existe uma pesquisa Deep Research em andamento para {pessoa.nome}. "
+                   "Aguarde a conclusão antes de iniciar outra.",
+        )
+
+    doc = DocumentoGerado(
+        inquerito_id=inquerito_id,
+        titulo=f"OSINT Aprofundado — {pessoa.nome}",
+        tipo="osint_deep",
+        conteudo="__PROCESSANDO__",
+        modelo_llm=DEEP_RESEARCH_AGENT_MODEL,
+    )
+    db.add(doc)
+    await db.commit()
+    await db.refresh(doc)
+
+    from app.workers.osint_deep_task import osint_deep_research_task
+    osint_deep_research_task.delay(str(inquerito_id), str(pessoa_id), str(doc.id))
+
+    logger.info(f"[OSINT-DEEP] Task disparada — doc={doc.id} pessoa={pessoa.nome}")
+    return {
+        "status": "iniciado",
+        "doc_id": str(doc.id),
+        "mensagem": (
+            f"Pesquisa Deep Research iniciada para {pessoa.nome}. "
+            "O relatório aparecerá em Documentos IA em 5–15 minutos."
+        ),
+    }
+
+
 # ── OSINT — Consultas brutas (sem LLM) ───────────────────────────────────────
 
 @router.post(

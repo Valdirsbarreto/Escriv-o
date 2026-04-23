@@ -402,6 +402,15 @@ export const osintBuscaWeb = async (inqueritoId: string, pessoaId: string) => {
   return response.data;
 };
 
+export const osintDeepResearch = async (inqueritoId: string, pessoaId: string) => {
+  const response = await api.post(
+    `/agentes/osint/deep/${inqueritoId}/${pessoaId}`,
+    null,
+    { timeout: 15000 },
+  );
+  return response.data as { status: string; doc_id: string; mensagem: string };
+};
+
 // ── Agente Sherlock ────────────────────────────────────────────────────────────
 
 export const ingestaoIniciarUrl = async (url: string, nome_arquivo: string) => {
