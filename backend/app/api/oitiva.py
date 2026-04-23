@@ -254,7 +254,7 @@ async def sherlock_oitiva(body: SherlockOitivaRequest, db: AsyncSession = Depend
             messages=[{"role": "user", "content": prompt}],
             tier="premium",
             temperature=0.1,
-            max_tokens=2000,
+            max_tokens=3000,
             json_mode=True,
             agente="SherlockOitiva",
         )
@@ -294,9 +294,11 @@ async def sherlock_oitiva(body: SherlockOitivaRequest, db: AsyncSession = Depend
                 m2 = _re.search(rf'"{campo}"\s*:\s*"([^"]+)"', s)
                 if m2:
                     resultado[campo] = m2.group(1)
+            FIELD_NAMES = {"consistencia", "observacoes", "inconsistencias", "perguntas_sugeridas"}
             for campo in ("observacoes", "inconsistencias", "perguntas_sugeridas"):
-                itens = _re.findall(rf'"([^"{{}}[\]]+)"', s[s.find(f'"{campo}"'):s.find(f'"{campo}"') + 2000] if f'"{campo}"' in s else "")
-                resultado[campo] = [i for i in itens if len(i) > 10][:5]
+                trecho = s[s.find(f'"{campo}"'):s.find(f'"{campo}"') + 2000] if f'"{campo}"' in s else ""
+                itens = _re.findall(rf'"([^"{{}}[\]]+)"', trecho)
+                resultado[campo] = [i for i in itens if len(i) > 10 and i not in FIELD_NAMES][:5]
             return resultado
 
         return tentar_parse(raw)

@@ -315,7 +315,14 @@ export default function OitivaPage() {
     setSherlockResult(null);
     try {
       const r = await sherlockOitiva({ inquerito_id: id, documento_atual: documentoRef.current });
-      setSherlockResult(r);
+      const FIELD_NAMES = new Set(["inconsistencias", "observacoes", "perguntas_sugeridas", "consistencia"]);
+      const limpar = (arr: string[]) => (arr || []).filter(s => !FIELD_NAMES.has(s.trim().toLowerCase()) && s.trim().length > 4);
+      setSherlockResult({
+        ...r,
+        inconsistencias: limpar(r.inconsistencias),
+        observacoes: limpar(r.observacoes),
+        perguntas_sugeridas: limpar(r.perguntas_sugeridas),
+      });
       setSherlockExpanded(true);
     } catch (e: any) {
       setErro("Sherlock: " + (e?.response?.data?.detail || e.message));
