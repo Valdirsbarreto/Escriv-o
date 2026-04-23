@@ -102,10 +102,42 @@ def osint_deep_research_task(self, inquerito_id: str, pessoa_id: str, doc_id: st
             )
             enderecos = enderecos_res.scalars().all()
 
-            # ── 2. Montar prompt investigativo ────────────────────────────────
-            prompt = _montar_prompt(pessoa, contatos, enderecos)
+            # ── 2. Buscar contexto do inquérito para briefing ─────────────────
+            from app.models.documento_gerado import DocumentoGerado as DocGerado
+            from app.services.summary_service import SummaryService
 
-            # ── 3. Iniciar Deep Research ──────────────────────────────────────
+            contexto_parts = []
+            try:
+                rel_res = await db.execute(
+                    select(DocGerado)
+                    .where(
+                        DocGerado.inquerito_id == inq_uuid,
+                        DocGerado.tipo == "relatorio_inicial",
+                        DocGerado.conteudo != "__PROCESSANDO__",
+                    )
+                    .order_by(DocGerado.created_at.desc())
+                    .limit(1)
+                )
+                rel = rel_res.scalar_one_or_none()
+                if rel and rel.conteudo:
+                    contexto_parts.append("=== RELATÓRIO INICIAL ===\n" + rel.conteudo[:8000])
+
+                resumo = await SummaryService(db).obter_resumo_caso(inq_uuid)
+                if resumo:
+                    contexto_parts.append("=== RESUMO EXECUTIVO ===\n" + resumo[:3000])
+            except Exception as e:
+                logger.warning(f"[OSINT-DEEP] Contexto parcial para briefing: {e}")
+
+            contexto_inquerito = "\n\n".join(contexto_parts) or "Contexto do inquérito não disponível."
+
+            # ── 2b. Gerar briefing investigativo via LLM ─────────────────────
+            briefing = await _gerar_briefing(pessoa, contatos, enderecos, contexto_inquerito)
+            logger.info(f"[OSINT-DEEP] Briefing gerado ({len(briefing)} chars) para {pessoa.nome}")
+
+            # ── 3. Montar prompt final e iniciar Deep Research ────────────────
+            prompt = _montar_prompt_com_briefing(pessoa, contatos, enderecos, briefing)
+
+            # ── Iniciar Deep Research ─────────────────────────────────────────
             from google import genai
             client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
@@ -202,6 +234,46 @@ def osint_deep_research_task(self, inquerito_id: str, pessoa_id: str, doc_id: st
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+async def _gerar_briefing(pessoa, contatos, enderecos, contexto_inquerito: str) -> str:
+    """
+    Chama gemini-flash (tier standard) para gerar um briefing investigativo
+    sob medida, considerando o contexto real dos autos e o papel da pessoa.
+    Fallback para prompt genérico em caso de erro.
+    """
+    from app.core.prompts import PROMPT_OSINT_DEEP_BRIEFING
+    from app.services.llm_service import LLMService
+
+    linhas_contato = "; ".join(f"{c.tipo_contato}: {c.valor}" for c in contatos) or "não informado"
+    linhas_end = "; ".join(
+        f"{e.endereco_completo} ({getattr(e,'cidade','')})" for e in enderecos
+    ) or "não informado"
+    cpf_doc = pessoa.cpf or getattr(pessoa, "cnpj", None) or "não informado"
+    papel = getattr(pessoa, "papel", None) or getattr(pessoa, "tipo_pessoa", "não identificado")
+
+    prompt = PROMPT_OSINT_DEEP_BRIEFING.format(
+        contexto_inquerito=contexto_inquerito,
+        nome=pessoa.nome,
+        documento=cpf_doc,
+        papel=papel,
+        contatos=linhas_contato,
+        enderecos=linhas_end,
+    )
+
+    try:
+        llm = LLMService()
+        result = await llm.chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            tier="standard",
+            temperature=0.1,
+            max_tokens=2000,
+            agente="OsintDeepBriefing",
+        )
+        return result["content"].strip()
+    except Exception as e:
+        logger.warning(f"[OSINT-DEEP] Falha no briefing LLM, usando template genérico: {e}")
+        return ""
+
+
 def _montar_prompt(pessoa, contatos, enderecos) -> str:
     linhas_contato = "\n".join(
         f"- {c.tipo_contato}: {c.valor}" for c in contatos
@@ -238,6 +310,46 @@ def _montar_prompt(pessoa, contatos, enderecos) -> str:
 
 **Formato esperado:**
 Relatório investigativo em Markdown, seções numeradas conforme os tópicos acima, fontes citadas com URLs quando disponíveis. Destaque achados críticos. Seja factual — cite apenas o que encontrar nas fontes, sem especulação. Redija em português do Brasil."""
+
+
+def _montar_prompt_com_briefing(pessoa, contatos, enderecos, briefing: str) -> str:
+    """
+    Combina o briefing investigativo gerado pelo LLM com os dados factuais
+    da pessoa para criar o prompt final do Deep Research Agent.
+    Se o briefing falhou (string vazia), usa o template genérico como fallback.
+    """
+    if not briefing:
+        return _montar_prompt(pessoa, contatos, enderecos)
+
+    cpf_info = f"CPF: {pessoa.cpf}" if pessoa.cpf else "CPF não informado"
+    cnpj_info = f" | CNPJ: {pessoa.cnpj}" if getattr(pessoa, "cnpj", None) else ""
+    papel = getattr(pessoa, "papel", None) or getattr(pessoa, "tipo_pessoa", "não identificado")
+    linhas_contato = "\n".join(f"- {c.tipo_contato}: {c.valor}" for c in contatos) or "Não informado"
+    linhas_end = "\n".join(
+        f"- {e.endereco_completo} ({getattr(e, 'cidade', '')} / {getattr(e, 'estado', '')})"
+        for e in enderecos
+    ) or "Não informado"
+
+    return f"""Você é um agente de pesquisa OSINT especializado em investigações criminais no Brasil.
+
+=== ALVO ===
+Nome: {pessoa.nome}
+{cpf_info}{cnpj_info}
+Papel: {papel}
+
+Contatos: {linhas_contato}
+Endereços: {linhas_end}
+
+=== BRIEFING INVESTIGATIVO (elaborado pelo analista de inteligência criminal) ===
+{briefing}
+
+=== INSTRUÇÕES ===
+Realize a pesquisa seguindo rigorosamente o briefing acima.
+- Priorize as fontes indicadas pelo analista para este caso específico
+- Cite URLs e datas de publicação sempre que disponíveis
+- Separe claramente o que é fato encontrado do que é inferência
+- Relatório final em Markdown, em português do Brasil
+- Destaque em negrito qualquer achado crítico para a investigação"""
 
 
 def _formatar_resultado(nome: str, texto: str) -> str:
