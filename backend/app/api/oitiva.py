@@ -258,9 +258,23 @@ async def sherlock_oitiva(body: SherlockOitivaRequest, db: AsyncSession = Depend
             agente="SherlockOitiva",
         )
         raw = result["content"].strip()
-        if "```" in raw:
-            raw = raw.split("```")[1].lstrip("json").strip()
-        return _json.loads(raw)
+
+        # Extrai bloco JSON mesmo com markdown ao redor
+        import re as _re
+        m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        if m:
+            raw = m.group(0)
+
+        try:
+            return _json.loads(raw)
+        except _json.JSONDecodeError:
+            # Remove caracteres de controle e tenta novamente
+            raw_clean = _re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", raw)
+            return _json.loads(raw_clean)
+
+    except _json.JSONDecodeError as e:
+        logger.error(f"[OITIVA-SHERLOCK] JSON inválido: {e}\nRaw: {raw[:300]}")
+        raise HTTPException(status_code=500, detail=f"Erro na análise: resposta do modelo inválida.")
     except Exception as e:
         logger.error(f"[OITIVA-SHERLOCK] Erro: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Erro na análise: {str(e)[:200]}")
