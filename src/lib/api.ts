@@ -411,6 +411,11 @@ export const osintDeepResearch = async (inqueritoId: string, pessoaId: string) =
   return response.data as { status: string; doc_id: string; mensagem: string };
 };
 
+export const osintDeepStatus = async (inqueritoId: string, pessoaId: string) => {
+  const response = await api.get(`/agentes/osint/deep/${inqueritoId}/${pessoaId}/status`);
+  return response.data as { status: "idle" | "processando" | "concluido" | "erro"; doc_id: string | null; erro?: string };
+};
+
 // ── Agente Sherlock ────────────────────────────────────────────────────────────
 
 export const ingestaoIniciarUrl = async (url: string, nome_arquivo: string) => {

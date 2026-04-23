@@ -1234,7 +1234,7 @@ export default function InqueritoDetalhePage() {
       {activeTab === "workspace" && (
         <div className="space-y-8">
           {/* Documentos Gerados pela IA */}
-          <div>
+          <div id="documentos-ia">
             <div className="flex items-center justify-between border-b border-zinc-800 pb-2 mb-4">
               <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
                 <Bot size={18} className="text-blue-400" /> Documentos Gerados pela IA

@@ -9,7 +9,7 @@ import {
   AlertTriangle, CheckCircle, XCircle, MinusCircle,
   ExternalLink, Play, UserSearch, Globe, Scale, Newspaper, FileText,
 } from "lucide-react";
-import { osintSugestao, osintLote, osintAnalisePreliminar, osintBuscaWeb, osintGerarRelatorioWeb, osintGratuito, osintDeepResearch } from "@/lib/api";
+import { osintSugestao, osintLote, osintAnalisePreliminar, osintBuscaWeb, osintGerarRelatorioWeb, osintGratuito, osintDeepResearch, osintDeepStatus } from "@/lib/api";
 import { Sparkles, Zap, Microscope } from "lucide-react";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -664,18 +664,38 @@ function OsintDeepPanel({ inqueritoId, pessoaId, nomePessoa }: {
   pessoaId: string;
   nomePessoa: string;
 }) {
-  const [etapa, setEtapa] = useState<"idle" | "confirmando" | "iniciado" | "erro">("idle");
+  const [etapa, setEtapa] = useState<"carregando" | "idle" | "confirmando" | "iniciado" | "concluido" | "erro">("carregando");
   const [erroMsg, setErroMsg] = useState<string | null>(null);
+  const [docId, setDocId] = useState<string | null>(null);
+
+  // Verificar status ao montar — restaura estado após navegação
+  useEffect(() => {
+    osintDeepStatus(inqueritoId, pessoaId)
+      .then(r => {
+        setDocId(r.doc_id);
+        if (r.status === "processando") setEtapa("iniciado");
+        else if (r.status === "concluido") setEtapa("concluido");
+        else if (r.status === "erro") { setEtapa("erro"); setErroMsg(r.erro || "Erro na pesquisa."); }
+        else setEtapa("idle");
+      })
+      .catch(() => setEtapa("idle"));
+  }, [inqueritoId, pessoaId]);
 
   const handleIniciar = async () => {
     setEtapa("iniciado");
     setErroMsg(null);
     try {
-      await osintDeepResearch(inqueritoId, pessoaId);
+      const r = await osintDeepResearch(inqueritoId, pessoaId);
+      setDocId(r.doc_id);
     } catch (e: any) {
       const detail = e?.response?.data?.detail || e?.message || "Erro desconhecido";
-      setErroMsg(String(detail));
-      setEtapa("erro");
+      // 409 = já em andamento (navegação e clique duplo)
+      if (e?.response?.status === 409) {
+        setEtapa("iniciado");
+      } else {
+        setErroMsg(String(detail));
+        setEtapa("erro");
+      }
     }
   };
 
@@ -687,19 +707,47 @@ function OsintDeepPanel({ inqueritoId, pessoaId, nomePessoa }: {
         <span className="text-xs text-zinc-600">Gemini · 5–15 min · ~US$ 1–3</span>
       </div>
       <div className="px-3 pb-3 border-t border-zinc-800/60 pt-2 space-y-2">
-        <p className="text-xs text-zinc-500 leading-relaxed">
-          Pesquisa autônoma em fontes abertas: processos judiciais, empresas, patrimônio, mídia, registros oficiais.
-          O relatório é salvo automaticamente em <span className="text-zinc-300">Documentos IA</span>.
-        </p>
+        {etapa !== "concluido" && (
+          <p className="text-xs text-zinc-500 leading-relaxed">
+            Pesquisa autônoma em fontes abertas: processos judiciais, empresas, patrimônio, mídia, registros oficiais.
+            O relatório é salvo em <span className="text-zinc-300">Documentos IA</span>.
+          </p>
+        )}
 
         {erroMsg && (
           <p className="text-xs text-red-400 leading-relaxed">{erroMsg}</p>
         )}
 
-        {etapa === "iniciado" ? (
-          <div className="flex items-center gap-2 text-xs text-violet-400">
-            <Loader2 size={11} className="animate-spin" />
-            Pesquisa em andamento… acompanhe em Documentos IA
+        {etapa === "carregando" ? (
+          <div className="flex items-center gap-1.5 text-xs text-zinc-600">
+            <Loader2 size={10} className="animate-spin" /> verificando…
+          </div>
+        ) : etapa === "iniciado" ? (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-xs text-violet-400">
+              <Loader2 size={11} className="animate-spin" />
+              Pesquisa em andamento… (5–15 min)
+            </div>
+            <p className="text-xs text-zinc-600">O documento aparecerá em <span className="text-zinc-400">Documentos IA</span> com borda âmbar ao concluir.</p>
+          </div>
+        ) : etapa === "concluido" ? (
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-violet-400 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
+              Relatório disponível
+            </span>
+            {docId && (
+              <a
+                href="#documentos-ia"
+                className="text-xs text-violet-400 underline hover:text-violet-300"
+                onClick={() => {
+                  const el = document.getElementById("documentos-ia");
+                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                }}
+              >
+                Ver relatório ↓
+              </a>
+            )}
           </div>
         ) : etapa === "confirmando" ? (
           <div className="space-y-2">

@@ -285,6 +285,48 @@ async def osint_deep_research(
     }
 
 
+@router.get(
+    "/osint/deep/{inquerito_id}/{pessoa_id}/status",
+    summary="Status do Deep Research para uma pessoa",
+)
+async def osint_deep_status(
+    inquerito_id: uuid.UUID,
+    pessoa_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Retorna o estado atual do Deep Research para a pessoa no inquérito.
+    Usado pelo frontend para restaurar o estado do painel após navegação.
+    """
+    from app.models.documento_gerado import DocumentoGerado
+    from app.models.pessoa import Pessoa
+
+    pessoa = await db.get(Pessoa, pessoa_id)
+    nome = pessoa.nome if pessoa else str(pessoa_id)
+
+    # Busca o doc mais recente de tipo osint_deep para este inquérito
+    # (título inclui o nome da pessoa — é suficiente para distinguir)
+    result = await db.execute(
+        select(DocumentoGerado)
+        .where(
+            DocumentoGerado.inquerito_id == inquerito_id,
+            DocumentoGerado.tipo == "osint_deep",
+            DocumentoGerado.titulo.ilike(f"%{nome}%"),
+        )
+        .order_by(DocumentoGerado.created_at.desc())
+        .limit(1)
+    )
+    doc = result.scalar_one_or_none()
+
+    if not doc:
+        return {"status": "idle", "doc_id": None}
+    if doc.conteudo == "__PROCESSANDO__":
+        return {"status": "processando", "doc_id": str(doc.id)}
+    if doc.conteudo.startswith("# ERRO"):
+        return {"status": "erro", "doc_id": str(doc.id), "erro": doc.conteudo[:300]}
+    return {"status": "concluido", "doc_id": str(doc.id)}
+
+
 # ── OSINT — Consultas brutas (sem LLM) ───────────────────────────────────────
 
 @router.post(
