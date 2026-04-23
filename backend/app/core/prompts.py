@@ -1808,5 +1808,6 @@ Analise a declaração em relação ao que já se sabe do inquérito e responda 
   ]
 }}
 
-Seja direto e objetivo. Máximo 3 inconsistências e 5 perguntas sugeridas.
+Seja direto e objetivo. Máximo 3 itens em observacoes e inconsistencias.
+SEMPRE gere entre 3 e 5 perguntas_sugeridas — nunca menos de 3, mesmo que a declaração pareça completa.
 IMPORTANTE: Retorne APENAS o JSON válido. Dentro dos valores de string NÃO use aspas duplas — use aspas simples para citações (ex: 'José Renato'). Não inclua quebras de linha dentro dos valores."""
