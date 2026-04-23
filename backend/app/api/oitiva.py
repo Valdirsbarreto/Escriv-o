@@ -235,8 +235,8 @@ async def sherlock_oitiva(body: SherlockOitivaRequest, db: AsyncSession = Depend
             contexto_parts.append("=== RELATÓRIO INICIAL ===\n" + rel.conteudo[:8000])
 
         # Resumo do caso
-        summary_svc = SummaryService(db)
-        resumo = await summary_svc.obter_resumo_caso(inq_id)
+        summary_svc = SummaryService()
+        resumo = await summary_svc.obter_resumo_caso(db, inq_id)
         if resumo:
             contexto_parts.append("=== RESUMO EXECUTIVO ===\n" + resumo[:3000])
     except Exception as e:

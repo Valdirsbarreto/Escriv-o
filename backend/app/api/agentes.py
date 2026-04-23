@@ -295,7 +295,7 @@ async def osint_deep_planejar(
         if rel and rel.conteudo:
             contexto_parts.append("=== RELATÓRIO INICIAL ===\n" + rel.conteudo[:8000])
 
-        resumo = await SummaryService(db).obter_resumo_caso(inquerito_id)
+        resumo = await SummaryService().obter_resumo_caso(db, inquerito_id)
         if resumo:
             contexto_parts.append("=== RESUMO EXECUTIVO ===\n" + resumo[:3000])
     except Exception as e:

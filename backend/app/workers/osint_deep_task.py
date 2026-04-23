@@ -123,7 +123,7 @@ def osint_deep_research_task(self, inquerito_id: str, pessoa_id: str, doc_id: st
                 if rel and rel.conteudo:
                     contexto_parts.append("=== RELATÓRIO INICIAL ===\n" + rel.conteudo[:8000])
 
-                resumo = await SummaryService(db).obter_resumo_caso(inq_uuid)
+                resumo = await SummaryService().obter_resumo_caso(db, inq_uuid)
                 if resumo:
                     contexto_parts.append("=== RESUMO EXECUTIVO ===\n" + resumo[:3000])
             except Exception as e:

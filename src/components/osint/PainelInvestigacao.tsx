@@ -684,6 +684,21 @@ function OsintDeepPanel({ inqueritoId, pessoaId, nomePessoa, onVerRelatorio }: {
       .catch(() => setEtapa("idle"));
   }, [inqueritoId, pessoaId]);
 
+  // Polling automático enquanto em andamento — detecta conclusão ou timeout
+  useEffect(() => {
+    if (etapa !== "iniciado") return;
+    const interval = setInterval(() => {
+      osintDeepStatus(inqueritoId, pessoaId)
+        .then(r => {
+          setDocId(r.doc_id);
+          if (r.status === "concluido") setEtapa("concluido");
+          else if (r.status === "erro") { setEtapa("erro"); setErroMsg(r.erro || "Erro na pesquisa."); }
+        })
+        .catch(() => {});
+    }, 60_000); // verifica a cada 60s
+    return () => clearInterval(interval);
+  }, [etapa, inqueritoId, pessoaId]);
+
   const handlePlanejar = async () => {
     setEtapa("planejando");
     setErroMsg(null);
