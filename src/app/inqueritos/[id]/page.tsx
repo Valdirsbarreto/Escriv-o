@@ -2305,7 +2305,7 @@ export default function InqueritoDetalhePage() {
                 <X size={18}/>
               </button>
             </div>
-            <div className="overflow-y-auto flex-1 px-4 py-4 space-y-3">
+            <div className="overflow-y-auto flex-1 min-h-0 px-4 py-4 space-y-3">
               {citacoes.loading ? (
                 <div className="flex items-center justify-center py-16 text-zinc-500">
                   <Loader2 size={24} className="animate-spin mr-2"/> Carregando fragmentos...
@@ -2377,7 +2377,7 @@ export default function InqueritoDetalhePage() {
                   <X size={18} />
                 </button>
               </div>
-              <div className="overflow-y-auto flex-1 px-6 py-4">
+              <div className="overflow-y-auto flex-1 min-h-0 px-6 py-4">
                 {docGeradoViewer.loading ? (
                   <div className="flex items-center justify-center py-16 text-zinc-500">
                     <Loader2 size={24} className="animate-spin mr-2" /> Carregando...
@@ -2483,7 +2483,7 @@ export default function InqueritoDetalhePage() {
                 <p className="text-xs text-zinc-500 bg-zinc-800/60 border border-zinc-700/40 rounded-lg px-3 py-2 leading-relaxed italic">{pecaViewer.peca.resumo}</p>
               </div>
             )}
-            <div className="overflow-y-auto flex-1 px-6 py-4">
+            <div className="overflow-y-auto flex-1 min-h-0 px-6 py-4">
               {pecaViewer.loading ? (
                 <div className="flex items-center justify-center py-16 text-zinc-500">
                   <Loader2 size={24} className="animate-spin mr-2" /> Carregando peça...
@@ -2563,7 +2563,7 @@ export default function InqueritoDetalhePage() {
               </div>
             </div>
             {/* Conteúdo */}
-            <div className="overflow-y-auto flex-1 px-6 py-4">
+            <div className="overflow-y-auto flex-1 min-h-0 px-6 py-4">
               {docViewer.loading ? (
                 <div className="flex items-center justify-center py-16 text-zinc-500">
                   <Loader2 size={24} className="animate-spin mr-2"/> Carregando...

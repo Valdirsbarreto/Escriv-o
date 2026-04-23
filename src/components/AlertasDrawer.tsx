@@ -210,7 +210,7 @@ export function AlertasDrawer() {
           </div>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-3">
           {carregando && (
             <p className="text-sm text-zinc-500 text-center py-8">Carregando alertas...</p>
           )}

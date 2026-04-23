@@ -546,7 +546,7 @@ export function CopilotoDrawer() {
           </div>
         </div>
 
-        <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-6 overscroll-contain">
+        <div ref={chatScrollRef} className="flex-1 overflow-y-auto min-h-0 p-6 overscroll-contain">
           <div className="flex flex-col gap-4 pb-4">
             {messages.map((msg, i) => (
               <div key={i} className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>

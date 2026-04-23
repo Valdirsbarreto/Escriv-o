@@ -114,7 +114,7 @@ export function IntimacaoEditModal({ intimacao, onClose, onSaved }: IntimacaoEdi
         </div>
 
         {/* Body */}
-        <div className="p-5 space-y-3 overflow-y-auto flex-1">
+        <div className="p-5 space-y-3 overflow-y-auto flex-1 min-h-0">
           {field("Nome do Intimado *", input("intimado_nome", "text", "Nome completo"))}
           {field("CPF", input("intimado_cpf", "text", "000.000.000-00"))}
           {field(
