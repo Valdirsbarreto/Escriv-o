@@ -172,7 +172,14 @@ def osint_deep_research_task(self, inquerito_id: str, pessoa_id: str, doc_id: st
                     )
                     if interaction.status == "completed":
                         if interaction.outputs:
-                            resultado_texto = interaction.outputs[-1].text
+                            # Log estrutura de outputs para diagnóstico
+                            for j, out in enumerate(interaction.outputs):
+                                txt_len = len(out.text or "")
+                                logger.info(f"[OSINT-DEEP] Output[{j}]: {txt_len} chars")
+                            # Pega o output mais substancial (maior texto), não necessariamente o último
+                            candidatos = [(len(o.text or ""), o.text) for o in interaction.outputs if o.text]
+                            if candidatos:
+                                resultado_texto = max(candidatos, key=lambda x: x[0])[1]
                         break
                     elif interaction.status in ("failed", "cancelled"):
                         logger.warning(f"[OSINT-DEEP] Interaction {interaction.status}")
@@ -398,8 +405,39 @@ Realize a pesquisa seguindo rigorosamente o briefing acima.
 - Destaque em negrito qualquer achado crítico para a investigação"""
 
 
+def _separar_fontes(texto: str) -> tuple[str, list[str]]:
+    """Separa linhas que são apenas URLs/domínios do conteúdo analítico.
+    Retorna (conteudo_limpo, lista_de_fontes).
+    """
+    import re
+    url_pattern = re.compile(
+        r"^\s*(https?://\S+|[\w.-]+\.(com|com\.br|org|gov|jus|mp|edu|net|io|br|uy|ar|pt)(\.br)?(/\S*)?)\s*$",
+        re.IGNORECASE,
+    )
+    conteudo_lines: list[str] = []
+    fontes: list[str] = []
+    for line in texto.splitlines():
+        if url_pattern.match(line):
+            url = line.strip()
+            if url and url not in fontes:
+                fontes.append(url)
+        else:
+            conteudo_lines.append(line)
+    # Remove blocos de linhas em branco consecutivos deixados pela extração
+    conteudo = re.sub(r"\n{3,}", "\n\n", "\n".join(conteudo_lines)).strip()
+    return conteudo, fontes
+
+
 def _formatar_resultado(nome: str, texto: str, conclusao: str = "") -> str:
     data_fmt = date.today().strftime("%d/%m/%Y")
+
+    conteudo, fontes = _separar_fontes(texto)
+
+    fontes_bloco = ""
+    if fontes:
+        lista = "\n".join(f"- {f}" for f in fontes[:50])  # limita a 50 fontes
+        fontes_bloco = f"\n\n<details>\n<summary>🔗 Fontes consultadas ({len(fontes)})</summary>\n\n{lista}\n\n</details>"
+
     conclusao_bloco = (
         f"\n\n---\n\n## Conclusão Investigativa e Diligências Sugeridas\n\n{conclusao}"
         if conclusao
@@ -411,7 +449,8 @@ def _formatar_resultado(nome: str, texto: str, conclusao: str = "") -> str:
         f"**Motor:** Gemini Deep Research Agent  \n"
         f"> ⚠️ Dados obtidos de fontes abertas na internet. Verificar antes de usar como elemento probatório.\n\n"
         f"---\n\n"
-        f"{texto}"
+        f"{conteudo}"
+        f"{fontes_bloco}"
         f"{conclusao_bloco}"
     )
 
