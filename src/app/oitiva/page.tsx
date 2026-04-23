@@ -768,7 +768,7 @@ export default function OitivaPage() {
               )}
             </div>
             <textarea
-              className="w-full bg-zinc-900/50 border border-zinc-700 rounded-lg p-4 text-sm text-zinc-200 leading-relaxed font-serif min-h-[300px] resize-none focus:outline-none focus:ring-1 focus:ring-zinc-600"
+              className="w-full bg-zinc-900/50 border border-zinc-700 rounded-lg p-4 text-sm text-zinc-200 leading-relaxed font-serif min-h-[520px] resize-y focus:outline-none focus:ring-1 focus:ring-zinc-600"
               value={documentoTexto}
               readOnly
               placeholder={statusMsg ? statusMsg : "As declarações aparecerão aqui à medida que cada segmento for transcrito..."}
@@ -917,7 +917,7 @@ export default function OitivaPage() {
           <div className="space-y-1">
             <p className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Declarações</p>
             <textarea
-              className="w-full bg-zinc-900/50 border border-zinc-700 rounded-lg p-4 text-sm text-zinc-200 leading-relaxed font-serif min-h-[400px] resize-y focus:outline-none focus:ring-1 focus:ring-zinc-500"
+              className="w-full bg-zinc-900/50 border border-zinc-700 rounded-lg p-4 text-sm text-zinc-200 leading-relaxed font-serif min-h-[600px] resize-y focus:outline-none focus:ring-1 focus:ring-zinc-500"
               value={documentoTexto}
               onChange={e => {
                 documentoRef.current = e.target.value;

@@ -1816,7 +1816,7 @@ export default function InqueritoDetalhePage() {
             </div>
           </div>
           
-          <ScrollArea className="h-[600px] w-full pr-4">
+          <ScrollArea className="min-h-[400px] max-h-[calc(100vh-260px)] w-full pr-4">
             <div className="space-y-3">
               {documentos.length === 0 ? (
                 <div className="py-12 text-center text-zinc-600 border border-zinc-800 border-dashed rounded-lg bg-zinc-900/40">
@@ -2364,7 +2364,7 @@ export default function InqueritoDetalhePage() {
             .doc-viewer a { color: #60a5fa; text-decoration: underline; }
           `}</style>
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setDocGeradoViewer(v => ({ ...v, open: false }))}>
-            <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+            <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-5xl max-h-[94vh] flex flex-col shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
                 <div className="flex items-center gap-3 min-w-0">
                   <Bot size={18} className="text-blue-400 shrink-0" />
@@ -2411,7 +2411,7 @@ export default function InqueritoDetalhePage() {
       {/* Modal de edição de documento gerado */}
       {editDocGerado?.open && typeof window !== "undefined" && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setEditDocGerado(null)}>
-          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-5xl max-h-[94vh] flex flex-col shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
             {/* Cabeçalho */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
               <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -2430,7 +2430,7 @@ export default function InqueritoDetalhePage() {
             {/* Editor */}
             <div className="flex-1 overflow-hidden px-6 py-4 min-h-0">
               <textarea
-                className="w-full h-full min-h-[400px] bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-200 font-mono leading-relaxed resize-none outline-none focus:border-amber-500/50 transition-colors"
+                className="w-full h-full min-h-[600px] bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-200 font-mono leading-relaxed resize-y outline-none focus:border-amber-500/50 transition-colors"
                 value={editDocGerado.conteudo}
                 onChange={e => setEditDocGerado(prev => prev ? { ...prev, conteudo: e.target.value } : null)}
                 spellCheck={false}
@@ -2461,7 +2461,7 @@ export default function InqueritoDetalhePage() {
       {/* Modal de visualização de peça extraída */}
       {pecaViewer.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setPecaViewer(v => ({ ...v, open: false }))}>
-          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
               <div className="flex items-center gap-3 min-w-0">
                 <FileText size={18} className="text-amber-400 shrink-0" />
@@ -2533,7 +2533,7 @@ export default function InqueritoDetalhePage() {
 
       {docViewer.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setDocViewer(v => ({ ...v, open: false }))}>
-          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
               <div className="flex items-center gap-3 min-w-0">

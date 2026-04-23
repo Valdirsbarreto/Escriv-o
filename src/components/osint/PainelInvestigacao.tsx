@@ -760,7 +760,7 @@ function OsintDeepPanel({ inqueritoId, pessoaId, nomePessoa, onVerRelatorio }: {
             </p>
             <textarea
               className="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-xs text-zinc-200 font-mono leading-relaxed focus:outline-none focus:ring-1 focus:ring-violet-500 resize-y"
-              rows={10}
+              rows={16}
               value={briefing}
               onChange={e => setBriefing(e.target.value)}
             />
