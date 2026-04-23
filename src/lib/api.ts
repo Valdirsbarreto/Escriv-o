@@ -491,6 +491,7 @@ export const salvarOitiva = async (oitivaId: string, body: {
   termo_limpo: string;
   status: string;
   pessoa_id?: string | null;
+  nome_declarante?: string;
 }) => {
   const response = await api.put(`/oitiva/${oitivaId}`, { oitiva_id: oitivaId, ...body });
   return response.data;

@@ -89,6 +89,8 @@ export default function OitivaPage() {
   const [oitivaId, setOitivaId] = useState<string | null>(null);
   const [statusOitiva, setStatusOitiva] = useState<"rascunho" | "finalizado">("rascunho");
   const [copiado, setCopiado] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [salvoOk, setSalvoOk] = useState(false);
 
   // ── Sherlock ──────────────────────────────────────────────────────────────
   const [sherlockResult, setSherlockResult] = useState<SherlockResult | null>(null);
@@ -334,16 +336,22 @@ export default function OitivaPage() {
 
   const salvar = useCallback(async (novoStatus: "rascunho" | "finalizado") => {
     if (!oitivaId) return;
+    setSalvando(true);
     try {
       await salvarOitiva(oitivaId, {
         termo_com_timestamps: documentoTexto,
         termo_limpo: documentoTexto,
         status: novoStatus,
         pessoa_id: pessoaId,
+        nome_declarante: pessoaId ? undefined : (qualificacao?.nome || undefined),
       });
       setStatusOitiva(novoStatus);
+      setSalvoOk(true);
+      setTimeout(() => setSalvoOk(false), 2500);
     } catch (e: any) {
       setErro("Erro ao salvar: " + (e?.response?.data?.detail || e.message));
+    } finally {
+      setSalvando(false);
     }
   }, [oitivaId, documentoTexto, pessoaId]);
 
@@ -854,8 +862,10 @@ export default function OitivaPage() {
               <Download size={11} /> .txt
             </button>
             {oitivaId && (
-              <button onClick={() => salvar("rascunho")} className="text-xs px-3 py-1.5 rounded-md border border-zinc-700 text-zinc-400 hover:text-zinc-200 flex items-center gap-1">
-                <Save size={11} /> Salvar
+              <button onClick={() => salvar("rascunho")} disabled={salvando}
+                className={`text-xs px-3 py-1.5 rounded-md border transition-colors flex items-center gap-1 disabled:opacity-50 ${salvoOk ? "bg-blue-700 border-blue-600 text-white" : "border-zinc-700 text-zinc-400 hover:text-zinc-200"}`}>
+                {salvando ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
+                {salvando ? "Salvando…" : salvoOk ? "Salvo!" : "Salvar"}
               </button>
             )}
             {oitivaId && statusOitiva !== "finalizado" && (

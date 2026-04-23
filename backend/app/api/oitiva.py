@@ -50,6 +50,7 @@ class SalvarRequest(BaseModel):
     termo_limpo: str
     status: str = "rascunho"  # "rascunho" | "finalizado"
     pessoa_id: Optional[str] = None
+    nome_declarante: Optional[str] = None  # fallback quando pessoa não cadastrada
 
 
 class RelavrarBlocoRequest(BaseModel):
@@ -433,7 +434,7 @@ async def atualizar_oitiva(
 
     # Ao finalizar pela primeira vez → gera DocumentoGerado no workspace
     if body.status == "finalizado" and era_rascunho:
-        nome_pessoa = "Declarante não identificado"
+        nome_pessoa = body.nome_declarante or "Declarante não identificado"
         if oitiva.pessoa_id:
             p = await db.get(Pessoa, oitiva.pessoa_id)
             if p:
