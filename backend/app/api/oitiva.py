@@ -265,12 +265,40 @@ async def sherlock_oitiva(body: SherlockOitivaRequest, db: AsyncSession = Depend
         if m:
             raw = m.group(0)
 
-        try:
-            return _json.loads(raw)
-        except _json.JSONDecodeError:
-            # Remove caracteres de controle e tenta novamente
-            raw_clean = _re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", raw)
-            return _json.loads(raw_clean)
+        def tentar_parse(s: str):
+            try:
+                return _json.loads(s)
+            except _json.JSONDecodeError:
+                pass
+            # Remove caracteres de controle
+            s = _re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", s)
+            try:
+                return _json.loads(s)
+            except _json.JSONDecodeError:
+                pass
+            # Substitui aspas curvas/tipográficas por aspas simples
+            s = s.replace("“", "'").replace("”", "'").replace("‘", "'").replace("’", "'")
+            try:
+                return _json.loads(s)
+            except _json.JSONDecodeError:
+                pass
+            # Último recurso: extrai campos manualmente via regex
+            resultado = {
+                "consistencia": "parcialmente_consistente",
+                "observacoes": [],
+                "inconsistencias": [],
+                "perguntas_sugeridas": [],
+            }
+            for campo in ("consistencia", ):
+                m2 = _re.search(rf'"{campo}"\s*:\s*"([^"]+)"', s)
+                if m2:
+                    resultado[campo] = m2.group(1)
+            for campo in ("observacoes", "inconsistencias", "perguntas_sugeridas"):
+                itens = _re.findall(rf'"([^"{{}}[\]]+)"', s[s.find(f'"{campo}"'):s.find(f'"{campo}"') + 2000] if f'"{campo}"' in s else "")
+                resultado[campo] = [i for i in itens if len(i) > 10][:5]
+            return resultado
+
+        return tentar_parse(raw)
 
     except _json.JSONDecodeError as e:
         logger.error(f"[OITIVA-SHERLOCK] JSON inválido: {e}\nRaw: {raw[:300]}")

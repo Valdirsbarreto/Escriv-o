@@ -1809,4 +1809,4 @@ Analise a declaração em relação ao que já se sabe do inquérito e responda 
 }}
 
 Seja direto e objetivo. Máximo 3 inconsistências e 5 perguntas sugeridas.
-Retorne APENAS o JSON."""
+IMPORTANTE: Retorne APENAS o JSON válido. Dentro dos valores de string NÃO use aspas duplas — use aspas simples para citações (ex: 'José Renato'). Não inclua quebras de linha dentro dos valores."""
