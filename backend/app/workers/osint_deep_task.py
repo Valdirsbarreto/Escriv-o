@@ -287,7 +287,7 @@ async def _gerar_briefing(pessoa, contatos, enderecos, contexto_inquerito: str) 
             messages=[{"role": "user", "content": prompt}],
             tier="standard",
             temperature=0.1,
-            max_tokens=2000,
+            max_tokens=8000,
             agente="OsintDeepBriefing",
         )
         return result["content"].strip()

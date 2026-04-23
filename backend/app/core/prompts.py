@@ -1815,7 +1815,7 @@ IMPORTANTE: Retorne APENAS o JSON válido. Dentro dos valores de string NÃO use
 # ── OSINT Deep Research — Briefing Investigativo ─────────────────────────────
 
 PROMPT_OSINT_DEEP_BRIEFING = """Você é um analista de inteligência criminal da PCERJ.
-Sua tarefa é, a partir do contexto do inquérito e dos dados conhecidos sobre uma pessoa, elaborar um briefing investigativo preciso para direcionar uma pesquisa OSINT aprofundada em fontes abertas.
+Com base no contexto do inquérito e nos dados desta pessoa, produza uma pauta de pesquisa OSINT — texto corrido, sem cabeçalho de memorando, sem campos PARA/DE/DATA.
 
 === CONTEXTO DO INQUÉRITO ===
 {contexto_inquerito}
@@ -1827,16 +1827,24 @@ Papel no inquérito: {papel}
 Contatos conhecidos: {contatos}
 Endereços conhecidos: {enderecos}
 
-=== SUA TAREFA ===
-Com base no crime investigado e no papel desta pessoa nos autos, elabore um briefing investigativo que responda:
+=== PAUTA INVESTIGATIVA (produza exatamente estas seções) ===
 
-1. **Hipótese central sobre esta pessoa** — qual o vínculo suspeito com o crime? O que precisa ser confirmado ou refutado?
-2. **Prioridades de pesquisa** — quais 3 a 5 aspectos são MAIS críticos para investigar (ex: vínculos societários, patrimônio incompatível, antecedentes criminais, relacionamentos com co-investigados, etc.)?
-3. **O que NÃO pesquisar** — aspectos irrelevantes para este caso específico que o agente de pesquisa pode ignorar.
-4. **Indicadores de alerta** — se encontrar X, Y ou Z nas fontes abertas, isso seria relevante para o caso por qual razão?
-5. **Formato esperado** — instrua o agente sobre como estruturar o relatório final (quais seções priorizar).
+**1. Hipótese central**
+Qual o vínculo suspeito desta pessoa com o crime investigado? O que precisa ser confirmado ou refutado nas fontes abertas?
 
-Seja específico e direto. O briefing será usado como instrução para um agente de pesquisa autônomo que fará dezenas de buscas na web. Redija em português do Brasil."""
+**2. Prioridades de pesquisa (3 a 5 itens)**
+Liste os aspectos MAIS críticos a investigar neste caso específico — por exemplo: vínculos societários, patrimônio incompatível, antecedentes criminais, conexões com co-investigados, movimentações atípicas.
+
+**3. O que ignorar**
+Aspectos sem relevância para este caso que o agente não precisa pesquisar.
+
+**4. Alertas de relevância**
+Se encontrar X ou Y nas fontes abertas, registrar porque é relevante para esta investigação.
+
+**5. Estrutura esperada do relatório**
+Quais seções priorizar no relatório final (ex: patrimônio, empresas, antecedentes, redes sociais, mídia).
+
+Seja direto e específico. Redija em português do Brasil, sem formatação de memorando."""
 
 
 # ── OSINT Deep Research — Conclusão Investigativa ────────────────────────────
