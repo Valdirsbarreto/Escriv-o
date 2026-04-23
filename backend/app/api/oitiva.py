@@ -255,6 +255,7 @@ async def sherlock_oitiva(body: SherlockOitivaRequest, db: AsyncSession = Depend
             tier="premium",
             temperature=0.1,
             max_tokens=2000,
+            json_mode=True,
             agente="SherlockOitiva",
         )
         raw = result["content"].strip()
