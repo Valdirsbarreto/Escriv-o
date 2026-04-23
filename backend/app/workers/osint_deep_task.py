@@ -176,6 +176,16 @@ def osint_deep_research_task(self, inquerito_id: str, pessoa_id: str, doc_id: st
                     logger.warning(f"[OSINT-DEEP] Erro no poll {i+1}: {e}")
                     continue
 
+            # ── 4b. Pós-processamento: conclusão investigativa ────────────────
+            conclusao = ""
+            if resultado_texto:
+                papel = getattr(pessoa, "papel", None) or getattr(pessoa, "tipo_pessoa", "não identificado")
+                conclusao = await _gerar_conclusao(
+                    pessoa.nome, papel, resultado_texto, contexto_inquerito
+                )
+                if conclusao:
+                    logger.info(f"[OSINT-DEEP] Conclusão gerada ({len(conclusao)} chars)")
+
             # ── 5. Persistir resultado ────────────────────────────────────────
             doc = await db.get(DocumentoGerado, doc_uuid)
             if not doc:
@@ -184,7 +194,7 @@ def osint_deep_research_task(self, inquerito_id: str, pessoa_id: str, doc_id: st
                 return None
 
             if resultado_texto:
-                doc.conteudo = _formatar_resultado(pessoa.nome, resultado_texto)
+                doc.conteudo = _formatar_resultado(pessoa.nome, resultado_texto, conclusao)
                 doc.modelo_llm = DEEP_RESEARCH_AGENT
                 logger.info(f"[OSINT-DEEP] Resultado salvo: {len(resultado_texto)} chars para {pessoa.nome}")
             else:
@@ -274,6 +284,37 @@ async def _gerar_briefing(pessoa, contatos, enderecos, contexto_inquerito: str) 
         return ""
 
 
+async def _gerar_conclusao(nome: str, papel: str, resultado_osint: str, contexto_inquerito: str) -> str:
+    """
+    Pós-processa o resultado bruto do Deep Research:
+    cruza achados OSINT com os autos e extrai diligências concretas.
+    Usa gemini-flash (tier standard) — rápido e econômico para este passo.
+    """
+    from app.core.prompts import PROMPT_OSINT_DEEP_CONCLUSAO
+    from app.services.llm_service import LLMService
+
+    prompt = PROMPT_OSINT_DEEP_CONCLUSAO.format(
+        contexto_inquerito=contexto_inquerito[:5000],
+        nome=nome,
+        papel=papel,
+        resultado_osint=resultado_osint[:15000],
+    )
+
+    try:
+        llm = LLMService()
+        result = await llm.chat_completion(
+            messages=[{"role": "user", "content": prompt}],
+            tier="standard",
+            temperature=0.1,
+            max_tokens=2500,
+            agente="OsintDeepConclusao",
+        )
+        return result["content"].strip()
+    except Exception as e:
+        logger.warning(f"[OSINT-DEEP] Falha na conclusão investigativa: {e}")
+        return ""
+
+
 def _montar_prompt(pessoa, contatos, enderecos) -> str:
     linhas_contato = "\n".join(
         f"- {c.tipo_contato}: {c.valor}" for c in contatos
@@ -352,8 +393,13 @@ Realize a pesquisa seguindo rigorosamente o briefing acima.
 - Destaque em negrito qualquer achado crítico para a investigação"""
 
 
-def _formatar_resultado(nome: str, texto: str) -> str:
+def _formatar_resultado(nome: str, texto: str, conclusao: str = "") -> str:
     data_fmt = date.today().strftime("%d/%m/%Y")
+    conclusao_bloco = (
+        f"\n\n---\n\n## Conclusão Investigativa e Diligências Sugeridas\n\n{conclusao}"
+        if conclusao
+        else ""
+    )
     return (
         f"# OSINT Aprofundado — {nome}\n\n"
         f"**Gerado em:** {data_fmt}  \n"
@@ -361,6 +407,7 @@ def _formatar_resultado(nome: str, texto: str) -> str:
         f"> ⚠️ Dados obtidos de fontes abertas na internet. Verificar antes de usar como elemento probatório.\n\n"
         f"---\n\n"
         f"{texto}"
+        f"{conclusao_bloco}"
     )
 
 

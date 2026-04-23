@@ -1837,3 +1837,37 @@ Com base no crime investigado e no papel desta pessoa nos autos, elabore um brie
 5. **Formato esperado** — instrua o agente sobre como estruturar o relatório final (quais seções priorizar).
 
 Seja específico e direto. O briefing será usado como instrução para um agente de pesquisa autônomo que fará dezenas de buscas na web. Redija em português do Brasil."""
+
+
+# ── OSINT Deep Research — Conclusão Investigativa ────────────────────────────
+
+PROMPT_OSINT_DEEP_CONCLUSAO = """Você é um analista de inteligência criminal da PCERJ.
+Recebeu o resultado bruto de uma pesquisa OSINT aprofundada (Gemini Deep Research) sobre uma pessoa investigada.
+Sua tarefa é cruzar esses achados com o contexto dos autos e extrair conclusões práticas para a investigação.
+
+=== CONTEXTO DO INQUÉRITO ===
+{contexto_inquerito}
+
+=== PESSOA ALVO ===
+Nome: {nome}
+Papel no inquérito: {papel}
+
+=== RESULTADO DA PESQUISA OSINT ===
+{resultado_osint}
+
+=== SUA TAREFA ===
+Com base no cruzamento entre os achados OSINT e os autos do inquérito, produza uma seção de conclusão com:
+
+**1. Achados críticos para a investigação**
+— Liste apenas o que é diretamente relevante para o caso (autoria, materialidade, patrimônio incompatível, vínculos co-investigados). Ignore achados sem relevância probatória.
+
+**2. Contradições identificadas**
+— Aponte contradições entre o que a pessoa declarou nos autos e o que a pesquisa OSINT revelou (ex: afirmou ser desempregado, mas é sócio de 3 empresas ativas).
+
+**3. Diligências investigativas sugeridas**
+— Liste de 3 a 7 diligências concretas e acionáveis que o Comissário deve realizar com base nos achados (ex: "Solicitar quebra de sigilo bancário das contas PJ do CNPJ 12.345.678/0001-00", "Intimar fulano como testemunha", "Requisitar certidões de imóveis em nome de X no cartório").
+
+**4. Indicadores de incompatibilidade patrimonial**
+— Se identificados, resuma os indícios de patrimônio incompatível com a função/renda declarada.
+
+Seja preciso e factual. Cite apenas o que está no relatório OSINT acima. Redija em português do Brasil, em formato Markdown."""

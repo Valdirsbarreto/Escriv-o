@@ -279,7 +279,7 @@ class CopilotoService:
                     # relatorio_inicial é injetado completo — é a fonte de verdade do caso.
                     # sintese_investigativa fica truncada: foi gerada com contexto anterior
                     # e pode estar obsoleta se o relatório inicial foi regenerado.
-                    TIPOS_COMPLETOS = {"relatorio_inicial"}
+                    TIPOS_COMPLETOS = {"relatorio_inicial", "osint_deep"}
                     for dg in docs_gerados:
                         data = dg.created_at.strftime("%d/%m/%Y") if dg.created_at else ""
                         limite = len(dg.conteudo) if dg.tipo in TIPOS_COMPLETOS else 3000
