@@ -2188,7 +2188,15 @@ export default function InqueritoDetalhePage() {
               <UserSearch size={18} className="text-purple-400" /> Investigação OSINT
             </h2>
           </div>
-          <PainelInvestigacao inqueritoId={inqId} />
+          <PainelInvestigacao
+            inqueritoId={inqId}
+            onVerRelatorio={() => {
+              setActiveTab("workspace");
+              setTimeout(() => {
+                document.getElementById("documentos-ia")?.scrollIntoView({ behavior: "smooth" });
+              }, 150);
+            }}
+          />
         </div>
       )}
 

@@ -659,10 +659,11 @@ function AnalisePreliminarPanel({
 
 // ── OSINT Deep Research Panel ─────────────────────────────────────────────────
 
-function OsintDeepPanel({ inqueritoId, pessoaId, nomePessoa }: {
+function OsintDeepPanel({ inqueritoId, pessoaId, nomePessoa, onVerRelatorio }: {
   inqueritoId: string;
   pessoaId: string;
   nomePessoa: string;
+  onVerRelatorio?: () => void;
 }) {
   type Etapa = "carregando" | "idle" | "planejando" | "revisando" | "iniciado" | "concluido" | "erro";
   const [etapa, setEtapa] = useState<Etapa>("carregando");
@@ -803,16 +804,18 @@ function OsintDeepPanel({ inqueritoId, pessoaId, nomePessoa }: {
               <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
               Relatório disponível
             </span>
-            <a
-              href="#documentos-ia"
+            <button
               className="text-xs text-violet-400 underline hover:text-violet-300 cursor-pointer"
-              onClick={e => {
-                e.preventDefault();
-                document.getElementById("documentos-ia")?.scrollIntoView({ behavior: "smooth" });
+              onClick={() => {
+                if (onVerRelatorio) {
+                  onVerRelatorio();
+                } else {
+                  document.getElementById("documentos-ia")?.scrollIntoView({ behavior: "smooth" });
+                }
               }}
             >
               Ver relatório ↓
-            </a>
+            </button>
           </div>
         )}
 
@@ -832,7 +835,7 @@ function OsintDeepPanel({ inqueritoId, pessoaId, nomePessoa }: {
 // ── Card de Personagem ────────────────────────────────────────────────────────
 
 function CardPersonagem({
-  p, inqueritoId, modulos, onToggleModulo, resultado, executando,
+  p, inqueritoId, modulos, onToggleModulo, resultado, executando, onVerRelatorio,
 }: {
   p: PersonagemAnalise;
   inqueritoId: string;
@@ -840,6 +843,7 @@ function CardPersonagem({
   onToggleModulo: (modId: string) => void;
   resultado: any;
   executando: boolean;
+  onVerRelatorio?: () => void;
 }) {
   const [expandido, setExpandido] = useState(false);
   const [execIndividual, setExecIndividual] = useState(false);
@@ -940,7 +944,7 @@ function CardPersonagem({
           <OsintWebPanel inqueritoId={inqueritoId} pessoaId={p.pessoa_id} />
 
           {/* OSINT Aprofundado (Gemini Deep Research — sob demanda com confirmação) */}
-          <OsintDeepPanel inqueritoId={inqueritoId} pessoaId={p.pessoa_id} nomePessoa={p.nome} />
+          <OsintDeepPanel inqueritoId={inqueritoId} pessoaId={p.pessoa_id} nomePessoa={p.nome} onVerRelatorio={onVerRelatorio} />
 
           {/* Cross-inquérito com links + tooltip de síntese */}
           {temCross && (
@@ -1069,7 +1073,7 @@ function CardPersonagem({
 
 // ── Painel principal ──────────────────────────────────────────────────────────
 
-export function PainelInvestigacao({ inqueritoId }: { inqueritoId: string }) {
+export function PainelInvestigacao({ inqueritoId, onVerRelatorio }: { inqueritoId: string; onVerRelatorio?: () => void }) {
   const [analise, setAnalise] = useState<any | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -1201,6 +1205,7 @@ export function PainelInvestigacao({ inqueritoId }: { inqueritoId: string }) {
             onToggleModulo={(modId) => toggleModulo(p.pessoa_id, modId)}
             resultado={resultados[p.pessoa_id]}
             executando={executandoLote}
+            onVerRelatorio={onVerRelatorio}
           />
         ))}
       </div>
