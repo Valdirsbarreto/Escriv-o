@@ -381,19 +381,41 @@ async def atualizar_oitiva(
     body: SalvarRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Atualiza termo editado e/ou status (rascunho→finalizado)."""
+    """Atualiza termo editado e/ou status (rascunho→finalizado).
+    Ao finalizar, cria DocumentoGerado tipo='termo_oitiva' no workspace.
+    """
     from app.models.oitiva import OitivaGravada
+    from app.models.documento_gerado import DocumentoGerado
+    from app.models.pessoa import Pessoa
 
     oitiva = await db.get(OitivaGravada, uuid.UUID(oitiva_id))
     if not oitiva:
         raise HTTPException(status_code=404, detail="Oitiva não encontrada.")
 
+    era_rascunho = oitiva.status == "rascunho"
     oitiva.termo_com_timestamps = body.termo_com_timestamps
     oitiva.termo_limpo = _strip_timestamps(body.termo_com_timestamps)
     oitiva.status = body.status
     if body.pessoa_id:
         oitiva.pessoa_id = uuid.UUID(body.pessoa_id)
     oitiva.updated_at = datetime.utcnow()
+
+    # Ao finalizar pela primeira vez → gera DocumentoGerado no workspace
+    if body.status == "finalizado" and era_rascunho:
+        nome_pessoa = "Declarante não identificado"
+        if oitiva.pessoa_id:
+            p = await db.get(Pessoa, oitiva.pessoa_id)
+            if p:
+                nome_pessoa = p.nome
+
+        doc = DocumentoGerado(
+            id=uuid.uuid4(),
+            inquerito_id=oitiva.inquerito_id,
+            tipo="termo_oitiva",
+            titulo=f"Termo de Declarações — {nome_pessoa}",
+            conteudo=oitiva.termo_limpo or oitiva.termo_com_timestamps or "",
+        )
+        db.add(doc)
 
     await db.commit()
     return {"ok": True, "status": oitiva.status}
