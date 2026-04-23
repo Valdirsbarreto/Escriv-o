@@ -250,7 +250,8 @@ def osint_deep_research_task(self, inquerito_id: str, pessoa_id: str, doc_id: st
         return result
     except Exception as e:
         logger.error(f"[OSINT-DEEP] Erro fatal: {e}", exc_info=True)
-        asyncio.run(_limpar_placeholder_sync(doc_id))
+        motivo = "Tempo limite da tarefa excedido (SoftTimeLimitExceeded)." if "SoftTimeLimitExceeded" in type(e).__name__ else str(e)[:200]
+        asyncio.run(_limpar_placeholder_sync(doc_id, motivo=motivo))
         raise
 
 
@@ -471,13 +472,12 @@ async def _marcar_erro(db: AsyncSession, doc_uuid: uuid.UUID, mensagem: str):
         await db.commit()
 
 
-async def _limpar_placeholder_sync(doc_id: str):
-    """Remove o placeholder __PROCESSANDO__ em caso de erro fatal não tratado."""
+async def _limpar_placeholder_sync(doc_id: str, motivo: str = "Timeout ou erro fatal na task."):
+    """Marca o placeholder __PROCESSANDO__ como erro em caso de falha fatal."""
     try:
         from app.core.config import settings
         from app.core.database import _encode_password_in_url
         from app.models.documento_gerado import DocumentoGerado
-        from sqlalchemy import delete as sa_delete
         from sqlalchemy.pool import NullPool
         import ssl
 
@@ -494,16 +494,19 @@ async def _limpar_placeholder_sync(doc_id: str):
         engine2 = create_async_engine(async_url, connect_args=connect_args, poolclass=NullPool)
         AsyncSession2 = async_sessionmaker(engine2, class_=AsyncSession, expire_on_commit=False)
         async with AsyncSession2() as db2:
-            await db2.execute(
-                sa_delete(DocumentoGerado).where(
-                    DocumentoGerado.id == uuid.UUID(doc_id),
-                    DocumentoGerado.conteudo == "__PROCESSANDO__",
+            doc = await db2.get(DocumentoGerado, uuid.UUID(doc_id))
+            if doc and doc.conteudo == "__PROCESSANDO__":
+                doc.conteudo = (
+                    f"# ERRO — OSINT Aprofundado\n\n"
+                    f"A pesquisa foi interrompida antes de concluir.\n\n"
+                    f"**Motivo:** {motivo}\n\n"
+                    f"Tente novamente — o Deep Research às vezes excede o tempo limite. "
+                    f"Use o briefing editável para refinar o escopo e reduzir o tempo de pesquisa."
                 )
-            )
-            await db2.commit()
+                await db2.commit()
         await engine2.dispose()
     except Exception as e:
-        logger.warning(f"[OSINT-DEEP] Falha ao limpar placeholder: {e}")
+        logger.warning(f"[OSINT-DEEP] Falha ao marcar placeholder como erro: {e}")
 
 
 async def _notificar_telegram(nome_pessoa: str, inquerito_id: str):
