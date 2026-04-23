@@ -244,7 +244,7 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
                     messages=[{"role": "user", "content": prompt}],
                     tier="premium",
                     temperature=0.1,
-                    max_tokens=32000,  # 9 seções detalhadas — 24000 ainda truncava em IPs complexos
+                    max_tokens=65536,  # teto do Flash — modelo para sozinho ao concluir
                     agente="RelatorioInicial",
                 ),
                 timeout=540,  # 9 min — contexto grande pode levar >5 min no Gemini
@@ -264,7 +264,7 @@ def gerar_relatorio_inicial_task(self, inquerito_id: str):
                         messages=[{"role": "user", "content": prompt_auditoria}],
                         tier="standard",
                         temperature=0.0,
-                        max_tokens=32000,  # precisa reproduzir o relatório completo (9 seções)
+                        max_tokens=65536,  # teto do Flash — auditor reproduz documento completo
                         agente="AuditorRelatorio",
                     ),
                     timeout=300,

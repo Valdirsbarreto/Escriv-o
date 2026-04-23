@@ -318,7 +318,7 @@ async def _gerar_conclusao(nome: str, papel: str, resultado_osint: str, contexto
             messages=[{"role": "user", "content": prompt}],
             tier="standard",
             temperature=0.1,
-            max_tokens=2500,
+            max_tokens=65536,
             agente="OsintDeepConclusao",
         )
         return result["content"].strip()

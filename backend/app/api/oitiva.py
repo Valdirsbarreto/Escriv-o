@@ -342,7 +342,7 @@ async def lavrar_termo(body: LavrarRequest, db: AsyncSession = Depends(get_db)):
                 messages=[{"role": "user", "content": prompt}],
                 tier="premium",
                 temperature=0.05,
-                max_tokens=8000,
+                max_tokens=65536,
                 agente="Oitiva",
             )
             termo_com_ts = result["content"].strip()

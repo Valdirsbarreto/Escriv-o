@@ -82,7 +82,7 @@ class AgenteCautelar:
                 messages=[{"role": "user", "content": prompt}],
                 tier="premium",
                 temperature=0.4,
-                max_tokens=3000,
+                max_tokens=65536,
                 agente="AgenteCautelar",
             )
 
